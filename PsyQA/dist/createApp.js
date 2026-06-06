@@ -22,7 +22,14 @@ const question_1 = require("./routes/question");
 const auth_1 = require("./routes/auth");
 const school_1 = require("./routes/school");
 const ollamaAvailability_1 = require("./services/ollamaAvailability");
-const ollamaClient_1 = require("./services/ollamaClient");
+const llmClient_1 = require("./services/llm/llmClient");
+const zhipuClient_1 = require("./services/llm/zhipuClient");
+const chromaVectorService_1 = require("./services/knowledge/chromaVectorService");
+const knowledgeStatus_1 = require("./services/knowledge/knowledgeStatus");
+const buildInfo_1 = require("./config/buildInfo");
+const questionController_1 = require("./controllers/questionController");
+const reportQueue_1 = require("./services/common/reportQueue");
+const seasonalRagPolicy_1 = require("./services/knowledge/seasonalRagPolicy");
 const env_1 = require("./config/env");
 const logger_1 = require("./utils/logger");
 function mountApiRoutes(app, base) {
@@ -91,27 +98,55 @@ function createApp() {
     });
     app.get('/health', (_req, res) => __awaiter(this, void 0, void 0, function* () {
         const useLlm = (0, ollamaAvailability_1.shouldUseOllamaLlm)();
-        const model = (0, ollamaClient_1.getOllamaModel)();
+        let llmMode = 'fast';
+        let llmProvider = null;
+        let model;
+        let loraFineTuned = false;
         let ollamaAvailable = false;
         if (useLlm) {
             try {
-                ollamaAvailable = yield (0, ollamaAvailability_1.isOllamaAvailable)(true);
+                const status = yield (0, llmClient_1.getLlmStatus)(true);
+                llmMode = status.mode;
+                llmProvider = status.provider;
+                model = status.fineTuned ? `${status.model}+LoRA` : status.model;
+                loraFineTuned = status.fineTuned;
+                if (status.provider === 'ollama') {
+                    ollamaAvailable = true;
+                }
+                else {
+                    ollamaAvailable = yield (0, ollamaAvailability_1.isOllamaOnlyAvailable)(true);
+                }
             }
             catch (_a) {
-                ollamaAvailable = false;
+                llmMode = 'fallback';
             }
         }
-        const llmMode = !useLlm
-            ? 'fast'
-            : ollamaAvailable
-                ? 'ollama'
-                : 'fallback';
+        const chroma = yield (0, chromaVectorService_1.getChromaStatus)();
+        const knowledge = yield (0, knowledgeStatus_1.getKnowledgeEmbedStatus)();
+        const load = (0, questionController_1.getAskLoadMetrics)();
+        const reportQueue = (0, reportQueue_1.getReportQueueMetrics)();
         res.json({
             status: 'ok',
             llmMode,
+            llmProvider,
+            zhipuConfigured: (0, zhipuClient_1.isZhipuConfigured)(),
+            llmAvailable: llmMode === 'zhipu' || llmMode === 'ollama',
             ollamaAvailable,
             model,
+            loraFineTuned,
+            loraModel: loraFineTuned ? model === null || model === void 0 ? void 0 : model.replace('+LoRA', '') : undefined,
+            chroma: Object.assign(Object.assign({}, chroma), { capacityHint: chroma.count != null ? `${chroma.count} vectors` : undefined }),
+            knowledge,
+            load,
+            reportQueue: {
+                pending: reportQueue.pending,
+                inFlight: reportQueue.inFlightKeys.length
+            },
+            seasonalRag: (0, seasonalRagPolicy_1.getSeasonalRagBoost)(),
+            dualLlm: process.env.PSYQA_DUAL_LLM === '1',
+            build: buildInfo_1.BUILD_INFO,
             fastAnswer: process.env.PSYQA_FAST_ANSWER === '1',
+            reactDemo: process.env.PSYQA_REACT_DEMO === '1',
             env: env_1.env.nodeEnv
         });
     }));

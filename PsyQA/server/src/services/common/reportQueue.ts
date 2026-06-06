@@ -49,6 +49,13 @@ export function isReportPendingText(report: string | undefined): boolean {
   return Boolean(report?.includes(REPORT_PENDING_MARKER));
 }
 
+export function getReportQueueMetrics(): { pending: number; inFlightKeys: string[] } {
+  return {
+    pending: inFlight.size,
+    inFlightKeys: [...inFlight]
+  };
+}
+
 export function scheduleReportEnrichment(params: {
   userId: string;
   dialogTime: string;

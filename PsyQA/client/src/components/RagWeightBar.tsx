@@ -23,7 +23,11 @@ export const RagWeightBar: React.FC<RagWeightBarProps> = ({ weights }) => {
   return (
     <div className="rag-weight-viz">
       <div className="rag-weight-head">
-        <strong>RAG 权重 · 动态混合</strong>
+        <strong
+          title={`私有权重 = 时间轴权重(${timelinePct}%) + 记忆密度加成(${boostPct}%)\n阶段：${weights.label}\n规则：0月30% → 6月45% → 18月70% → 24月85%`}
+        >
+          RAG 权重 · 动态混合
+        </strong>
         <span className="rag-weight-meta">
           第 {weights.monthsElapsed} 月 · {weights.memoryCount} 条私有记忆
         </span>

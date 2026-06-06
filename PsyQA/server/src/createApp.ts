@@ -12,6 +12,11 @@ import {
 } from './services/llm/llmClient';
 import { isZhipuConfigured } from './services/llm/zhipuClient';
 import { getChromaStatus } from './services/knowledge/chromaVectorService';
+import { getKnowledgeEmbedStatus } from './services/knowledge/knowledgeStatus';
+import { BUILD_INFO } from './config/buildInfo';
+import { getAskLoadMetrics } from './controllers/questionController';
+import { getReportQueueMetrics } from './services/common/reportQueue';
+import { getSeasonalRagBoost } from './services/knowledge/seasonalRagPolicy';
 import { env } from './config/env';
 import { logger } from './utils/logger';
 
@@ -119,6 +124,9 @@ export function createApp(): Express {
     }
 
     const chroma = await getChromaStatus();
+    const knowledge = await getKnowledgeEmbedStatus();
+    const load = getAskLoadMetrics();
+    const reportQueue = getReportQueueMetrics();
     res.json({
       status: 'ok',
       llmMode,
@@ -129,8 +137,21 @@ export function createApp(): Express {
       model,
       loraFineTuned,
       loraModel: loraFineTuned ? model?.replace('+LoRA', '') : undefined,
-      chroma,
+      chroma: {
+        ...chroma,
+        capacityHint: chroma.count != null ? `${chroma.count} vectors` : undefined
+      },
+      knowledge,
+      load,
+      reportQueue: {
+        pending: reportQueue.pending,
+        inFlight: reportQueue.inFlightKeys.length
+      },
+      seasonalRag: getSeasonalRagBoost(),
+      dualLlm: process.env.PSYQA_DUAL_LLM === '1',
+      build: BUILD_INFO,
       fastAnswer: process.env.PSYQA_FAST_ANSWER === '1',
+      reactDemo: process.env.PSYQA_REACT_DEMO === '1',
       env: env.nodeEnv
     });
   });

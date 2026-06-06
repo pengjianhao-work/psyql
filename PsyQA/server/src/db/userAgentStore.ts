@@ -229,3 +229,34 @@ export function clearUserAgentData(userId: string): void {
   getDb().prepare('DELETE FROM user_agent_profile WHERE user_id = ?').run(userId);
   getDb().prepare('DELETE FROM user_dialog_vectors WHERE user_id = ?').run(userId);
 }
+
+export function listUserDialogVectorMeta(userId: string): Array<{
+  dialogTime: string;
+  chromaId: string;
+  month: string;
+  emotion: string | null;
+  contentPreview: string | null;
+  createdAt: string;
+}> {
+  return getDb()
+    .prepare(
+      `SELECT dialog_time as dialogTime, chroma_id as chromaId, month,
+              emotion, content_preview as contentPreview, created_at as createdAt
+       FROM user_dialog_vectors WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`
+    )
+    .all(userId) as Array<{
+    dialogTime: string;
+    chromaId: string;
+    month: string;
+    emotion: string | null;
+    contentPreview: string | null;
+    createdAt: string;
+  }>;
+}
+
+export function deleteUserDialogVectorMeta(userId: string, dialogTime: string): boolean {
+  const r = getDb()
+    .prepare('DELETE FROM user_dialog_vectors WHERE user_id = ? AND dialog_time = ?')
+    .run(userId, dialogTime);
+  return r.changes > 0;
+}

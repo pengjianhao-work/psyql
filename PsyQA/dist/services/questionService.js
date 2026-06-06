@@ -12,6 +12,6 @@ Object.defineProperty(exports, "enhanceQueryWithKeywords", { enumerable: true, g
 var userProgressService_1 = require("./question/userProgressService");
 Object.defineProperty(exports, "getUserProgressData", { enumerable: true, get: function () { return userProgressService_1.getUserProgressData; } });
 Object.defineProperty(exports, "buildLatestAssessment", { enumerable: true, get: function () { return userProgressService_1.buildLatestAssessment; } });
-var historyManager_1 = require("./historyManager");
+var historyManager_1 = require("./common/historyManager");
 Object.defineProperty(exports, "getUserProgress", { enumerable: true, get: function () { return historyManager_1.getUserProgress; } });
 Object.defineProperty(exports, "clearUserHistory", { enumerable: true, get: function () { return historyManager_1.clearUserHistory; } });

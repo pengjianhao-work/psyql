@@ -35,6 +35,8 @@ if (-not $Quiet) {
     Write-Host "  目录: $Root" -ForegroundColor DarkGray
 }
 
+& "$PSScriptRoot\preflight-check.ps1" -Quiet:$Quiet
+
 # ---------- 1. Node.js ----------
 Write-Step "检查 Node.js"
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue

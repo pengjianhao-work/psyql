@@ -85,3 +85,42 @@ export function buildReportCopyText(
   ];
   return lines.filter(Boolean).join('\n');
 }
+
+export function buildCounselorShareBrief(
+  summary: ReportQuickSummary,
+  shareContext?: {
+    studentLabel?: string;
+    orgName?: string;
+    className?: string;
+    studentNo?: string;
+    allowSchoolTranscriptView?: boolean;
+  }
+): string {
+  const identity = [
+    shareContext?.studentLabel,
+    shareContext?.orgName,
+    shareContext?.className,
+    shareContext?.studentNo ? `学号 ${shareContext.studentNo}` : ''
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const lines = [
+    '【心理港湾 · 辅导员简报】',
+    identity || '学生（未补充档案）',
+    `时间：${new Date().toLocaleString('zh-CN')}`,
+    '',
+    `情绪：${summary.emotionLabel}`,
+    `风险：${summary.riskLabel}`,
+    `问题域：${summary.problemLabel}`,
+    summary.reliabilityPct !== null ? `分析可靠度：${summary.reliabilityPct}%` : '',
+    summary.actionHint ? `关注：${summary.actionHint}` : '',
+    '',
+    shareContext?.allowSchoolTranscriptView === false
+      ? '说明：学生未授权查看对话原文，以上为系统摘要。'
+      : '说明：如需对话原文，请在学校端学生档案中查看（需学生授权）。',
+    '',
+    '—— 由心理港湾系统自动生成，不能替代专业评估'
+  ];
+  return lines.filter(Boolean).join('\n');
+}

@@ -41,22 +41,25 @@ describe('relevanceFilter', () => {
 describe('findSimilarQuestions', () => {
     const mockQuestions = [
         {
+            questionID: 1,
             question: '我已经失眠很久了，每天一睡着就想哭，我要崩溃了？',
             description: '情绪',
             keywords: '失眠 焦虑',
-            answers: [{ answer_text: '...' }]
+            answers: [{ answer_text: '...', has_label: false, labels_sequence: null }]
         },
         {
+            questionID: 2,
             question: '和室友关系不好，很烦恼',
             description: '人际',
             keywords: '宿舍 室友',
-            answers: [{ answer_text: '...' }]
+            answers: [{ answer_text: '...', has_label: false, labels_sequence: null }]
         },
         {
+            questionID: 3,
             question: '高三，喜欢一个没有联系的人',
             description: '恋爱',
             keywords: '恋爱',
-            answers: [{ answer_text: '...' }]
+            answers: [{ answer_text: '...', has_label: false, labels_sequence: null }]
         }
     ];
     test('returns empty for unrelated generic query context', () => {

@@ -13,9 +13,9 @@ exports.generateFollowUpQuestions = generateFollowUpQuestions;
 exports.mapFollowUpsToSimilarQuestions = mapFollowUpsToSimilarQuestions;
 exports.generateStudentReportBrief = generateStudentReportBrief;
 exports.getProblemLabel = getProblemLabel;
-const ollamaClient_1 = require("../ollamaClient");
-const llmClient_1 = require("../llmClient");
-const emotionService_1 = require("../emotionService");
+const ollamaClient_1 = require("../llm/ollamaClient");
+const llmClient_1 = require("../llm/llmClient");
+const emotionService_1 = require("../psych/emotionService");
 /** 大模型生成的 1–2 个「继续聊」话术 */
 function generateFollowUpQuestions(userQuery, botReply, problemLabel) {
     return __awaiter(this, void 0, void 0, function* () {

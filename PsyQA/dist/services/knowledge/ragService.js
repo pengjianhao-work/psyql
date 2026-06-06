@@ -45,19 +45,43 @@ var __rest = (this && this.__rest) || function (s, e) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateRAGAnswer = exports.retrieveKnowledge = exports.loadKnowledgeBase = exports.reloadKnowledgeBase = exports.getKnowledgeBaseCount = void 0;
+exports.retrieveKnowledgeByCategory = retrieveKnowledgeByCategory;
 exports.scoreKnowledgeItem = scoreKnowledgeItem;
 exports.mergeRankedReferences = mergeRankedReferences;
+exports.mergeRankedReferencesRRF = mergeRankedReferencesRRF;
 const fs = __importStar(require("fs"));
 const textProcessor_1 = require("../../utils/textProcessor");
 const emotionService_1 = require("../psych/emotionService");
 const psychTextAnalysis_1 = require("../../utils/psychTextAnalysis");
 const paths_1 = require("../../config/paths");
+const memoryCache_1 = require("../../utils/memoryCache");
+const seasonalRagPolicy_1 = require("./seasonalRagPolicy");
 let knowledgeBase = [];
 const MIN_KNOWLEDGE_SCORE = 3;
 const MIN_RELATIVE_RATIO = 0.5;
+const RAG_CACHE_TTL_MS = 120000;
+function ragCacheKey(query, topK, problemCategory, emotion) {
+    return `rag:${topK}:${problemCategory !== null && problemCategory !== void 0 ? problemCategory : ''}:${emotion !== null && emotion !== void 0 ? emotion : ''}:${query.slice(0, 200)}`;
+}
+function retrieveKnowledgeUncached(query, topK, problemCategory, emotion) {
+    if (knowledgeBase.length === 0)
+        return [];
+    const scoredItems = knowledgeBase.map((item) => (Object.assign(Object.assign({}, item), { score: scoreKnowledgeItem(query, item, { problemCategory, emotion }) })));
+    const filtered = filterByRelativeScore(scoredItems, MIN_KNOWLEDGE_SCORE);
+    return filtered.slice(0, topK).map((_a) => {
+        var { score } = _a, item = __rest(_a, ["score"]);
+        return (Object.assign(Object.assign({}, item), { relevance: score }));
+    });
+}
 const resolveKnowledgePath = () => (0, paths_1.resolveDataFile)('mental_dataset.json');
 const getKnowledgeBaseCount = () => knowledgeBase.length;
 exports.getKnowledgeBaseCount = getKnowledgeBaseCount;
+/** 按问题领域定向检索 */
+function retrieveKnowledgeByCategory(query, topK, category, emotion) {
+    return retrieveKnowledgeUncached(query, topK * 3, category, emotion)
+        .filter((item) => { var _a, _b; return !((_b = (_a = item.tags) === null || _a === void 0 ? void 0 : _a.problems) === null || _b === void 0 ? void 0 : _b.length) || item.tags.problems.includes(category); })
+        .slice(0, topK);
+}
 const reloadKnowledgeBase = () => {
     (0, exports.loadKnowledgeBase)();
 };
@@ -88,6 +112,7 @@ function tagBoost(item, problemCategory, emotion) {
     return boost;
 }
 function scoreKnowledgeItem(query, item, options) {
+    var _a, _b;
     let score = (0, textProcessor_1.computeTextRelevance)(query, item.question, item.answer);
     if ((options === null || options === void 0 ? void 0 : options.problemCategory) && options.problemCategory !== 'other') {
         const { score: catScore } = (0, psychTextAnalysis_1.scoreKeywordMatches)((0, textProcessor_1.preprocessText)(`${item.question} ${item.answer}`), emotionService_1.PROBLEM_KEYWORDS[options.problemCategory] || []);
@@ -97,6 +122,7 @@ function scoreKnowledgeItem(query, item, options) {
     if (options === null || options === void 0 ? void 0 : options.vectorSimilarity) {
         score += options.vectorSimilarity * 5;
     }
+    score = (0, seasonalRagPolicy_1.applySeasonalScoreMultiplier)(score, (_a = item.tags) === null || _a === void 0 ? void 0 : _a.problems, (_b = item.tags) === null || _b === void 0 ? void 0 : _b.emotions, options === null || options === void 0 ? void 0 : options.problemCategory, options === null || options === void 0 ? void 0 : options.emotion);
     return score;
 }
 function filterByRelativeScore(items, minAbsolute) {
@@ -108,14 +134,13 @@ function filterByRelativeScore(items, minAbsolute) {
     return sorted.filter((item) => item.score >= minScore);
 }
 const retrieveKnowledge = (query, topK = 3, problemCategory, emotion) => {
-    if (knowledgeBase.length === 0)
-        return [];
-    const scoredItems = knowledgeBase.map((item) => (Object.assign(Object.assign({}, item), { score: scoreKnowledgeItem(query, item, { problemCategory, emotion }) })));
-    const filtered = filterByRelativeScore(scoredItems, MIN_KNOWLEDGE_SCORE);
-    return filtered.slice(0, topK).map((_a) => {
-        var { score } = _a, item = __rest(_a, ["score"]);
-        return (Object.assign(Object.assign({}, item), { relevance: score }));
-    });
+    const key = ragCacheKey(query, topK, problemCategory, emotion);
+    const cached = (0, memoryCache_1.cacheGet)(key);
+    if (cached)
+        return cached;
+    const result = retrieveKnowledgeUncached(query, topK, problemCategory, emotion);
+    (0, memoryCache_1.cacheSet)(key, result, RAG_CACHE_TTL_MS);
+    return result;
 };
 exports.retrieveKnowledge = retrieveKnowledge;
 function mergeRankedReferences(query, retrievedKnowledge, vectorResults, problemCategory, emotion, topK = 3) {
@@ -145,6 +170,34 @@ function mergeRankedReferences(query, retrievedKnowledge, vectorResults, problem
         var { score } = _a, item = __rest(_a, ["score"]);
         return (Object.assign(Object.assign({}, item), { relevance: score }));
     });
+}
+const RRF_K = 60;
+/** Reciprocal Rank Fusion：合并 TF-IDF/向量两路排序 */
+function mergeRankedReferencesRRF(query, retrievedKnowledge, vectorResults, problemCategory, emotion, topK = 3) {
+    const scores = new Map();
+    retrievedKnowledge.forEach((item, rank) => {
+        var _a, _b;
+        const key = item.question.slice(0, 80);
+        const rrf = 1 / (RRF_K + rank + 1);
+        const textScore = ((_a = item.relevance) !== null && _a !== void 0 ? _a : scoreKnowledgeItem(query, item, { problemCategory, emotion })) / 100;
+        const prev = scores.get(key);
+        const total = ((_b = prev === null || prev === void 0 ? void 0 : prev.score) !== null && _b !== void 0 ? _b : 0) + rrf + textScore * 0.15;
+        scores.set(key, { item: Object.assign(Object.assign({}, item), { relevance: item.relevance }), score: total });
+    });
+    vectorResults.forEach((result, rank) => {
+        var _a;
+        const item = { question: result.question, answer: result.answer };
+        const key = item.question.slice(0, 80);
+        const rrf = 1 / (RRF_K + rank + 1);
+        const vecBoost = result.similarity * 0.25;
+        const prev = scores.get(key);
+        const total = ((_a = prev === null || prev === void 0 ? void 0 : prev.score) !== null && _a !== void 0 ? _a : 0) + rrf + vecBoost;
+        scores.set(key, { item, score: total });
+    });
+    return Array.from(scores.values())
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topK)
+        .map(({ item, score }) => (Object.assign(Object.assign({}, item), { relevance: score * 100 })));
 }
 const generateRAGAnswer = (question, retrievedKnowledge) => {
     if (retrievedKnowledge.length === 0) {

@@ -12,6 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.clearEmbeddingCache = clearEmbeddingCache;
 exports.embedText = embedText;
 exports.cosineSimilarity = cosineSimilarity;
 exports.loadStoredEmbedding = loadStoredEmbedding;
@@ -20,22 +21,43 @@ exports.countEmbeddingsInDb = countEmbeddingsInDb;
 const axios_1 = __importDefault(require("axios"));
 const database_1 = require("../../db/database");
 const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || 'nomic-embed-text';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_MAX = 500;
+const embedCache = new Map();
 function embedApiUrl() {
     const raw = process.env.OLLAMA_API_URL || 'http://localhost:11434';
     const base = raw.replace(/\/api\/generate\/?$/, '').replace(/\/$/, '');
     return `${base}/api/embeddings`;
+}
+function cacheKey(text) {
+    return `${EMBED_MODEL}:${text.slice(0, 500)}`;
+}
+function clearEmbeddingCache() {
+    embedCache.clear();
 }
 function embedText(text) {
     return __awaiter(this, void 0, void 0, function* () {
         const input = text.slice(0, 2000);
         if (!input.trim())
             return null;
+        const key = cacheKey(input);
+        const cached = embedCache.get(key);
+        if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+            return cached.vec;
+        }
         try {
             const { data } = yield axios_1.default.post(embedApiUrl(), { model: EMBED_MODEL, prompt: input }, { timeout: 30000 });
             const vec = data === null || data === void 0 ? void 0 : data.embedding;
             if (!Array.isArray(vec) || vec.length < 8)
                 return null;
-            return vec;
+            const result = vec;
+            embedCache.set(key, { vec: result, at: Date.now() });
+            if (embedCache.size > CACHE_MAX) {
+                const oldest = embedCache.keys().next().value;
+                if (oldest)
+                    embedCache.delete(oldest);
+            }
+            return result;
         }
         catch (err) {
             console.warn('Ollama embedding failed:', err instanceof Error ? err.message : err);

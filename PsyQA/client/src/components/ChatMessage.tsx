@@ -102,32 +102,97 @@ const ACTION_LABELS: Record<string, string> = {
   search_user_memory: '检索用户记忆',
   reflect_psych: '心理分析回顾',
   finish: '生成回复',
-  parse_error: '解析失败'
+  parse_error: '解析失败',
+  plan: '规划上下文',
+  respond: '生成回复'
 };
 
-function ReActTracePanel({ steps }: { steps: ReActStep[] }) {
-  const [expanded, setExpanded] = useState(false);
+const REACT_MODE_LABEL: Record<string, string> = {
+  full: 'ReAct 完整推理',
+  prefetch: 'ReAct 预检索加速',
+  planner: 'Planner 规划模式'
+};
+
+const GENERATION_HINT_LABEL: Record<string, string> = {
+  llm_ok: '',
+  fast_kb: '⚡ 知识库 FAST · 规则匹配应答',
+  retrieval_miss: '检索未命中 · 已用规则补充',
+  kb_empty: '知识库无匹配 · 规则生成',
+  llm_fallback: 'LLM 不可用 · 知识库兜底',
+  rule_only: '规则模式回复'
+};
+
+const STEP_ERROR_ACTIONS = new Set(['parse_error']);
+
+function ReActTracePanel({
+  steps,
+  reactMode,
+  pinned,
+  onTogglePin,
+  onStepClick
+}: {
+  steps: ReActStep[];
+  reactMode?: Message['reactMode'];
+  pinned?: boolean;
+  onTogglePin?: () => void;
+  onStepClick?: (step: number) => void;
+}) {
+  const [expanded, setExpanded] = useState(steps.length <= 2);
   if (!steps.length) return null;
 
+  const badgeLabel =
+    (reactMode && REACT_MODE_LABEL[reactMode]) || (steps.length > 1 ? 'ReAct' : 'Agent');
+
   return (
-    <div className="message-react message-extras">
+    <div className={`message-react message-extras${pinned ? ' react-panel-pinned' : ''}`}>
       <button
         type="button"
         className="refs-toggle react-toggle"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        <span className="react-badge">ReAct</span>
+        <span className="react-badge">{badgeLabel}</span>
         {expanded ? '收起推理过程' : '查看推理过程'}
         <span className="refs-count">{steps.length} 步</span>
+        {onTogglePin && (
+          <span
+            role="button"
+            tabIndex={0}
+            className="react-pin-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.stopPropagation();
+                onTogglePin();
+              }
+            }}
+            title={pinned ? '取消固定' : '固定悬浮'}
+          >
+            {pinned ? '📌' : '📍'}
+          </span>
+        )}
       </button>
 
       {expanded && (
         <div className="react-trace-body">
           {steps.map((s) => (
-            <article key={s.step} className="react-step">
+            <article
+              key={s.step}
+              id={`react-step-${s.step}`}
+              className={`react-step${STEP_ERROR_ACTIONS.has(s.action) ? ' react-step-error' : ''}`}
+            >
               <header className="react-step-header">
-                <span className="react-step-num">Step {s.step}</span>
+                <button
+                  type="button"
+                  className="react-step-jump"
+                  onClick={() => onStepClick?.(s.step)}
+                  title="定位到回答"
+                >
+                  <span className="react-step-num">Step {s.step}</span>
+                </button>
                 <span className="react-step-action">{ACTION_LABELS[s.action] || s.action}</span>
               </header>
               {s.thought && <p className="react-step-thought">{s.thought}</p>}
@@ -153,6 +218,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [displayedContent, setDisplayedContent] = useState('');
   const [isTyping, setIsTyping] = useState(message.type === 'bot');
   const [refsExpanded, setRefsExpanded] = useState(false);
+  const [reactPinned, setReactPinned] = useState(false);
 
   const knowledgeList = knowledgeSources ?? message.knowledgeSources ?? [];
   const relatedTopics = useMemo(
@@ -176,6 +242,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       return;
     }
 
+    if (message.streaming) {
+      setDisplayedContent(message.content);
+      setIsTyping(false);
+      return;
+    }
+
     setDisplayedContent('');
     setIsTyping(true);
     setRefsExpanded(false);
@@ -194,7 +266,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     }, ms);
 
     return () => window.clearInterval(interval);
-  }, [message.content, isBot]);
+  }, [message.content, message.streaming, isBot]);
 
   const formattedBody = useMemo(
     () => (isBot && !isTyping ? formatBotMessage(answerBody) : null),
@@ -239,7 +311,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </div>
         )}
 
-        <div className={`message-bubble ${message.type}`}>
+        <div className={`message-bubble ${message.type}`} id={isBot ? `bot-answer-${message.id}` : undefined}>
           <div className="message-text">
             {formattedBody ?? (
               <>
@@ -298,8 +370,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </section>
         )}
 
-        {!isTyping && isBot && message.reactUsed && message.reactTrace && message.reactTrace.length > 0 && (
-          <ReActTracePanel steps={message.reactTrace} />
+        {isBot && message.generationHint && GENERATION_HINT_LABEL[message.generationHint] && (
+          <p
+            className={`generation-hint-tag${message.generationHint === 'fast_kb' ? ' generation-hint-fast' : ''}`}
+            role="status"
+          >
+            {GENERATION_HINT_LABEL[message.generationHint]}
+          </p>
+        )}
+
+        {isBot && message.reactTrace && message.reactTrace.length > 0 && (
+          <ReActTracePanel
+            steps={message.reactTrace}
+            reactMode={message.reactMode}
+            pinned={reactPinned}
+            onTogglePin={() => setReactPinned((v) => !v)}
+            onStepClick={() => {
+              document.getElementById(`bot-answer-${message.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+          />
         )}
 
         {!isTyping && isBot && hasKnowledge && (

@@ -7,6 +7,10 @@ import {
   listStudentsForUser
 } from '../services/school/schoolService';
 import { getAlertById, listAlerts, updateAlert, AlertStatus } from '../services/school/schoolAlertService';
+import {
+  listNotificationsForUser,
+  markNotificationsRead
+} from '../services/school/schoolNotificationService';
 export const getSchoolDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
   const stats = await getDashboardForUser(req.authUser!);
   res.json(stats);
@@ -34,6 +38,7 @@ export const getSchoolStudentDetail = async (req: AuthRequest, res: Response): P
 export const getSchoolAlerts = (req: AuthRequest, res: Response): void => {
   const status = req.query.status ? String(req.query.status) : undefined;
   const level = req.query.level ? String(req.query.level) : undefined;
+  const tier = req.query.tier ? String(req.query.tier) : undefined;
   const from = req.query.from ? String(req.query.from) : undefined;
   const to = req.query.to ? String(req.query.to) : undefined;
   const user = req.authUser!;
@@ -45,7 +50,7 @@ export const getSchoolAlerts = (req: AuthRequest, res: Response): void => {
         : user.orgId
           ? [user.orgId]
           : undefined;
-  const alerts = listAlerts({ status: status as never, level, orgIds, from, to });
+  const alerts = listAlerts({ status: status as never, level, tier, orgIds, from, to });
   res.json({ count: alerts.length, alerts });
 };
 
@@ -95,4 +100,23 @@ export const patchSchoolAlert = (req: AuthRequest, res: Response): void => {
   }
 
   res.json({ message: '预警已更新', alert: updated });
+};
+
+export const getSchoolNotifications = (req: AuthRequest, res: Response): void => {
+  const user = req.authUser!;
+  const orgIds =
+    user.role === 'admin'
+      ? undefined
+      : user.managedOrgIds?.length
+        ? user.managedOrgIds
+        : user.orgId
+          ? [user.orgId]
+          : undefined;
+  res.json({ notifications: listNotificationsForUser(user.id, orgIds) });
+};
+
+export const postMarkSchoolNotificationsRead = (req: AuthRequest, res: Response): void => {
+  const ids = Array.isArray(req.body?.ids) ? (req.body.ids as string[]) : [];
+  markNotificationsRead(req.authUser!.id, ids);
+  res.json({ message: '已标记为已读' });
 };

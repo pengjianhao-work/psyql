@@ -1,25 +1,24 @@
-import { runReActCounselAgent, shouldUseReAct } from './reactCounselAgent';
+import { runReActCounselAgent } from './reactCounselAgent';
 import type { ReActCounselContext, ReActCounselResult, ReActStep } from './reactCounselAgent';
 import { runPlannerRespondAgent } from './plannerRespondAgent';
+import {
+  resolveAgentPolicy,
+  resolveCounselAgentMode,
+  shouldRunCounselAgent,
+  shouldUseReAct,
+  isReactDemoMode
+} from './agentPolicy';
 
 export type { ReActStep, ReActCounselContext, ReActCounselResult };
-export { shouldUseReAct, resolveReActPlan } from './reactCounselAgent';
-
-export type CounselAgentMode = 'react' | 'planner' | 'auto';
-
-export function resolveCounselAgentMode(): CounselAgentMode {
-  const raw = (process.env.PSYQA_AGENT_MODE || 'auto').trim().toLowerCase();
-  if (raw === 'planner' || raw === 'planner-responder') return 'planner';
-  if (raw === 'react') return 'react';
-  return 'auto';
-}
-
-export function shouldRunCounselAgent(): boolean {
-  if (process.env.PSYQA_REACT_ENABLED === '0') return false;
-  if (process.env.PSYQA_FAST_ANSWER === '1') return false;
-  if (process.env.PSYQA_LOAD_TEST === '1') return false;
-  return true;
-}
+export type { CounselAgentMode, ReactMode } from './agentPolicy';
+export {
+  resolveAgentPolicy,
+  resolveCounselAgentMode,
+  shouldRunCounselAgent,
+  shouldUseReAct,
+  isReactDemoMode
+} from './agentPolicy';
+export { resolveReActPlan } from './reactCounselAgent';
 
 export async function runCounselAgent(
   ctx: ReActCounselContext,
@@ -28,6 +27,7 @@ export async function runCounselAgent(
     temperature?: number;
     timeoutMs?: number;
     onToken?: (chunk: string) => void;
+    onStep?: (step: ReActStep) => void;
   }
 ): Promise<ReActCounselResult> {
   const mode = resolveCounselAgentMode();
@@ -35,6 +35,7 @@ export async function runCounselAgent(
     mode === 'planner' ||
     (mode === 'auto' &&
       (ctx.risk.level === 'high' ||
+        ctx.risk.level === 'critical' ||
         (ctx.prefetchedKnowledge?.length ?? 0) >= 2 ||
         process.env.PSYQA_AGENT_AUTO_PLANNER === '1'));
 

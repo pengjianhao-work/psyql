@@ -16,11 +16,23 @@ import {
   fetchRuntimeHealth,
   getUserProfile,
   UserProfilePayload,
-  AuthUserPublic
+  AuthUserPublic,
+  fetchStudentTranscriptRequests,
+  resolveStudentTranscriptRequest,
+  batchResolveTranscript,
+  fetchCbtModule,
+  CbtMicroModule,
+  TranscriptViewRequest
 } from '../api';
 import { Sidebar } from '../components/Sidebar';
 import { ChatContainer } from '../components/ChatContainer';
-import { recordResponseTimeMs, getEstimatedWaitSec } from '../utils/responseTimeEstimate';
+import { recordResponseTimeMs, computeDynamicWaitSec, getEstimatedWaitSec } from '../utils/responseTimeEstimate';
+import { checkSensitiveInput, shouldConfirmSensitiveSend } from '../utils/sensitiveInputCheck';
+import { shouldShowTrendCareAlert } from '../utils/trendCareAlert';
+import { TrendCareAlertModal } from '../components/TrendCareAlertModal';
+import { InsightsPanelShell } from '../components/InsightsPanelShell';
+import { EmotionRhythmCalendar } from '../components/EmotionRhythmCalendar';
+import { CbtMicroModuleModal } from '../components/CbtMicroModuleModal';
 import { TrendChart } from '../components/TrendChart';
 import { ReportPanel } from '../components/ReportPanel';
 import { PortraitHistoryList, ConversationPortraitPanel } from '../components/ConversationPortraitPanel';
@@ -121,7 +133,9 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     report: string;
     statModel?: QuestionResponse['statModel'];
     portrait?: QuestionResponse['portrait'];
+    implicitNeeds?: QuestionResponse['implicitNeeds'];
   } | null>(null);
+  const [cbtModule, setCbtModule] = useState<CbtMicroModule | null>(null);
   const [lastDialogTime, setLastDialogTime] = useState<string | undefined>();
   const [showSelfRating, setShowSelfRating] = useState(false);
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
@@ -140,8 +154,17 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   const [reportPending, setReportPending] = useState(false);
   const [insightsRefreshing, setInsightsRefreshing] = useState(false);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
-  const [estimatedWaitSec] = useState(() => getEstimatedWaitSec());
+  const [runtimeHealth, setRuntimeHealth] = useState<Awaited<ReturnType<typeof fetchRuntimeHealth>> | null>(null);
+  const [estimatedWaitSec, setEstimatedWaitSec] = useState(() => getEstimatedWaitSec());
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [trendCareOpen, setTrendCareOpen] = useState(false);
+  const [trendCareReason, setTrendCareReason] = useState('');
   const sendLockRef = useRef(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const streamPausedRef = useRef(false);
+  const streamTokenBufferRef = useRef('');
+  const [streamPaused, setStreamPaused] = useState(false);
+  const [pendingTranscriptRequests, setPendingTranscriptRequests] = useState<TranscriptViewRequest[]>([]);
   const refreshInsightsRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
   const pushToast = useCallback(
@@ -168,9 +191,21 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   const checkBackendOnline = useCallback(async () => {
     try {
       const h = await fetchRuntimeHealth();
+      setRuntimeHealth(h);
       setBackendOnline(h.status === 'ok');
+      setEstimatedWaitSec(
+        computeDynamicWaitSec({
+          fastAnswer: h.fastAnswer,
+          llmAvailable: h.llmAvailable,
+          llmMode: h.llmMode,
+          knowledgeCount: h.knowledge?.knowledgeCount,
+          activeAskRequests: h.load?.activeAskRequests,
+          maxAskRequests: h.load?.maxAskRequests
+        })
+      );
       return h.status === 'ok';
     } catch {
+      setRuntimeHealth(null);
       setBackendOnline(false);
       return false;
     }
@@ -326,6 +361,16 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   }, [onLogout]);
 
   useEffect(() => {
+    if (!currentUserId || guestMode) {
+      setPendingTranscriptRequests([]);
+      return;
+    }
+    void fetchStudentTranscriptRequests(currentUserId)
+      .then((r) => setPendingTranscriptRequests(r.requests.filter((x) => x.status === 'pending')))
+      .catch(() => setPendingTranscriptRequests([]));
+  }, [currentUserId, guestMode]);
+
+  useEffect(() => {
     if (!currentUserId) {
       return;
     }
@@ -384,6 +429,65 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     void loadUserProfileFromServer(currentUserId);
   }, [currentUserId, loadUserProfileFromServer]);
 
+  const handleValidateBeforeSend = useCallback(
+    (question: string) => {
+      const check = checkSensitiveInput(question);
+      if (check.level === 'medium') {
+        pushToast(check.message, 'info');
+        return true;
+      }
+      if (shouldConfirmSensitiveSend(check)) {
+        return window.confirm(`${check.message}\n\n匹配词：${check.keywords.join('、')}`);
+      }
+      return true;
+    },
+    [pushToast]
+  );
+
+  const handleStopGenerate = useCallback(() => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    streamPausedRef.current = false;
+    streamTokenBufferRef.current = '';
+    setStreamPaused(false);
+    setIsGenerating(false);
+    setIsLoading(false);
+    sendLockRef.current = false;
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.streaming
+          ? {
+              ...m,
+              streaming: false,
+              aborted: true,
+              content: m.content.trim() || '（已停止生成，可修改问题后重新发送）'
+            }
+          : m
+      )
+    );
+    pushToast('已停止生成', 'info');
+  }, [pushToast]);
+
+  const handlePauseGenerate = useCallback(() => {
+    streamPausedRef.current = true;
+    setStreamPaused(true);
+  }, []);
+
+  const handleResumeGenerate = useCallback(() => {
+    streamPausedRef.current = false;
+    setStreamPaused(false);
+    const buffered = streamTokenBufferRef.current;
+    if (!buffered) return;
+    streamTokenBufferRef.current = '';
+    setMessages((prev) => {
+      const bot = [...prev].reverse().find((m) => m.streaming);
+      if (!bot) return prev;
+      return prev.map((m) =>
+        m.id === bot.id ? { ...m, content: `${m.content}${buffered}` } : m
+      );
+    });
+  }, []);
+
   const handleSend = useCallback(async (question: string, description: string) => {
     if (sendLockRef.current || historyLoading) {
       pushToast('正在回复上一条消息，请稍候', 'info');
@@ -398,7 +502,23 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     }
     sendLockRef.current = true;
     setIsLoading(true);
+    setIsGenerating(true);
+    streamPausedRef.current = false;
+    streamTokenBufferRef.current = '';
+    setStreamPaused(false);
     const requestStart = Date.now();
+    streamAbortRef.current = new AbortController();
+
+    setEstimatedWaitSec(
+      computeDynamicWaitSec({
+        fastAnswer: runtimeHealth?.fastAnswer,
+        llmAvailable: runtimeHealth?.llmAvailable,
+        llmMode: runtimeHealth?.llmMode,
+        knowledgeCount: runtimeHealth?.knowledge?.knowledgeCount,
+        activeAskRequests: runtimeHealth?.load?.activeAskRequests,
+        maxAskRequests: runtimeHealth?.load?.maxAskRequests
+      })
+    );
 
     setMessages((prev) => [
       ...prev,
@@ -411,8 +531,12 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       let response: QuestionResponse | null = null;
       let streamOk = false;
 
-      await askQuestionStream(question, description, currentUserId, {
+      const { aborted } = await askQuestionStream(question, description, currentUserId, {
         onToken: (text) => {
+          if (streamPausedRef.current) {
+            streamTokenBufferRef.current += text;
+            return;
+          }
           streamOk = true;
           setIsLoading(false);
           setMessages((prev) => {
@@ -424,22 +548,60 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                   id: botId,
                   type: 'bot',
                   content: text,
-                  timestamp: botTime
+                  timestamp: botTime,
+                  streaming: true,
+                  reactTrace: []
                 }
               ];
             }
             return prev.map((m) =>
-              m.id === botId ? { ...m, content: `${m.content}${text}` } : m
+              m.id === botId ? { ...m, content: `${m.content}${text}`, streaming: true } : m
+            );
+          });
+        },
+        onReactStep: (step) => {
+          setIsLoading(false);
+          setMessages((prev) => {
+            const existing = prev.find((m) => m.id === botId);
+            const trace = existing?.reactTrace ?? [];
+            const nextTrace = [...trace.filter((s) => s.step !== step.step), step].sort(
+              (a, b) => a.step - b.step
+            );
+            if (!existing) {
+              return [
+                ...prev,
+                {
+                  id: botId,
+                  type: 'bot',
+                  content: '',
+                  timestamp: botTime,
+                  streaming: true,
+                  reactTrace: nextTrace
+                }
+              ];
+            }
+            return prev.map((m) =>
+              m.id === botId ? { ...m, reactTrace: nextTrace, streaming: true } : m
             );
           });
         },
         onDone: (payload) => {
           response = payload;
         },
-        onError: () => {
-          /* fallback below */
+        onError: (msg, code) => {
+          const labels: Record<string, string> = {
+            llm_error: 'LLM 推理异常',
+            kb_empty: '知识库无匹配',
+            retrieval_miss: '检索未命中'
+          };
+          const label = code ? labels[code] || code : '';
+          pushToast(label ? `${label}：${msg}` : msg, 'warning');
         }
-      });
+      }, { signal: streamAbortRef.current.signal });
+
+      if (aborted) {
+        return;
+      }
 
       if (!response) {
         setMessages((prev) => prev.filter((m) => m.id !== botId));
@@ -460,7 +622,11 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                   report: response!.report,
                   llmUsed: response!.llmUsed,
                   reactUsed: response!.reactUsed,
-                  reactTrace: response!.reactTrace
+                  reactMode: response!.reactMode,
+                  reactTrace: response!.reactTrace ?? [],
+                  generationHint: response!.generationHint,
+                  briefReport: response!.briefReport,
+                  streaming: false
                 }
               : m
           )
@@ -481,7 +647,11 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                   report: response!.report,
                   llmUsed: response!.llmUsed,
                   reactUsed: response!.reactUsed,
-                  reactTrace: response!.reactTrace
+                  reactMode: response!.reactMode,
+                  reactTrace: response!.reactTrace ?? [],
+                  generationHint: response!.generationHint,
+                  briefReport: response!.briefReport,
+                  streaming: false
                 }
               : m
           )
@@ -489,6 +659,38 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       }
 
       const finalResponse = response!;
+
+      if (finalResponse.briefReport) {
+        setLatestReport((prev) =>
+          prev
+            ? { ...prev, report: finalResponse.briefReport || prev.report }
+            : {
+                emotion: finalResponse.emotion,
+                risk: finalResponse.risk,
+                problem: finalResponse.problem,
+                emotionStyle: finalResponse.emotionStyle,
+                intervention: finalResponse.intervention,
+                carePlan: finalResponse.carePlan,
+                analysisSources: finalResponse.analysisSources,
+                llmUsed: finalResponse.llmUsed,
+                report: finalResponse.briefReport || finalResponse.report,
+                statModel: finalResponse.statModel,
+                portrait: finalResponse.portrait
+              }
+        );
+      }
+
+      try {
+        const progress = await getUserProgress(currentUserId);
+        const trend = shouldShowTrendCareAlert(progress);
+        if (trend.show) {
+          setTrendCareReason(trend.reason);
+          setTrendCareOpen(true);
+        }
+      } catch {
+        /* ignore */
+      }
+
       recordResponseTimeMs(Date.now() - requestStart);
       setLatestReport({
         emotion: finalResponse.emotion,
@@ -501,9 +703,10 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
         llmUsed: finalResponse.llmUsed,
         report: finalResponse.report,
         statModel: finalResponse.statModel,
-        portrait: finalResponse.portrait
+        portrait: finalResponse.portrait,
+        implicitNeeds: finalResponse.implicitNeeds
       });
-      setLastDialogTime(botTime);
+      setLastDialogTime(finalResponse.dialogId || botTime);
       setShowSelfRating(true);
       setShowSessionFeedback(true);
       setInsightsOpen(false);
@@ -630,7 +833,9 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       }
     } finally {
       sendLockRef.current = false;
+      streamAbortRef.current = null;
       setIsLoading(false);
+      setIsGenerating(false);
     }
   }, [
     historyLoading,
@@ -639,7 +844,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     pushToast,
     checkBackendOnline,
     reportEthicsOk,
-    loadUserProfileFromServer
+    loadUserProfileFromServer,
+    runtimeHealth
   ]);
 
   const handleSimilarQuestionClick = (question: string) => {
@@ -897,7 +1103,48 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
         <BackendOfflineBanner onRetry={() => void checkBackendOnline()} />
       )}
       {guestMode && <GuestModeBanner onLogin={handleLogoutAccount} />}
-      {crisisLevel && reportEthicsOk && (
+      {pendingTranscriptRequests.length > 0 && (
+        <div className="transcript-approval-banner">
+          <p>
+            辅导员 <strong>{pendingTranscriptRequests[0].counselorName}</strong> 等申请查看您的对话原文
+            {pendingTranscriptRequests.length > 1 ? `（共 ${pendingTranscriptRequests.length} 条）` : ''}：
+            {pendingTranscriptRequests[0].reason}
+          </p>
+          <div className="transcript-approval-actions">
+            <button
+              type="button"
+              className="save-care-btn small"
+              onClick={() => {
+                const ids = pendingTranscriptRequests.map((r) => r.id);
+                void batchResolveTranscript(currentUserId, ids, true)
+                  .then((r) => {
+                    pushToast(r.message, 'success');
+                    setPendingTranscriptRequests([]);
+                  })
+                  .catch((e) => pushToast(getErrorMessage(e), 'warning'));
+              }}
+            >
+              {pendingTranscriptRequests.length > 1 ? '全部同意' : '同意授权'}
+            </button>
+            <button
+              type="button"
+              className="school-btn-secondary small"
+              onClick={() => {
+                const ids = pendingTranscriptRequests.map((r) => r.id);
+                void batchResolveTranscript(currentUserId, ids, false)
+                  .then((r) => {
+                    pushToast(r.message, 'info');
+                    setPendingTranscriptRequests([]);
+                  })
+                  .catch((e) => pushToast(getErrorMessage(e), 'warning'));
+              }}
+            >
+              {pendingTranscriptRequests.length > 1 ? '全部拒绝' : '拒绝'}
+            </button>
+          </div>
+        </div>
+      )}
+      {crisisLevel && (
         <CrisisSupportBanner
           level={crisisLevel as 'high' | 'critical'}
           hotline={latestReport?.risk?.hotline}
@@ -992,9 +1239,16 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             <ChatContainer
               messages={messages}
               isLoading={isLoading}
+              isGenerating={isGenerating}
               initializing={historyLoading}
               estimatedWaitSec={estimatedWaitSec}
+              fastAnswerMode={runtimeHealth?.fastAnswer === true || runtimeHealth?.llmMode === 'fast'}
               onSend={handleSend}
+              onStopGenerate={handleStopGenerate}
+              onPauseGenerate={handlePauseGenerate}
+              onResumeGenerate={handleResumeGenerate}
+              streamPaused={streamPaused}
+              onValidateBeforeSend={handleValidateBeforeSend}
               onSimilarQuestionClick={handleSimilarQuestionClick}
               onClearHistory={handleClearHistory}
               inputLocked={isLoading || historyLoading || backendOnline === false}
@@ -1025,56 +1279,91 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           </div>
           {insightsOpen && reportEthicsOk && (
           <div className="insights-grid">
+            <div className="insights-col insights-col-rhythm">
+              <InsightsPanelShell title="智能情绪节律日历" className="insights-col-rhythm">
+                <EmotionRhythmCalendar userId={currentUserId} />
+              </InsightsPanelShell>
+            </div>
             <div className="insights-col insights-col-chart">
-              <TrendChart data={trendData} />
+              <InsightsPanelShell title="心理变化趋势" className="insights-col-chart">
+                <TrendChart data={trendData} />
+              </InsightsPanelShell>
             </div>
             {latestReport?.portrait && (
               <div className="insights-col insights-col-portrait">
-                <ConversationPortraitPanel
-                  portrait={latestReport.portrait}
-                  sessionCount={(latestReport.statModel?.totalSessions ?? consultCount) || 1}
-                  pending={portraitPending}
-                />
+                <InsightsPanelShell title="本次咨询画像" className="insights-col-portrait">
+                  <ConversationPortraitPanel
+                    portrait={latestReport.portrait}
+                    sessionCount={(latestReport.statModel?.totalSessions ?? consultCount) || 1}
+                    pending={portraitPending}
+                  />
+                </InsightsPanelShell>
               </div>
             )}
             {latestReport && (
               <div className="insights-col insights-col-report">
-                <ReportPanel
-                  emotion={latestReport.emotion}
-                  risk={latestReport.risk}
-                  problem={latestReport.problem}
-                  intervention={latestReport.intervention}
-                  carePlan={latestReport.carePlan}
-                  analysisSources={latestReport.analysisSources}
-                  llmUsed={latestReport.llmUsed}
-                  reportPending={reportPending}
-                  emotionStyle={latestReport.emotionStyle}
-                  report={latestReport.report}
-                  statModel={latestReport.statModel}
-                  shareContext={
-                    sessionUser
-                      ? {
-                          studentLabel: sessionUser.realName || sessionUser.displayName,
-                          orgName: sessionUser.orgName,
-                          className: sessionUser.className,
-                          studentNo: sessionUser.studentNo,
-                          allowSchoolTranscriptView: sessionUser.allowSchoolTranscriptView !== false
-                        }
-                      : undefined
-                  }
-                />
+                <InsightsPanelShell title="心理咨询报告" className="insights-col-report">
+                  <ReportPanel
+                    emotion={latestReport.emotion}
+                    risk={latestReport.risk}
+                    problem={latestReport.problem}
+                    intervention={latestReport.intervention}
+                    carePlan={latestReport.carePlan}
+                    analysisSources={latestReport.analysisSources}
+                    llmUsed={latestReport.llmUsed}
+                    reportPending={reportPending}
+                    implicitNeeds={latestReport.implicitNeeds}
+                    onOpenCbt={() => {
+                      void fetchCbtModule(latestReport.problem?.category, latestReport.emotion?.emotion).then(
+                        (d) => setCbtModule(d.module)
+                      );
+                    }}
+                    emotionStyle={latestReport.emotionStyle}
+                    report={latestReport.report}
+                    statModel={latestReport.statModel}
+                    shareContext={
+                      sessionUser
+                        ? {
+                            studentLabel: sessionUser.realName || sessionUser.displayName,
+                            orgName: sessionUser.orgName,
+                            className: sessionUser.className,
+                            studentNo: sessionUser.studentNo,
+                            allowSchoolTranscriptView: sessionUser.allowSchoolTranscriptView !== false
+                          }
+                        : undefined
+                    }
+                  />
+                </InsightsPanelShell>
               </div>
             )}
             {portraitHistoryItems.length > 0 && (
               <div className="insights-col insights-col-history">
-                <h3 className="portrait-history-title">历次咨询画像</h3>
-                <PortraitHistoryList items={portraitHistoryItems} />
+                <InsightsPanelShell title="历次咨询画像" className="insights-col-history">
+                  <PortraitHistoryList items={portraitHistoryItems} />
+                </InsightsPanelShell>
               </div>
             )}
           </div>
           )}
         </div>
       </main>
+      <TrendCareAlertModal
+        open={trendCareOpen}
+        reason={trendCareReason}
+        onClose={() => setTrendCareOpen(false)}
+        onContactCounselor={() => {
+          setTrendCareOpen(false);
+          pushToast('可在「个人资料」中查看辅导员联系方式，或前往学校心理中心预约', 'info');
+        }}
+      />
+      {cbtModule && (
+        <CbtMicroModuleModal
+          module={cbtModule}
+          problem={latestReport?.problem?.category}
+          emotion={latestReport?.emotion?.emotion}
+          onClose={() => setCbtModule(null)}
+        />
+      )}
       <ToastStack messages={toasts} onDismiss={dismissToast} />
     </div>
   );

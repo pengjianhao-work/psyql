@@ -2,10 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildLatestAssessment = buildLatestAssessment;
 exports.getUserProgressData = getUserProgressData;
-const historyManager_1 = require("../historyManager");
-const psychStatsService_1 = require("../psychStatsService");
-const emotionService_1 = require("../emotionService");
-const interventionService_1 = require("../interventionService");
+const historyManager_1 = require("../common/historyManager");
+const psychStatsService_1 = require("../psych/psychStatsService");
+const emotionService_1 = require("../psych/emotionService");
+const interventionService_1 = require("../psych/interventionService");
 function buildFullReport(emotion, risk, problem, interventionName, statModel) {
     const base = (0, emotionService_1.formatEmotionReport)(emotion, risk, problem, interventionName);
     return base;

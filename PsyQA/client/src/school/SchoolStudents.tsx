@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { fetchSchoolStudents, getErrorMessage, SchoolStudentItem } from '../api';
+import { Link, useSearchParams } from 'react-router-dom';
+import { batchTranscriptRequest, fetchSchoolStudents, getErrorMessage, SchoolStudentItem } from '../api';
 import { formatEmotion, formatRisk, riskClass } from './schoolLabels';
 
 const SchoolStudents: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<SchoolStudentItem[]>([]);
   const [riskOnly, setRiskOnly] = useState(false);
+  const [classFilter, setClassFilter] = useState(searchParams.get('class') || '');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchMsg, setBatchMsg] = useState<string | null>(null);
+  const [batching, setBatching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,15 +31,62 @@ const SchoolStudents: React.FC = () => {
     load();
   }, [load]);
 
+  const classOptions = useMemo(() => {
+    const set = new Set<string>();
+    students.forEach((s) => {
+      if (s.className) set.add(s.className);
+    });
+    return Array.from(set).sort();
+  }, [students]);
+
   const visible = useMemo(() => {
-    if (!riskOnly) return students;
-    return students.filter(
-      (s) =>
-        s.pendingAlerts > 0 ||
-        s.lastRisk === 'high' ||
-        s.lastRisk === 'critical'
-    );
-  }, [students, riskOnly]);
+    let list = students;
+    if (classFilter) {
+      list = list.filter((s) => s.className === classFilter);
+    }
+    if (riskOnly) {
+      list = list.filter(
+        (s) => s.pendingAlerts > 0 || s.lastRisk === 'high' || s.lastRisk === 'critical'
+      );
+    }
+    return list;
+  }, [students, riskOnly, classFilter]);
+
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    if (selected.size >= visible.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(visible.map((s) => s.id)));
+    }
+  };
+
+  const handleBatchAuth = async () => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    setBatching(true);
+    setBatchMsg(null);
+    try {
+      const r = await batchTranscriptRequest(
+        ids,
+        classFilter ? `${classFilter} 班级建档批量授权申请` : '批量查看对话授权申请'
+      );
+      setBatchMsg(r.message);
+      setSelected(new Set());
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setBatching(false);
+    }
+  };
 
   if (error && students.length === 0) {
     return (
@@ -51,16 +103,30 @@ const SchoolStudents: React.FC = () => {
     <div className="school-students">
       <div className="school-toolbar">
         <h2>学生列表</h2>
+        <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+          <option value="">全部班级</option>
+          {classOptions.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
         <label className="school-filter-check">
           <input type="checkbox" checked={riskOnly} onChange={(e) => setRiskOnly(e.target.checked)} />
           仅显示有风险提示
         </label>
+        {selected.size > 0 && (
+          <button type="button" className="save-care-btn" disabled={batching} onClick={() => void handleBatchAuth()}>
+            {batching ? '申请中…' : `批量申请授权（${selected.size}）`}
+          </button>
+        )}
         <button type="button" className="save-care-btn school-refresh-btn" onClick={load} disabled={loading}>
           {loading ? '加载中…' : '刷新'}
         </button>
       </div>
+      {batchMsg && <p className="agent-profile-success">{batchMsg}</p>}
       <p className="muted school-readonly-hint">
-        管理人可查看学生姓名、学号、心理指标与完整对话记录。点击「查看详情」进入档案页。
+        勾选同班学生后可批量发起对话查看授权；学生端可一次性同意或拒绝。
       </p>
 
       {error && (
@@ -77,6 +143,14 @@ const SchoolStudents: React.FC = () => {
             <table className="school-table school-table-wide">
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={visible.length > 0 && selected.size === visible.length}
+                      onChange={toggleAllVisible}
+                      aria-label="全选当前列表"
+                    />
+                  </th>
                   <th>姓名</th>
                   <th>学号</th>
                   <th>院系</th>
@@ -93,7 +167,15 @@ const SchoolStudents: React.FC = () => {
               </thead>
               <tbody>
                 {visible.map((s) => (
-                  <tr key={s.id}>
+                  <tr key={s.id} className={selected.has(s.id) ? 'school-row-selected' : ''}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(s.id)}
+                        onChange={() => toggleOne(s.id)}
+                        aria-label={`选择 ${s.displayName || s.maskName}`}
+                      />
+                    </td>
                     <td>
                       <span className="school-student-name">
                         {s.avatar && <span>{s.avatar}</span>}

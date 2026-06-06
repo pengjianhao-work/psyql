@@ -7,6 +7,7 @@ import {
   enrichPublicAccount
 } from '../user/accountService';
 import { listAlerts, SchoolAlert } from './schoolAlertService';
+import { hasApprovedTranscriptAccess } from './transcriptRequestService';
 import {
   getCategoryName,
   getEmotionLabel,
@@ -30,9 +31,11 @@ export interface StudentListItem {
   id: string;
   maskName: string;
   orgId: string;
+  className?: string;
   lastConsultTime?: string;
   lastEmotion?: string;
   lastRisk?: string;
+  lastProblem?: string;
   lastStressLevel?: number;
   lastAnxietyLevel?: number;
   lastMoodStability?: number;
@@ -61,17 +64,27 @@ function canAccessOrg(user: PublicAccount, orgId: string): boolean {
   return user.managedOrgIds.includes(orgId);
 }
 
-/** 辅导员需学生授权且在本院系；管理员始终可看原文 */
+function canAccessStudent(user: PublicAccount, student: AccountRecord): boolean {
+  if (!canAccessOrg(user, student.orgId || 'default')) return false;
+  if (user.role === 'admin') return true;
+  const classes = user.managedClassIds;
+  if (!classes?.length) return true;
+  if (!student.className) return false;
+  return classes.some((c) => student.className === c || student.className?.includes(c));
+}
+
+/** 辅导员需学生授权且在本院系；管理员始终可看原文；已审批申请可临时开放 */
 export function canViewFullTranscripts(viewer: PublicAccount, student: AccountRecord): boolean {
   if (viewer.role === 'admin') return true;
   if (viewer.role !== 'counselor') return false;
-  if (!canAccessOrg(viewer, student.orgId || 'default')) return false;
+  if (!canAccessStudent(viewer, student)) return false;
+  if (hasApprovedTranscriptAccess(student.id, viewer.id)) return true;
   return student.allowSchoolTranscriptView !== false;
 }
 
 export async function getDashboardForUser(user: PublicAccount): Promise<DashboardStats> {
   const accounts = (await loadAccounts()).users.filter((a) => a.role === 'student');
-  const visibleStudents = accounts.filter((a) => canAccessOrg(user, a.orgId || 'default'));
+  const visibleStudents = accounts.filter((a) => canAccessStudent(user, a));
 
   let totalConsultations = 0;
   const activeSet = new Set<string>();
@@ -136,7 +149,7 @@ export async function listStudentsForUser(user: PublicAccount): Promise<StudentL
   });
 
   return accounts
-    .filter((a) => canAccessOrg(user, a.orgId || 'default'))
+    .filter((a) => canAccessStudent(user, a))
     .map((st) => {
       const hist = getUserHistory(st.id);
       const last = hist?.dialogs.filter((d) => d.psych).slice(-1)[0];
@@ -180,7 +193,7 @@ export async function getStudentSummaryForUser(
 ): Promise<StudentSummary | null> {
   const accounts = (await loadAccounts()).users;
   const st = accounts.find((a) => a.id === studentId && a.role === 'student');
-  if (!st || !canAccessOrg(user, st.orgId || 'default')) return null;
+  if (!st || !canAccessStudent(user, st)) return null;
 
   const hist = getUserHistory(studentId);
   if (!hist) {
@@ -228,7 +241,7 @@ export async function getStudentDetailForUser(
 } | null> {
   const accounts = (await loadAccounts()).users;
   const st = accounts.find((a) => a.id === studentId && a.role === 'student');
-  if (!st || !canAccessOrg(user, st.orgId || 'default')) return null;
+  if (!st || !canAccessStudent(user, st)) return null;
 
   const pub = enrichPublicAccount(st);
   const canTranscript = canViewFullTranscripts(user, st);

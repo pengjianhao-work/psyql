@@ -9,9 +9,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.patchAdminUser = exports.postAdminUser = exports.getAdminUsers = exports.getSchoolReportExport = void 0;
-const schoolReportService_1 = require("../services/schoolReportService");
-const adminAccountService_1 = require("../services/adminAccountService");
+exports.patchAdminUser = exports.postAdminUser = exports.getAdminUsers = exports.getSchoolMonthlyLedgerExport = exports.getSchoolReportExport = void 0;
+const schoolReportService_1 = require("../services/school/schoolReportService");
+const adminAccountService_1 = require("../services/user/adminAccountService");
 const getSchoolReportExport = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const format = String(req.query.format || 'json').toLowerCase();
     const report = yield (0, schoolReportService_1.buildSchoolReport)(req.authUser);
@@ -26,6 +26,25 @@ const getSchoolReportExport = (req, res) => __awaiter(void 0, void 0, void 0, fu
     res.json(report);
 });
 exports.getSchoolReportExport = getSchoolReportExport;
+const getSchoolMonthlyLedgerExport = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const month = String(req.query.month || new Date().toISOString().slice(0, 7));
+    const format = String(req.query.format || 'xlsx').toLowerCase();
+    const report = yield (0, schoolReportService_1.buildSchoolReport)(req.authUser);
+    if (format === 'csv') {
+        const csv = (0, schoolReportService_1.schoolMonthlyLedgerCsv)(report, month);
+        const filename = `psyqa-monthly-ledger-${month}.csv`;
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send('\ufeff' + csv);
+        return;
+    }
+    const xml = (0, schoolReportService_1.schoolMonthlyLedgerExcel)(report, month);
+    const filename = `psyqa-monthly-ledger-${month}.xls`;
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send('\ufeff' + xml);
+});
+exports.getSchoolMonthlyLedgerExport = getSchoolMonthlyLedgerExport;
 const getAdminUsers = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const users = yield (0, adminAccountService_1.listUsersForAdmin)();
     res.json({ count: users.length, users });

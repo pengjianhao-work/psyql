@@ -5,6 +5,7 @@ const express_1 = require("express");
 const schoolAdminController_1 = require("../controllers/schoolAdminController");
 exports.schoolAdminRouter = (0, express_1.Router)();
 exports.schoolAdminRouter.get('/report', schoolAdminController_1.getSchoolReportExport);
+exports.schoolAdminRouter.get('/report/monthly-ledger', schoolAdminController_1.getSchoolMonthlyLedgerExport);
 exports.schoolAdminRouter.get('/users', schoolAdminController_1.getAdminUsers);
 exports.schoolAdminRouter.post('/users', schoolAdminController_1.postAdminUser);
 exports.schoolAdminRouter.patch('/users/:userId', schoolAdminController_1.patchAdminUser);

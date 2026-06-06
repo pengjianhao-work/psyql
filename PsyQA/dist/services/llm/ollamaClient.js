@@ -45,13 +45,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.shouldPreferLoraModel = exports.getConfiguredLoraModelName = exports.clearOllamaModelCache = exports.resolveOllamaModel = void 0;
 exports.resolveOllamaGenerateUrl = resolveOllamaGenerateUrl;
 exports.getOllamaModel = getOllamaModel;
 exports.checkOllamaHealth = checkOllamaHealth;
 exports.callOllamaGenerateOnly = callOllamaGenerateOnly;
+exports.callOllamaGenerateStream = callOllamaGenerateStream;
 exports.callOllamaGenerate = callOllamaGenerate;
 exports.extractJsonObject = extractJsonObject;
 const axios_1 = __importDefault(require("axios"));
+const loraModelRegistry_1 = require("./loraModelRegistry");
+Object.defineProperty(exports, "resolveOllamaModel", { enumerable: true, get: function () { return loraModelRegistry_1.resolveOllamaModel; } });
+Object.defineProperty(exports, "clearOllamaModelCache", { enumerable: true, get: function () { return loraModelRegistry_1.clearOllamaModelCache; } });
+var loraModelRegistry_2 = require("./loraModelRegistry");
+Object.defineProperty(exports, "getConfiguredLoraModelName", { enumerable: true, get: function () { return loraModelRegistry_2.getConfiguredLoraModelName; } });
+Object.defineProperty(exports, "shouldPreferLoraModel", { enumerable: true, get: function () { return loraModelRegistry_2.shouldPreferLoraModel; } });
 /** 兼容 .env 里写 http://localhost:11434 或完整 /api/generate 路径 */
 function resolveOllamaGenerateUrl() {
     const raw = process.env.OLLAMA_API_URL || 'http://localhost:11434';
@@ -63,7 +71,6 @@ function getOllamaModel() {
     return process.env.OLLAMA_MODEL || 'qwen:7b';
 }
 const DEFAULT_API = resolveOllamaGenerateUrl();
-const DEFAULT_MODEL = getOllamaModel();
 function checkOllamaHealth() {
     return __awaiter(this, void 0, void 0, function* () {
         const base = (process.env.OLLAMA_API_URL || 'http://localhost:11434').replace(/\/api\/generate\/?$/, '');
@@ -84,7 +91,7 @@ function checkOllamaHealth() {
 function callOllamaGenerateOnly(prompt, options) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a, _b, _c, _d;
-        const model = (options === null || options === void 0 ? void 0 : options.model) || DEFAULT_MODEL;
+        const { model } = yield (0, loraModelRegistry_1.resolveOllamaModel)();
         const maxAttempts = 2;
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
@@ -101,7 +108,8 @@ function callOllamaGenerateOnly(prompt, options) {
                 return typeof text === 'string' ? text.trim() : null;
             }
             catch (error) {
-                console.warn(`Ollama generate failed (${attempt}/${maxAttempts}):`, error);
+                console.warn(`Ollama generate failed (${attempt}/${maxAttempts}, model=${model}):`, error);
+                (0, loraModelRegistry_1.clearOllamaModelCache)();
                 try {
                     const { markOllamaUnavailable } = yield Promise.resolve().then(() => __importStar(require('./ollamaAvailability')));
                     markOllamaUnavailable();
@@ -115,6 +123,70 @@ function callOllamaGenerateOnly(prompt, options) {
             }
         }
         return null;
+    });
+}
+/** Ollama NDJSON 流式生成，逐 token 回调 */
+function callOllamaGenerateStream(prompt, options) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c;
+        const { model } = yield (0, loraModelRegistry_1.resolveOllamaModel)();
+        try {
+            const response = yield axios_1.default.post(DEFAULT_API, {
+                model: (options === null || options === void 0 ? void 0 : options.model) || model,
+                prompt,
+                stream: true,
+                options: {
+                    temperature: (_a = options === null || options === void 0 ? void 0 : options.temperature) !== null && _a !== void 0 ? _a : 0.15,
+                    num_predict: (_b = options === null || options === void 0 ? void 0 : options.maxTokens) !== null && _b !== void 0 ? _b : 512
+                }
+            }, { responseType: 'stream', timeout: (_c = options === null || options === void 0 ? void 0 : options.timeoutMs) !== null && _c !== void 0 ? _c : 90000 });
+            return yield new Promise((resolve) => {
+                let full = '';
+                let buffer = '';
+                const stream = response.data;
+                const finish = (result) => {
+                    resolve(result);
+                };
+                stream.on('data', (chunk) => {
+                    var _a;
+                    buffer += chunk.toString('utf-8');
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed)
+                            continue;
+                        try {
+                            const json = JSON.parse(trimmed);
+                            if (typeof json.response === 'string' && json.response) {
+                                full += json.response;
+                                (_a = options === null || options === void 0 ? void 0 : options.onToken) === null || _a === void 0 ? void 0 : _a.call(options, json.response);
+                            }
+                        }
+                        catch (_b) {
+                            /* skip malformed line */
+                        }
+                    }
+                });
+                stream.on('end', () => finish(full.trim() || null));
+                stream.on('error', (err) => {
+                    console.warn('Ollama stream error:', err);
+                    finish(full.trim() || null);
+                });
+            });
+        }
+        catch (error) {
+            console.warn('Ollama stream failed:', error);
+            (0, loraModelRegistry_1.clearOllamaModelCache)();
+            try {
+                const { markOllamaUnavailable } = yield Promise.resolve().then(() => __importStar(require('./ollamaAvailability')));
+                markOllamaUnavailable();
+            }
+            catch (_d) {
+                /* ignore */
+            }
+            return null;
+        }
     });
 }
 /** 优先智谱 AI，回退 Ollama */

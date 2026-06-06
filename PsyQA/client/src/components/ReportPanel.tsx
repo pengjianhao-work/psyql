@@ -16,6 +16,12 @@ import {
 } from '../types';
 import { renderFormattedReport } from '../utils/formatReportText';
 import {
+  buildReportCopyText,
+  buildReportQuickSummary,
+  buildCounselorShareBrief
+} from '../utils/reportSummary';
+import { ReportSummaryCards } from './ReportSummaryCards';
+import {
   DonutChart,
   FusionBarChart,
   GaugeChart,
@@ -35,6 +41,8 @@ interface ReportPanelProps {
   report: string;
   statModel?: PsychStatModel;
   reportPending?: boolean;
+  implicitNeeds?: Array<{ implicitConcern: string; suggestedPrompt: string }>;
+  onOpenCbt?: () => void;
   shareContext?: {
     userLabel?: string;
     sessionIndex?: number;
@@ -77,14 +85,33 @@ export const ReportPanel: React.FC<ReportPanelProps> = ({
   analysisSources,
   llmUsed,
   reportPending,
+  implicitNeeds,
+  onOpenCbt,
   emotionStyle,
   report,
-  statModel
+  statModel,
+  shareContext
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showStats, setShowStats] = useState(Boolean(statModel));
+  const [actionHint, setActionHint] = useState<string | null>(null);
+  const [printPrivacyMask, setPrintPrivacyMask] = useState(true);
 
   const lowConfidence = emotion.confidence < 0.45;
+
+  const quickSummary = buildReportQuickSummary(
+    emotion,
+    risk,
+    problem,
+    statModel,
+    carePlan,
+    intervention
+  );
+
+  const flashAction = (msg: string) => {
+    setActionHint(msg);
+    window.setTimeout(() => setActionHint(null), 2200);
+  };
 
   const handleExport = () => {
     const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
@@ -96,6 +123,59 @@ export const ReportPanel: React.FC<ReportPanelProps> = ({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleCopySummary = async () => {
+    const text = buildReportCopyText(quickSummary, report, statModel);
+    try {
+      await navigator.clipboard.writeText(text);
+      flashAction('摘要已复制到剪贴板');
+    } catch {
+      flashAction('复制失败，请手动选择文本');
+    }
+  };
+
+  const handleShareCounselor = async () => {
+    const text = buildCounselorShareBrief(quickSummary, shareContext);
+    try {
+      await navigator.clipboard.writeText(text);
+      flashAction('辅导员简报已复制，可粘贴至邮件或工作群');
+    } catch {
+      flashAction('复制失败，请手动选择文本');
+    }
+  };
+
+  const handlePrintOnePage = () => {
+    const orgLine = shareContext?.orgName ? `${shareContext.orgName} · 心理健康中心` : '心理港湾 · 学校心理健康档案';
+    const reportExcerpt = printPrivacyMask
+      ? report.slice(0, 380).replace(/[\u4e00-\u9fff]{2,}说[:：]/g, '[对话已脱敏]')
+      : report.slice(0, 1200);
+    const onePage = [
+      orgLine,
+      '————————————————',
+      '心理港湾 · 咨询一页纸摘要',
+      shareContext?.studentLabel ? `学生：${shareContext.studentLabel}` : '',
+      quickSummary.oneLine,
+      quickSummary.reliabilityPct !== null ? `分析可靠度：${quickSummary.reliabilityPct}%` : '',
+      quickSummary.actionHint ? `关注提示：${quickSummary.actionHint}` : '',
+      intervention ? `干预框架：${intervention.frameworkName}` : '',
+      carePlan ? `关怀建议：${carePlan.suggestion}` : '',
+      risk.hotline ? `援助热线：${risk.hotline}` : '',
+      '',
+      printPrivacyMask ? '【报告节选 · 已脱敏】' : '【详细报告节选】',
+      reportExcerpt
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      flashAction('无法打开打印窗口，请检查浏览器弹窗设置');
+      return;
+    }
+    printWindow.document.write(`<pre style="font-family:sans-serif;line-height:1.6;padding:24px">${onePage.replace(/</g, '&lt;')}</pre>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   };
 
   const renderMetricBar = (
@@ -162,6 +242,41 @@ export const ReportPanel: React.FC<ReportPanelProps> = ({
 
       {isExpanded && (
         <div className="report-content report-content-scroll">
+          {reportPending && (
+            <div className="report-instant-banner">
+              <strong>即时简易报告</strong>
+              <p>{quickSummary.oneLine}</p>
+              {quickSummary.actionHint && <p className="report-instant-hint">{quickSummary.actionHint}</p>}
+              <p className="report-instant-note">完整版报告正在后台生成，完成后可导出全文。</p>
+            </div>
+          )}
+
+          {!reportPending && (
+            <ReportSummaryCards
+              emotion={emotion}
+              risk={risk}
+              problem={problem}
+              statModel={statModel}
+              implicitNeeds={implicitNeeds}
+              reportText={report}
+            />
+          )}
+
+          {onOpenCbt && (
+            <button type="button" className="cbt-launch-btn" onClick={onOpenCbt}>
+              开始 CBT 认知练习
+            </button>
+          )}
+
+          <label className="report-privacy-toggle">
+            <input
+              type="checkbox"
+              checked={printPrivacyMask}
+              onChange={(e) => setPrintPrivacyMask(e.target.checked)}
+            />
+            导出 PDF 时隐去敏感对话摘录
+          </label>
+
           {lowConfidence && (
             <div className="report-disclaimer">
               情绪识别置信度较低，以下分析仅供参考，如有持续困扰建议寻求专业心理评估。
@@ -431,10 +546,20 @@ export const ReportPanel: React.FC<ReportPanelProps> = ({
           )}
 
           <div className="report-actions">
+            <button type="button" className="action-btn" onClick={() => void handleCopySummary()}>
+              复制摘要
+            </button>
+            <button type="button" className="action-btn" onClick={() => void handleShareCounselor()}>
+              分享辅导员
+            </button>
+            <button type="button" className="action-btn" onClick={handlePrintOnePage}>
+              一页纸 PDF
+            </button>
             <button type="button" className="action-btn export-btn" onClick={handleExport}>
               导出完整报告
             </button>
           </div>
+          {actionHint && <p className="report-action-hint">{actionHint}</p>}
         </div>
       )}
     </div>

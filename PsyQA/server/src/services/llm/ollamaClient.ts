@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Readable } from 'stream';
 import { resolveOllamaModel, clearOllamaModelCache } from './loraModelRegistry';
 
 export { resolveOllamaModel, clearOllamaModelCache };
@@ -79,6 +80,80 @@ export async function callOllamaGenerateOnly(
     }
   }
   return null;
+}
+
+/** Ollama NDJSON 流式生成，逐 token 回调 */
+export async function callOllamaGenerateStream(
+  prompt: string,
+  options?: {
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    timeoutMs?: number;
+    onToken?: (chunk: string) => void;
+  }
+): Promise<string | null> {
+  const { model } = await resolveOllamaModel();
+  try {
+    const response = await axios.post(
+      DEFAULT_API,
+      {
+        model: options?.model || model,
+        prompt,
+        stream: true,
+        options: {
+          temperature: options?.temperature ?? 0.15,
+          num_predict: options?.maxTokens ?? 512
+        }
+      },
+      { responseType: 'stream', timeout: options?.timeoutMs ?? 90_000 }
+    );
+
+    return await new Promise<string | null>((resolve) => {
+      let full = '';
+      let buffer = '';
+      const stream = response.data as Readable;
+
+      const finish = (result: string | null) => {
+        resolve(result);
+      };
+
+      stream.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString('utf-8');
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const json = JSON.parse(trimmed) as { response?: string; done?: boolean };
+            if (typeof json.response === 'string' && json.response) {
+              full += json.response;
+              options?.onToken?.(json.response);
+            }
+          } catch {
+            /* skip malformed line */
+          }
+        }
+      });
+
+      stream.on('end', () => finish(full.trim() || null));
+      stream.on('error', (err) => {
+        console.warn('Ollama stream error:', err);
+        finish(full.trim() || null);
+      });
+    });
+  } catch (error) {
+    console.warn('Ollama stream failed:', error);
+    clearOllamaModelCache();
+    try {
+      const { markOllamaUnavailable } = await import('./ollamaAvailability');
+      markOllamaUnavailable();
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
 }
 
 /** 优先智谱 AI，回退 Ollama */

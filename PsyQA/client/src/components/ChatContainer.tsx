@@ -6,7 +6,12 @@ import { ChatInput } from './ChatInput';
 interface ChatContainerProps {
   messages: Message[];
   isLoading: boolean;
+  isGenerating?: boolean;
   onSend: (question: string, description: string) => void;
+  onStopGenerate?: () => void;
+  onPauseGenerate?: () => void;
+  onResumeGenerate?: () => void;
+  streamPaused?: boolean;
   onSimilarQuestionClick: (question: string) => void;
   onClearHistory: () => void;
   onExportHistory?: () => void;
@@ -15,12 +20,19 @@ interface ChatContainerProps {
   inputLocked?: boolean;
   exportMenu?: React.ReactNode;
   estimatedWaitSec?: number;
+  fastAnswerMode?: boolean;
+  onValidateBeforeSend?: (question: string) => boolean;
 }
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({
   messages,
   isLoading,
+  isGenerating = false,
   onSend,
+  onStopGenerate,
+  onPauseGenerate,
+  onResumeGenerate,
+  streamPaused = false,
   onSimilarQuestionClick,
   onClearHistory,
   onExportHistory,
@@ -28,14 +40,17 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   initializing = false,
   inputLocked = false,
   exportMenu,
-  estimatedWaitSec
+  estimatedWaitSec,
+  fastAnswerMode = false,
+  onValidateBeforeSend
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  const showWelcome = messages.length <= 1 && !isLoading;
+  const showWelcome = messages.length <= 1 && !isLoading && !isGenerating;
   const showQuickPrompts = showWelcome && quickPrompts.length > 0;
   const inputDisabled = isLoading || initializing || inputLocked;
+  const showStop = isGenerating && onStopGenerate;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -128,13 +143,54 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                     <span />
                   </div>
                   <div className="chat-loading-text">
-                    <p className="chat-loading-title">正在认真倾听并思考…</p>
-                    {estimatedWaitSec != null && estimatedWaitSec > 0 && (
+                    <p className="chat-loading-title">
+                      {fastAnswerMode ? '规则模式 · 正在匹配知识库…' : '正在认真倾听并思考…'}
+                    </p>
+                    {estimatedWaitSec != null && estimatedWaitSec > 0 && !fastAnswerMode && (
                       <span className="chat-loading-hint">预计约 {estimatedWaitSec} 秒，请稍候</span>
                     )}
+                    {fastAnswerMode && (
+                      <span className="chat-loading-hint">通常 1–3 秒内返回</span>
+                    )}
                   </div>
+                  {showStop && (
+                    <div className="stream-control-row">
+                      {!streamPaused ? (
+                        <button type="button" className="stream-pause-btn" onClick={onPauseGenerate}>
+                          暂停输出
+                        </button>
+                      ) : (
+                        <button type="button" className="stream-pause-btn" onClick={onResumeGenerate}>
+                          继续输出
+                        </button>
+                      )}
+                      <button type="button" className="stream-stop-btn" onClick={onStopGenerate}>
+                        停止生成
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {!isLoading && showStop && (
+          <div className="stream-stop-bar">
+            <span>{streamPaused ? '输出已暂停…' : '正在输出回复…'}</span>
+            <div className="stream-control-row">
+              {!streamPaused ? (
+                <button type="button" className="stream-pause-btn" onClick={onPauseGenerate}>
+                  暂停
+                </button>
+              ) : (
+                <button type="button" className="stream-pause-btn" onClick={onResumeGenerate}>
+                  继续
+                </button>
+              )}
+              <button type="button" className="stream-stop-btn" onClick={onStopGenerate}>
+                停止
+              </button>
             </div>
           </div>
         )}
@@ -145,8 +201,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       <ChatInput
         onSend={onSend}
         disabled={inputDisabled}
-        loading={isLoading}
+        loading={isLoading || isGenerating}
         initializing={initializing}
+        onValidateBeforeSend={onValidateBeforeSend}
       />
     </div>
   );

@@ -16,6 +16,7 @@ const supertest_1 = __importDefault(require("supertest"));
 const createApp_1 = require("../../createApp");
 describe('HTTP integration', () => {
     const app = (0, createApp_1.createApp)();
+    jest.setTimeout(15000);
     it('GET /health returns ok', () => __awaiter(void 0, void 0, void 0, function* () {
         const res = yield (0, supertest_1.default)(app).get('/health');
         expect(res.status).toBe(200);

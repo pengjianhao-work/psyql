@@ -56,6 +56,10 @@ function requirePermission(...perms) {
             return;
         }
         const granted = new Set((0, accountService_1.getPermissionsForRole)(req.authUser.role));
+        if (granted.has('admin:*')) {
+            next();
+            return;
+        }
         const ok = perms.some((p) => granted.has(p));
         if (!ok) {
             res.status(403).json({ error: '无权限执行该操作' });

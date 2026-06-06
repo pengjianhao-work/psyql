@@ -128,7 +128,25 @@ export const RuntimeStatusBar: React.FC = () => {
 
             {health.llmMode === 'fast' && (
 
-              <span className="muted"> · 使用「一键启动」可恢复大模型模式</span>
+              <span className="muted"> · 规则+知识库秒回 · 完整模式请用「心理港湾」启动</span>
+
+            )}
+
+            {health.knowledge && !health.knowledge.embedReady && health.llmMode !== 'fast' && (
+
+              <span className="muted"> · 知识库 {health.knowledge.knowledgeCount} 条（可运行数据处理.bat 完成向量嵌入）</span>
+
+            )}
+
+            {health.reportQueue && health.reportQueue.pending > 0 && (
+
+              <span className="muted"> · 报告队列 {health.reportQueue.pending}</span>
+
+            )}
+
+            {health.knowledge?.chromaConnected && health.knowledge.chromaCount != null && (
+
+              <span className="muted"> · Chroma {health.knowledge.chromaCount} 条</span>
 
             )}
 

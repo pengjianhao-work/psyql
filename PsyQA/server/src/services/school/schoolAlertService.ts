@@ -7,8 +7,12 @@ import {
   insertAlertInDb,
   updateAlertInDb
 } from '../../db/alertStore';
+import { notifyTier1Alert } from './schoolNotificationService';
+import { ensureInterventionLedger } from './interventionLedgerService';
 
 export type AlertStatus = 'pending' | 'contacted' | 'referred' | 'closed' | 'false_positive';
+
+export type AlertTier = 1 | 2 | 3;
 
 export interface SchoolAlert {
   id: string;
@@ -16,6 +20,10 @@ export interface SchoolAlert {
   studentMask: string;
   orgId: string;
   level: 'critical' | 'high' | 'medium';
+  /** 1=危机(自杀自伤) 2=重度情绪 3=一般困扰 */
+  tier: AlertTier;
+  slaHours: number;
+  slaDueAt: string;
   source: 'risk' | 'trend' | 'manual';
   summary: string;
   riskKeywords: string[];
@@ -59,6 +67,22 @@ export function maskStudentId(userId: string, displayName?: string): string {
   return `${userId.slice(0, 4)}****`;
 }
 
+function resolveAlertTier(riskLevel: RiskLevel, keywords: string[]): {
+  tier: AlertTier;
+  level: 'critical' | 'high' | 'medium';
+  slaHours: number;
+} {
+  const kw = keywords.join(' ');
+  const crisis = /自杀|自伤|自残|不想活|跳楼|割腕|杀人|伤害他人/.test(kw);
+  if (riskLevel === 'critical' || crisis) {
+    return { tier: 1, level: 'critical', slaHours: 2 };
+  }
+  if (riskLevel === 'high' || /抑郁|绝望|崩溃|焦虑严重/.test(kw)) {
+    return { tier: 2, level: 'high', slaHours: 24 };
+  }
+  return { tier: 3, level: 'medium', slaHours: 72 };
+}
+
 export function recordRiskAlert(params: {
   studentId: string;
   displayName?: string;
@@ -69,18 +93,26 @@ export function recordRiskAlert(params: {
   dialogId: string;
   dialogTime: string;
 }): SchoolAlert | null {
-  if (params.riskLevel !== 'high' && params.riskLevel !== 'critical') {
+  const tierInfo = resolveAlertTier(params.riskLevel, params.riskKeywords);
+  if (params.riskLevel === 'low' && tierInfo.tier === 3) {
+    return null;
+  }
+  if (params.riskLevel !== 'high' && params.riskLevel !== 'critical' && tierInfo.tier === 3) {
     return null;
   }
 
-  const level = params.riskLevel === 'critical' ? 'critical' : 'high';
+  const level = tierInfo.level;
   const now = new Date().toISOString();
+  const slaDueAt = new Date(Date.now() + tierInfo.slaHours * 3600_000).toISOString();
   const alert: SchoolAlert = {
     id: `alert_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     studentId: params.studentId,
     studentMask: maskStudentId(params.studentId, params.displayName),
     orgId: params.orgId || 'default',
     level,
+    tier: tierInfo.tier,
+    slaHours: tierInfo.slaHours,
+    slaDueAt,
     source: 'risk',
     summary: params.summary,
     riskKeywords: params.riskKeywords,
@@ -98,6 +130,17 @@ export function recordRiskAlert(params: {
     if (data.alerts.length > 500) {
       writeAlerts({ alerts: data.alerts.slice(0, 500) });
     }
+    if (alert.tier === 1) notifyTier1Alert(alert);
+    if (alert.tier <= 2) {
+      ensureInterventionLedger({
+        alertId: alert.id,
+        studentId: alert.studentId,
+        studentMask: alert.studentMask,
+        orgId: alert.orgId,
+        tier: alert.tier,
+        slaDueAt: alert.slaDueAt
+      });
+    }
     return alert;
   }
 
@@ -107,12 +150,24 @@ export function recordRiskAlert(params: {
     data.alerts = data.alerts.slice(0, 500);
   }
   writeAlerts(data);
+  if (alert.tier === 1) notifyTier1Alert(alert);
+  if (alert.tier <= 2) {
+    ensureInterventionLedger({
+      alertId: alert.id,
+      studentId: alert.studentId,
+      studentMask: alert.studentMask,
+      orgId: alert.orgId,
+      tier: alert.tier,
+      slaDueAt: alert.slaDueAt
+    });
+  }
   return alert;
 }
 
 export function listAlerts(filters?: {
   status?: AlertStatus;
   level?: string;
+  tier?: string;
   orgIds?: string[];
   from?: string;
   to?: string;
@@ -124,6 +179,10 @@ export function listAlerts(filters?: {
   if (filters?.level) {
     items = items.filter((a) => a.level === filters.level);
   }
+  if (filters?.tier) {
+    const t = Number(filters.tier) as AlertTier;
+    items = items.filter((a) => (a.tier ?? 2) === t);
+  }
   if (filters?.orgIds && filters.orgIds.length > 0) {
     items = items.filter((a) => filters.orgIds!.includes(a.orgId));
   }
@@ -133,7 +192,14 @@ export function listAlerts(filters?: {
   if (filters?.to) {
     items = items.filter((a) => a.dialogTime <= filters.to!);
   }
-  return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return items
+    .map((a) => ({
+      ...a,
+      tier: a.tier ?? (a.level === 'critical' ? 1 : a.level === 'high' ? 2 : 3),
+      slaHours: a.slaHours ?? (a.level === 'critical' ? 2 : 24),
+      slaDueAt: a.slaDueAt ?? a.createdAt
+    }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function getAlertById(alertId: string): SchoolAlert | null {

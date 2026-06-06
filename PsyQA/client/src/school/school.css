@@ -213,6 +213,103 @@
   color: #991b1b;
 }
 
+.badge.tier-1 {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+
+.badge.tier-2 {
+  background: #fed7aa;
+  color: #9a3412;
+}
+
+.badge.tier-3 {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.school-tier1-push-banner {
+  margin: 0.75rem 1rem 0;
+  padding: 0.85rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  animation: psy-fade-in 0.35s ease;
+}
+
+.school-tier1-push-banner strong {
+  color: #991b1b;
+}
+
+.school-tier1-push-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.school-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.school-heatmap-cell {
+  padding: 0.85rem;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  border: 1px solid #e2e8f0;
+}
+.heat-low { background: #f0fdf4; }
+.heat-medium { background: #fffbeb; }
+.heat-high { background: #ffedd5; }
+.heat-critical { background: #fef2f2; border-color: #fecaca; }
+
+.school-ledger-list { list-style: none; padding: 0; }
+.school-ledger-card {
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+.school-overdue-banner {
+  padding: 0.75rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.school-row-selected {
+  background: #f0f4ff;
+}
+
+.school-kb-add { margin-bottom: 1rem; }
+.school-kb-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 640px;
+}
+.school-kb-list { list-style: none; padding: 0; }
+.school-kb-item {
+  padding: 0.85rem;
+  border-bottom: 1px solid #edf2ef;
+  font-size: 0.9rem;
+}
+.school-kb-review-btns { display: flex; gap: 0.35rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.school-kb-pager {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
 .school-tags {
   display: flex;
   flex-wrap: wrap;

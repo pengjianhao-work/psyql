@@ -2,6 +2,7 @@ import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import type { ReActCounselContext, ReActCounselResult, ReActStep } from './reactCounselAgent';
+import type { ReactMode } from './agentPolicy';
 
 export interface PlannerPlan {
   useKnowledge: boolean;
@@ -93,14 +94,19 @@ export async function runPlannerRespondAgent(
     temperature?: number;
     timeoutMs?: number;
     onToken?: (chunk: string) => void;
+    onStep?: (step: ReActStep) => void;
     useLlmPlanner?: boolean;
   }
 ): Promise<ReActCounselResult> {
   const steps: ReActStep[] = [];
+  const emit = (step: ReActStep) => {
+    steps.push(step);
+    options?.onStep?.(step);
+  };
   const useLlmPlanner = options?.useLlmPlanner ?? process.env.PSYQA_AGENT_PLANNER === '1';
   const plan = useLlmPlanner ? (await llmPlanner(ctx)) ?? ruleBasedPlan(ctx) : ruleBasedPlan(ctx);
 
-  steps.push({
+  emit({
     step: 1,
     thought: plan.reason,
     action: 'plan',
@@ -144,7 +150,7 @@ export async function runPlannerRespondAgent(
       })) || '';
   }
 
-  steps.push({
+  emit({
     step: 2,
     thought: '基于规划上下文生成回复',
     action: 'respond',
@@ -153,10 +159,12 @@ export async function runPlannerRespondAgent(
   });
 
   const success = finalAnswer.length >= 80;
+  const reactMode: ReactMode = success ? 'planner' : 'off';
   return {
-    answer: finalAnswer,
+    answer: success ? finalAnswer : '',
     steps,
     success,
-    reactUsed: success
+    reactUsed: success,
+    reactMode
   };
 }

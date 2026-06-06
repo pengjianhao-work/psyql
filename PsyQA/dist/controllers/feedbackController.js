@@ -5,7 +5,7 @@ exports.getSessionFeedbackForDialog = getSessionFeedbackForDialog;
 exports.getUserProfileHandler = getUserProfileHandler;
 const resolveUserId_1 = require("../utils/resolveUserId");
 const feedbackStore_1 = require("../db/feedbackStore");
-const userProfileService_1 = require("../services/userProfileService");
+const userProfileService_1 = require("../services/user/userProfileService");
 function postSessionFeedback(req, res) {
     var _a;
     const userId = (0, resolveUserId_1.resolveStudentUserId)(req, res, (_a = req.body) === null || _a === void 0 ? void 0 : _a.userId);

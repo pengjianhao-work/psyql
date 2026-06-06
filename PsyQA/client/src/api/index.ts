@@ -36,6 +36,8 @@ api.interceptors.request.use((config) => {
 });
 attachBackendFallback(api, '/api/questions');
 
+export type GenerationHint = 'llm_ok' | 'retrieval_miss' | 'kb_empty' | 'llm_fallback' | 'rule_only' | 'fast_kb';
+
 export interface RuntimeHealth {
   status: string;
   llmMode: 'zhipu' | 'ollama' | 'fallback' | 'fast';
@@ -45,6 +47,27 @@ export interface RuntimeHealth {
   llmAvailable?: boolean;
   model?: string;
   fastAnswer?: boolean;
+  reactDemo?: boolean;
+  knowledge?: {
+    knowledgeCount: number;
+    datasetUpdatedAt?: string;
+    chromaConnected: boolean;
+    chromaCount?: number;
+    embedReady: boolean;
+  };
+  build?: {
+    version: string;
+    startedAt: string;
+    nodeVersion: string;
+  };
+  load?: {
+    activeAskRequests: number;
+    maxAskRequests: number;
+  };
+  reportQueue?: {
+    pending: number;
+    inFlight: number;
+  };
 }
 
 const BACKEND_ORIGIN =
@@ -323,23 +346,26 @@ export const askQuestion = async (
   return response.data;
 };
 
-/** SSE 流式咨询（智谱逐字输出） */
+/** SSE 流式咨询（智谱/Ollama 逐字输出 + ReAct 步骤） */
 export async function askQuestionStream(
   question: string,
   description: string | undefined,
   userId: string | undefined,
   handlers: {
     onToken: (text: string) => void;
+    onReactStep?: (step: import('../types').ReActStep) => void;
     onDone: (payload: QuestionResponse & { portraitPending?: boolean }) => void;
-    onError: (message: string) => void;
-  }
-): Promise<void> {
+    onError: (message: string, code?: string) => void;
+  },
+  options?: { signal?: AbortSignal }
+): Promise<{ aborted: boolean }> {
   const token = getAuthToken();
   let res: Response;
   try {
     res = await fetch(resolveStreamUrl(), {
       method: 'POST',
       credentials: 'include',
+      signal: options?.signal,
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
@@ -352,10 +378,13 @@ export async function askQuestionStream(
       })
     });
   } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { aborted: true };
+    }
     handlers.onError(
       err instanceof Error && err.message ? err.message : '无法连接后端，请确认 npm run dev 已启动'
     );
-    return;
+    return { aborted: false };
   }
 
   if (!res.ok || !res.body) {
@@ -367,40 +396,56 @@ export async function askQuestionStream(
       /* ignore */
     }
     handlers.onError(msg);
-    return;
+    return { aborted: false };
   }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split('\n\n');
-    buffer = chunks.pop() || '';
-    for (const chunk of chunks) {
-      const line = chunk.split('\n').find((l) => l.startsWith('data:'));
-      if (!line) continue;
-      try {
-        const payload = JSON.parse(line.slice(5).trim()) as {
-          type?: string;
-          text?: string;
-          error?: string;
-        } & QuestionResponse;
-        if (payload.type === 'token' && payload.text) {
-          handlers.onToken(payload.text);
-        } else if (payload.type === 'error') {
-          handlers.onError(payload.error || '生成失败');
-        } else if (payload.type === 'done') {
-          handlers.onDone(payload as QuestionResponse & { portraitPending?: boolean });
+  try {
+    while (true) {
+      if (options?.signal?.aborted) {
+        await reader.cancel().catch(() => undefined);
+        return { aborted: true };
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop() || '';
+      for (const chunk of chunks) {
+        const line = chunk.split('\n').find((l) => l.startsWith('data:'));
+        if (!line) continue;
+        try {
+          const payload = JSON.parse(line.slice(5).trim()) as {
+            type?: string;
+            text?: string;
+            error?: string;
+            code?: string;
+            step?: import('../types').ReActStep;
+          } & QuestionResponse;
+          if (payload.type === 'token' && payload.text) {
+            handlers.onToken(payload.text);
+          } else if (payload.type === 'react_step' && payload.step) {
+            handlers.onReactStep?.(payload.step);
+          } else if (payload.type === 'error') {
+            handlers.onError(payload.error || '生成失败', payload.code);
+          } else if (payload.type === 'done') {
+            handlers.onDone(payload as QuestionResponse & { portraitPending?: boolean });
+          }
+        } catch {
+          /* skip malformed sse */
         }
-      } catch {
-        /* skip malformed sse */
       }
     }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { aborted: true };
+    }
+    throw err;
   }
+  return { aborted: false };
 }
 
 export interface InsightsStatus {
@@ -636,6 +681,84 @@ export const patchAgentProfile = async (payload: {
   return response.data;
 };
 
+export interface AgentMemoryRow {
+  dialogTime: string;
+  chromaId: string;
+  month: string;
+  emotion: string | null;
+  contentPreview: string | null;
+  createdAt: string;
+  tags?: string[];
+  locked?: boolean;
+  archived?: boolean;
+}
+
+export const listAgentMemories = async (userId: string): Promise<AgentMemoryRow[]> => {
+  const response = await api.get('/agent-memories', { params: { userId } });
+  return response.data.memories;
+};
+
+export const deleteAgentMemory = async (userId: string, dialogTime: string): Promise<void> => {
+  await api.delete('/agent-memory', { data: { userId, dialogTime } });
+};
+
+export async function batchArchiveMemories(
+  userId: string,
+  dialogTimes: string[],
+  archived = true
+): Promise<void> {
+  await api.post('/memory-batch-archive', { userId, dialogTimes, archived });
+}
+
+export type KnowledgeCategoryFilter =
+  | 'all'
+  | 'academic_stress'
+  | 'interpersonal'
+  | 'crisis'
+  | 'emotion_regulation'
+  | 'family_relationship';
+
+export interface KnowledgeCatalogItem {
+  index: number;
+  question: string;
+  answer: string;
+  categoryLabels: string[];
+  tags?: { problems: string[]; emotions: string[] };
+}
+
+export async function fetchKnowledgeItems(params: {
+  category?: KnowledgeCategoryFilter;
+  q?: string;
+  page?: number;
+}): Promise<{ total: number; page: number; pageSize: number; items: KnowledgeCatalogItem[] }> {
+  const { data } = await api.get('/admin/knowledge-items', { params });
+  return data;
+}
+
+export async function createKnowledgeItem(body: {
+  question: string;
+  answer: string;
+  category: KnowledgeCategoryFilter;
+}): Promise<void> {
+  await api.post('/admin/knowledge-items', body);
+}
+
+export async function fetchKnowledgeUpdateStatus(): Promise<{
+  live: { knowledgeBaseCount: number; vectorDbCount: number };
+}> {
+  const { data } = await api.get('/admin/knowledge-status');
+  return data;
+}
+
+export async function submitKnowledgeReview(body: {
+  question: string;
+  answerPreview: string;
+  verdict: 'correct' | 'incorrect' | 'partial';
+  comment?: string;
+}): Promise<void> {
+  await schoolApi.post('/knowledge-reviews', body);
+}
+
 export async function downloadAgentProfileExport(userId: string): Promise<void> {
   const token = getAuthToken();
   const res = await fetch(
@@ -770,6 +893,9 @@ export interface SchoolAlertItem {
   orgId: string;
   orgName?: string;
   level: 'critical' | 'high' | 'medium';
+  tier?: 1 | 2 | 3;
+  slaHours?: number;
+  slaDueAt?: string;
   source: string;
   summary: string;
   riskKeywords: string[];
@@ -801,6 +927,7 @@ export async function fetchSchoolStudentDetail(studentId: string): Promise<Schoo
 export async function fetchSchoolAlerts(params?: {
   status?: string;
   level?: string;
+  tier?: string;
   from?: string;
   to?: string;
 }): Promise<{ count: number; alerts: SchoolAlertItem[] }> {
@@ -906,4 +1033,202 @@ export async function downloadSchoolReport(format: 'json' | 'csv' = 'csv'): Prom
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+export async function downloadSchoolMonthlyLedger(month?: string): Promise<void> {
+  const m = month || new Date().toISOString().slice(0, 7);
+  const response = await schoolApi.get('/admin/report/monthly-ledger', {
+    params: { month: m, format: 'xlsx' },
+    responseType: 'blob'
+  });
+  const blob = response.data as Blob;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `psyqa-monthly-ledger-${m}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export interface SchoolNotificationItem {
+  id: string;
+  type: 'tier1_alert';
+  alertId: string;
+  studentMask: string;
+  summary: string;
+  orgId: string;
+  tier: 1;
+  createdAt: string;
+}
+
+export async function fetchSchoolNotifications(): Promise<{ notifications: SchoolNotificationItem[] }> {
+  const { data } = await schoolApi.get('/notifications');
+  return data;
+}
+
+export async function markSchoolNotificationsRead(ids: string[]): Promise<void> {
+  await schoolApi.post('/notifications/read', { ids });
+}
+
+export interface TranscriptViewRequest {
+  id: string;
+  studentId: string;
+  counselorId: string;
+  counselorName: string;
+  orgId: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export async function postCounselorTranscriptRequest(
+  studentId: string,
+  reason?: string
+): Promise<{ message: string; request: TranscriptViewRequest }> {
+  const { data } = await schoolApi.post('/transcript-requests', { studentId, reason });
+  return data;
+}
+
+export async function fetchCounselorTranscriptRequests(): Promise<{ requests: TranscriptViewRequest[] }> {
+  const { data } = await schoolApi.get('/transcript-requests');
+  return data;
+}
+
+export async function fetchStudentTranscriptRequests(
+  userId: string
+): Promise<{ requests: TranscriptViewRequest[] }> {
+  const { data } = await api.get('/transcript-requests', { params: { userId } });
+  return data;
+}
+
+export async function resolveStudentTranscriptRequest(
+  userId: string,
+  requestId: string,
+  approve: boolean
+): Promise<{ message: string; request: TranscriptViewRequest }> {
+  const { data } = await api.post('/transcript-requests/resolve', { userId, requestId, approve });
+  return data;
+}
+
+// —— 创新功能 API ——
+
+export interface EmotionRhythmPayload {
+  month: string;
+  days: Array<{ date: string; level: string; score: number; ewma: number; sessions: number }>;
+  periodicDips: Array<{ label: string; description: string; carePlan: string }>;
+  summary: string;
+}
+
+export async function fetchEmotionRhythm(userId: string, month?: string): Promise<EmotionRhythmPayload> {
+  const { data } = await api.get('/emotion-rhythm', { params: { userId, month } });
+  return data;
+}
+
+export interface CbtMicroModule {
+  id: string;
+  title: string;
+  topic: string;
+  framework: string;
+  steps: Array<{
+    scenario: string;
+    thought: string;
+    choices: Array<{ id: string; text: string; isAdaptive: boolean; feedback: string }>;
+  }>;
+}
+
+export async function fetchCbtModule(problem?: string, emotion?: string): Promise<{ module: CbtMicroModule }> {
+  const { data } = await api.get('/cbt-module', { params: { problem, emotion } });
+  return data;
+}
+
+export async function submitCbtComplete(body: {
+  problem?: string;
+  emotion?: string;
+  selections: Record<number, string>;
+}): Promise<{ score: number; message: string }> {
+  const { data } = await api.post('/cbt-complete', body);
+  return data;
+}
+
+export interface MemoryTagEntry {
+  dialogTime: string;
+  tags: string[];
+  locked: boolean;
+  archived: boolean;
+}
+
+export async function fetchMemoryTags(userId: string, tag?: string): Promise<{ memories: MemoryTagEntry[] }> {
+  const { data } = await api.get('/memory-tags', { params: { userId, tag } });
+  return data;
+}
+
+export async function patchMemoryTag(
+  userId: string,
+  dialogTime: string,
+  patch: { locked?: boolean; archived?: boolean; tags?: string[] }
+): Promise<void> {
+  await api.patch('/memory-tag', { userId, dialogTime, ...patch });
+}
+
+export interface HeatmapCell {
+  orgId: string;
+  className: string;
+  studentCount: number;
+  consultCount: number;
+  highRiskCount: number;
+  pendingAlerts: number;
+  avgStress: number;
+  heatLevel: 'low' | 'medium' | 'high' | 'critical';
+  topIssue?: string;
+}
+
+export async function fetchSchoolHeatmap(month?: string): Promise<{
+  month: string;
+  cells: HeatmapCell[];
+  groupInsight: string;
+}> {
+  const { data } = await schoolApi.get('/heatmap', { params: { month } });
+  return data;
+}
+
+export interface InterventionRecord {
+  id: string;
+  alertId: string;
+  studentMask: string;
+  tier: number;
+  slaDueAt: string;
+  status: string;
+  meetingNotes: string[];
+}
+
+export async function fetchInterventionLedgers(): Promise<{
+  records: InterventionRecord[];
+  overdue: InterventionRecord[];
+}> {
+  const { data } = await schoolApi.get('/intervention-ledgers');
+  return data;
+}
+
+export async function patchInterventionLedger(
+  id: string,
+  patch: Partial<{ status: string; meetingNotes: string[]; measures: string[]; nextFollowUpAt: string }>
+): Promise<void> {
+  await schoolApi.patch(`/intervention-ledgers/${encodeURIComponent(id)}`, patch);
+}
+
+export async function batchTranscriptRequest(studentIds: string[], reason?: string): Promise<{ message: string }> {
+  const { data } = await schoolApi.post('/transcript-requests/batch', { studentIds, reason });
+  return data;
+}
+
+export async function batchResolveTranscript(
+  userId: string,
+  requestIds: string[],
+  approve: boolean
+): Promise<{ message: string; count: number }> {
+  const { data } = await api.post('/transcript-requests/batch-resolve', { userId, requestIds, approve });
+  return data;
 }

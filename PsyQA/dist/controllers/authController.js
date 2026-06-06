@@ -10,9 +10,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getColleges = exports.patchProfile = exports.getMe = exports.postLogout = exports.postLogin = exports.postRegister = void 0;
-const sessionService_1 = require("../services/sessionService");
-const accountService_1 = require("../services/accountService");
-const orgService_1 = require("../services/orgService");
+const sessionService_1 = require("../services/user/sessionService");
+const accountService_1 = require("../services/user/accountService");
+const orgService_1 = require("../services/user/orgService");
 const authCookie_1 = require("../utils/authCookie");
 const postRegister = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { username, password, displayName } = req.body;

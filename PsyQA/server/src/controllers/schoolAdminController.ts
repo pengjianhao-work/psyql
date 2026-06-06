@@ -3,6 +3,8 @@ import { AuthRequest } from '../middleware/authMiddleware';
 import {
   buildSchoolReport,
   schoolReportToCsv,
+  schoolMonthlyLedgerCsv,
+  schoolMonthlyLedgerExcel,
   SchoolReportPayload
 } from '../services/school/schoolReportService';
 import {
@@ -26,6 +28,27 @@ export const getSchoolReportExport = async (req: AuthRequest, res: Response): Pr
   }
 
   res.json(report satisfies SchoolReportPayload);
+};
+
+export const getSchoolMonthlyLedgerExport = async (req: AuthRequest, res: Response): Promise<void> => {
+  const month = String(req.query.month || new Date().toISOString().slice(0, 7));
+  const format = String(req.query.format || 'xlsx').toLowerCase();
+  const report = await buildSchoolReport(req.authUser!);
+
+  if (format === 'csv') {
+    const csv = schoolMonthlyLedgerCsv(report, month);
+    const filename = `psyqa-monthly-ledger-${month}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send('\ufeff' + csv);
+    return;
+  }
+
+  const xml = schoolMonthlyLedgerExcel(report, month);
+  const filename = `psyqa-monthly-ledger-${month}.xls`;
+  res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send('\ufeff' + xml);
 };
 
 export const getAdminUsers = async (_req: AuthRequest, res: Response): Promise<void> => {

@@ -9,6 +9,8 @@ import { EmotionType, ProblemCategory, PROBLEM_KEYWORDS } from '../psych/emotion
 import { scoreKeywordMatches } from '../../utils/psychTextAnalysis';
 import { resolveDataFile } from '../../config/paths';
 import { SearchResult } from './searchTypes';
+import { cacheGet, cacheSet } from '../../utils/memoryCache';
+import { applySeasonalScoreMultiplier } from './seasonalRagPolicy';
 
 export interface KnowledgeTags {
   problems: ProblemCategory[];
@@ -27,10 +29,53 @@ let knowledgeBase: KnowledgeItem[] = [];
 
 const MIN_KNOWLEDGE_SCORE = 3;
 const MIN_RELATIVE_RATIO = 0.5;
+const RAG_CACHE_TTL_MS = 120_000;
+
+function ragCacheKey(
+  query: string,
+  topK: number,
+  problemCategory?: ProblemCategory,
+  emotion?: EmotionType
+): string {
+  return `rag:${topK}:${problemCategory ?? ''}:${emotion ?? ''}:${query.slice(0, 200)}`;
+}
+
+function retrieveKnowledgeUncached(
+  query: string,
+  topK: number,
+  problemCategory?: ProblemCategory,
+  emotion?: EmotionType
+): KnowledgeItem[] {
+  if (knowledgeBase.length === 0) return [];
+
+  const scoredItems = knowledgeBase.map((item) => ({
+    ...item,
+    score: scoreKnowledgeItem(query, item, { problemCategory, emotion })
+  }));
+
+  const filtered = filterByRelativeScore(scoredItems, MIN_KNOWLEDGE_SCORE);
+
+  return filtered.slice(0, topK).map(({ score, ...item }) => ({
+    ...item,
+    relevance: score
+  }));
+}
 
 const resolveKnowledgePath = (): string => resolveDataFile('mental_dataset.json');
 
 export const getKnowledgeBaseCount = (): number => knowledgeBase.length;
+
+/** 按问题领域定向检索 */
+export function retrieveKnowledgeByCategory(
+  query: string,
+  topK: number,
+  category: ProblemCategory,
+  emotion?: EmotionType
+): KnowledgeItem[] {
+  return retrieveKnowledgeUncached(query, topK * 3, category, emotion)
+    .filter((item) => !item.tags?.problems?.length || item.tags.problems.includes(category))
+    .slice(0, topK);
+}
 
 export const reloadKnowledgeBase = (): void => {
   loadKnowledgeBase();
@@ -92,6 +137,14 @@ export function scoreKnowledgeItem(
     score += options.vectorSimilarity * 5;
   }
 
+  score = applySeasonalScoreMultiplier(
+    score,
+    item.tags?.problems,
+    item.tags?.emotions,
+    options?.problemCategory,
+    options?.emotion
+  );
+
   return score;
 }
 
@@ -109,19 +162,13 @@ export const retrieveKnowledge = (
   problemCategory?: ProblemCategory,
   emotion?: EmotionType
 ): KnowledgeItem[] => {
-  if (knowledgeBase.length === 0) return [];
+  const key = ragCacheKey(query, topK, problemCategory, emotion);
+  const cached = cacheGet<KnowledgeItem[]>(key);
+  if (cached) return cached;
 
-  const scoredItems = knowledgeBase.map((item) => ({
-    ...item,
-    score: scoreKnowledgeItem(query, item, { problemCategory, emotion })
-  }));
-
-  const filtered = filterByRelativeScore(scoredItems, MIN_KNOWLEDGE_SCORE);
-
-  return filtered.slice(0, topK).map(({ score, ...item }) => ({
-    ...item,
-    relevance: score
-  }));
+  const result = retrieveKnowledgeUncached(query, topK, problemCategory, emotion);
+  cacheSet(key, result, RAG_CACHE_TTL_MS);
+  return result;
 };
 
 export function mergeRankedReferences(

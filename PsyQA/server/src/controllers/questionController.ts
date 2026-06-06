@@ -30,6 +30,10 @@ let activeRequests = 0;
 const MAX_ACTIVE_REQUESTS = process.env.PSYQA_LOAD_TEST === '1' ? 8 : 4;
 const SLOW_REQUEST_MS = 15000;
 
+export function getAskLoadMetrics(): { activeAskRequests: number; maxAskRequests: number } {
+  return { activeAskRequests: activeRequests, maxAskRequests: MAX_ACTIVE_REQUESTS };
+}
+
 interface UserServiceMetrics {
   userId: string;
   totalRequests: number;
@@ -174,7 +178,10 @@ function buildAskResponsePayload(
     analysisSources: result.analysisSources,
     llmUsed: result.llmUsed,
     reactUsed: result.reactUsed,
+    reactMode: result.reactMode,
     reactTrace: result.reactTrace,
+    generationHint: result.generationHint,
+    briefReport: result.briefReport,
     report: result.report,
     statModel: result.statModel,
     responseTimeMs: elapsedMs,
@@ -306,7 +313,8 @@ export const askQuestionStream = async (req: AuthRequest, res: Response) => {
     const similarQuestions = findSimilarQuestions(userQuestion, questions, 3, description);
 
     const result = await generateAIAnswer(userQuestion, description, similarQuestions, activeUserId, {
-      onToken: (text) => sendEvent({ type: 'token', text })
+      onToken: (text) => sendEvent({ type: 'token', text }),
+      onReactStep: (step) => sendEvent({ type: 'react_step', step })
     });
 
     const elapsedMs = await recordAskSideEffects(activeUserId, userQuestion, result, requestStart);
@@ -319,7 +327,7 @@ export const askQuestionStream = async (req: AuthRequest, res: Response) => {
     const elapsedMs = Date.now() - requestStart;
     updateUserMetrics(activeUserId, elapsedMs, true, 'unknown');
     console.error('Error generating stream answer:', error);
-    sendEvent({ type: 'error', error: '生成回复失败，请稍后重试' });
+    sendEvent({ type: 'error', error: '生成回复失败，请稍后重试', code: 'llm_error' });
     res.end();
   } finally {
     inFlightUsers.delete(activeUserId);

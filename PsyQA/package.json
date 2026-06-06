@@ -16,6 +16,7 @@
     "test:server": "jest --config server/jest.config.js",
     "build:embeddings": "ts-node server/scripts/build-embeddings.ts",
     "build:embeddings:all": "ts-node server/scripts/build-embeddings.ts --all",
+    "embed:incremental": "ts-node server/scripts/build-embeddings.ts",
     "vector:resync": "ts-node server/scripts/resync-vector-sqlite.ts",
     "embed:full": "npm run vector:resync && npm run build:embeddings:all && npm run sync:chroma:stored",
     "expand:knowledge:full": "python ../scripts/expand_knowledge_base.py --max-knowledge 800 --max-vector 25000 --psyqa-limit 22341",

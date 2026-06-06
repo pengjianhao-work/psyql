@@ -10,11 +10,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.postAnalyzePsych = void 0;
-const psychAnalysisService_1 = require("../services/psychAnalysisService");
-const carePlanHints_1 = require("../services/carePlanHints");
-const emotionService_1 = require("../services/emotionService");
-const interventionService_1 = require("../services/interventionService");
-const psychStatsService_1 = require("../services/psychStatsService");
+const psychAnalysisService_1 = require("../services/psych/psychAnalysisService");
+const carePlanHints_1 = require("../services/psych/carePlanHints");
+const emotionService_1 = require("../services/psych/emotionService");
+const interventionService_1 = require("../services/psych/interventionService");
+const psychStatsService_1 = require("../services/psych/psychStatsService");
 const postAnalyzePsych = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { text, tryLlm } = req.body;
     if (!text || !String(text).trim()) {

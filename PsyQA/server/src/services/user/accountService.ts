@@ -23,6 +23,8 @@ export interface AccountRecord {
   realName?: string;
   gender?: string;
   managedOrgIds?: string[];
+  /** 辅导员管辖班级（与 className 匹配） */
+  managedClassIds?: string[];
   allowSchoolTranscriptView?: boolean;
   createdAt: string;
 }

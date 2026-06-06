@@ -2,6 +2,8 @@ import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { getCategoryName, type EmotionAnalysis, type RiskAssessment, type ProblemAnalysis, type ProblemCategory } from '../psych/emotionService';
+import { isReactDemoMode } from './agentPolicy';
+import type { ReactMode } from './agentPolicy';
 
 export interface ReActStep {
   step: number;
@@ -36,7 +38,9 @@ export interface ReActCounselResult {
   answer: string;
   steps: ReActStep[];
   success: boolean;
+  /** @deprecated 使用 reactMode */
   reactUsed: boolean;
+  reactMode: ReactMode;
 }
 
 export interface ReActPlan {
@@ -52,15 +56,13 @@ const TOOL_NAMES = [
   'finish'
 ] as const;
 
-export function shouldUseReAct(): boolean {
-  if (process.env.PSYQA_REACT_ENABLED === '0') return false;
-  if (process.env.PSYQA_FAST_ANSWER === '1') return false;
-  if (process.env.PSYQA_LOAD_TEST === '1') return false;
-  if (process.env.PSYQA_AGENT_MODE === 'planner') return false;
-  return true;
-}
+const MIN_ANSWER_CHARS = 80;
 
 export function resolveReActPlan(ctx: ReActCounselContext): ReActPlan {
+  if (isReactDemoMode()) {
+    return { maxSteps: 4, skipSearchTools: false, prefetchOnly: false };
+  }
+
   const hasPrefetch =
     (ctx.prefetchedKnowledge?.length ?? 0) > 0 || (ctx.prefetchedMemory?.length ?? 0) > 0;
 
@@ -158,15 +160,7 @@ async function executeTool(
       return formatPrefetchMemory(hits);
     }
     case 'reflect_psych':
-      return [
-        `情绪：${ctx.emotion.emotion}（置信 ${(ctx.emotion.confidence * 100).toFixed(0)}%）`,
-        `风险：${ctx.risk.level}`,
-        `问题域：${getCategoryName(ctx.problem.category as ProblemCategory)}`,
-        `干预框架：${ctx.intervention.frameworkName}`,
-        ctx.llmRationale ? `分析要点：${ctx.llmRationale}` : ''
-      ]
-        .filter(Boolean)
-        .join('；');
+      return executeReflectPsych(ctx);
     case 'finish': {
       const ans = String(input.answer || input.response || input.text || '').trim();
       return ans ? `已生成最终回复（${ans.length} 字）` : 'finish 缺少 answer 字段。';
@@ -174,6 +168,18 @@ async function executeTool(
     default:
       return `未知工具 ${action}，可用：${TOOL_NAMES.join(', ')}`;
   }
+}
+
+function executeReflectPsych(ctx: ReActCounselContext): string {
+  return [
+    `情绪：${ctx.emotion.emotion}（置信 ${(ctx.emotion.confidence * 100).toFixed(0)}%）`,
+    `风险：${ctx.risk.level}`,
+    `问题域：${getCategoryName(ctx.problem.category as ProblemCategory)}`,
+    `干预框架：${ctx.intervention.frameworkName}`,
+    ctx.llmRationale ? `分析要点：${ctx.llmRationale}` : ''
+  ]
+    .filter(Boolean)
+    .join('；');
 }
 
 function buildReActSystemPrompt(ctx: ReActCounselContext, plan: ReActPlan): string {
@@ -257,15 +263,77 @@ async function generateFinishAnswer(
   );
 }
 
+function buildPrefetchTrajectory(ctx: ReActCounselContext): string {
+  const parts: string[] = [];
+  if (ctx.prefetchedKnowledge?.length) {
+    parts.push(`Observation [prefetch]: ${formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2))}`);
+  }
+  if (ctx.prefetchedMemory?.length) {
+    parts.push(`Observation [prefetch]: ${formatPrefetchMemory(ctx.prefetchedMemory.slice(0, 2))}`);
+  }
+  parts.push(`Observation: ${executeReflectPsych(ctx)}`);
+  return parts.join('\n');
+}
+
+function pushStep(
+  steps: ReActStep[],
+  step: ReActStep,
+  onStep?: (s: ReActStep) => void
+): void {
+  steps.push(step);
+  onStep?.(step);
+}
+
+function buildResult(
+  answer: string,
+  steps: ReActStep[],
+  reactMode: ReactMode
+): ReActCounselResult {
+  const success = answer.length >= MIN_ANSWER_CHARS;
+  return {
+    answer: success ? answer : '',
+    steps,
+    success,
+    reactUsed: reactMode === 'full',
+    reactMode: success ? reactMode : 'off'
+  };
+}
+
 export async function runReActCounselAgent(
   ctx: ReActCounselContext,
-  options?: { maxSteps?: number; temperature?: number; timeoutMs?: number; onToken?: (chunk: string) => void }
+  options?: {
+    maxSteps?: number;
+    temperature?: number;
+    timeoutMs?: number;
+    onToken?: (chunk: string) => void;
+    onStep?: (step: ReActStep) => void;
+  }
 ): Promise<ReActCounselResult> {
   const plan = resolveReActPlan(ctx);
   const maxSteps = options?.maxSteps ?? plan.maxSteps;
   const steps: ReActStep[] = [];
   let trajectory = '';
   let finalAnswer = '';
+
+  if (plan.prefetchOnly) {
+    trajectory = buildPrefetchTrajectory(ctx);
+    finalAnswer = await generateFinishAnswer(ctx, trajectory, options);
+    if (finalAnswer.length >= MIN_ANSWER_CHARS) {
+      pushStep(
+        steps,
+        {
+          step: 1,
+          thought: '编排层已注入预检索结果，单次生成最终回复',
+          action: 'finish',
+          actionInput: {},
+          observation: `已生成（${finalAnswer.length} 字）`
+        },
+        options?.onStep
+      );
+      return buildResult(finalAnswer, steps, 'prefetch');
+    }
+    finalAnswer = '';
+  }
 
   const systemPrompt = buildReActSystemPrompt(ctx, plan);
 
@@ -281,13 +349,32 @@ export async function runReActCounselAgent(
 
     const parsed = parseReActOutput(raw);
     if (!parsed.action) {
-      steps.push({
-        step,
-        thought: parsed.thought || raw.slice(0, 120),
-        action: 'parse_error',
-        actionInput: {},
-        observation: '未能解析 Action，终止 ReAct 循环。'
-      });
+      finalAnswer = await generateFinishAnswer(ctx, trajectory, options);
+      if (finalAnswer.length >= MIN_ANSWER_CHARS) {
+        pushStep(
+          steps,
+          {
+            step,
+            thought: parsed.thought || '解析失败，直接生成最终回复',
+            action: 'finish',
+            actionInput: {},
+            observation: `已生成（${finalAnswer.length} 字）`
+          },
+          options?.onStep
+        );
+        break;
+      }
+      pushStep(
+        steps,
+        {
+          step,
+          thought: parsed.thought || raw.slice(0, 120),
+          action: 'parse_error',
+          actionInput: {},
+          observation: '未能解析 Action，终止 ReAct 循环。'
+        },
+        options?.onStep
+      );
       break;
     }
 
@@ -295,29 +382,37 @@ export async function runReActCounselAgent(
       finalAnswer = String(
         parsed.actionInput.answer || parsed.actionInput.response || parsed.actionInput.text || ''
       ).trim();
-      if (!finalAnswer) {
+      if (!finalAnswer || finalAnswer.length < MIN_ANSWER_CHARS) {
         finalAnswer = await generateFinishAnswer(ctx, trajectory, options);
       }
-      steps.push({
-        step,
-        thought: parsed.thought,
-        action: 'finish',
-        actionInput: parsed.actionInput,
-        observation: finalAnswer
-          ? `已生成最终回复（${finalAnswer.length} 字）`
-          : 'finish 缺少 answer 字段。'
-      });
+      pushStep(
+        steps,
+        {
+          step,
+          thought: parsed.thought,
+          action: 'finish',
+          actionInput: parsed.actionInput,
+          observation: finalAnswer
+            ? `已生成最终回复（${finalAnswer.length} 字）`
+            : 'finish 缺少 answer 字段。'
+        },
+        options?.onStep
+      );
       break;
     }
 
     const observation = await executeTool(parsed.action, parsed.actionInput, ctx, plan);
-    steps.push({
-      step,
-      thought: parsed.thought,
-      action: parsed.action,
-      actionInput: parsed.actionInput,
-      observation
-    });
+    pushStep(
+      steps,
+      {
+        step,
+        thought: parsed.thought,
+        action: parsed.action,
+        actionInput: parsed.actionInput,
+        observation
+      },
+      options?.onStep
+    );
 
     trajectory += [
       trajectory ? '\n' : '',
@@ -332,23 +427,27 @@ export async function runReActCounselAgent(
 
     if (step === maxSteps && !finalAnswer) {
       finalAnswer = await generateFinishAnswer(ctx, trajectory, options);
-      if (finalAnswer) {
-        steps.push({
-          step: step + 1,
-          thought: '达到步数上限，生成最终回复',
-          action: 'finish',
-          actionInput: {},
-          observation: `已生成（${finalAnswer.length} 字）`
-        });
+      if (finalAnswer.length >= MIN_ANSWER_CHARS) {
+        pushStep(
+          steps,
+          {
+            step: step + 1,
+            thought: '达到步数上限，生成最终回复',
+            action: 'finish',
+            actionInput: {},
+            observation: `已生成（${finalAnswer.length} 字）`
+          },
+          options?.onStep
+        );
       }
     }
   }
 
-  const success = finalAnswer.length >= 80;
-  return {
-    answer: finalAnswer,
-    steps,
-    success,
-    reactUsed: success && steps.some((s) => s.action === 'finish')
-  };
+  const reactMode: ReactMode = steps.some((s) => s.action === 'search_knowledge' || s.action === 'search_user_memory')
+    ? 'full'
+    : steps.length > 1
+      ? 'full'
+      : 'prefetch';
+
+  return buildResult(finalAnswer, steps, reactMode);
 }

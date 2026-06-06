@@ -1,11 +1,24 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   fetchSchoolAlerts,
   getErrorMessage,
   patchSchoolAlert,
   SchoolAlertItem
 } from '../api';
+
+const tierOptions = [
+  { value: '', label: '全部分层' },
+  { value: '1', label: '一级（2h SLA）' },
+  { value: '2', label: '二级（24h SLA）' },
+  { value: '3', label: '三级（72h SLA）' }
+];
+
+const tierLabel: Record<number, string> = {
+  1: '一级',
+  2: '二级',
+  3: '三级'
+};
 
 const levelOptions = [
   { value: '', label: '全部等级' },
@@ -32,8 +45,10 @@ const statusLabel: Record<string, string> = {
 };
 
 const SchoolAlerts: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [alerts, setAlerts] = useState<SchoolAlertItem[]>([]);
   const [level, setLevel] = useState('');
+  const [tier, setTier] = useState(searchParams.get('tier') || '');
   const [status, setStatus] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [loading, setLoading] = useState(true);
@@ -48,6 +63,7 @@ const SchoolAlerts: React.FC = () => {
     try {
       const data = await fetchSchoolAlerts({
         level: level || undefined,
+        tier: tier || undefined,
         status: status || undefined,
         from: fromDate ? `${fromDate}T00:00:00.000Z` : undefined
       });
@@ -57,7 +73,7 @@ const SchoolAlerts: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [level, status, fromDate]);
+  }, [level, tier, status, fromDate]);
 
   useEffect(() => {
     load();
@@ -87,6 +103,13 @@ const SchoolAlerts: React.FC = () => {
         <select value={level} onChange={(e) => setLevel(e.target.value)}>
           {levelOptions.map((o) => (
             <option key={o.value || 'all'} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <select value={tier} onChange={(e) => setTier(e.target.value)}>
+          {tierOptions.map((o) => (
+            <option key={o.value || 'all-tier'} value={o.value}>
               {o.label}
             </option>
           ))}
@@ -131,6 +154,9 @@ const SchoolAlerts: React.FC = () => {
                   查看档案
                 </Link>
               </div>
+              <span className={`badge tier-${a.tier ?? 2}`}>
+                {tierLabel[a.tier ?? (a.level === 'critical' ? 1 : a.level === 'high' ? 2 : 3)]}
+              </span>
               <span className={`badge ${a.level}`}>
                 {a.level === 'critical' ? '危急' : a.level === 'high' ? '高危' : '关注'}
               </span>
@@ -148,6 +174,12 @@ const SchoolAlerts: React.FC = () => {
             )}
             <small className="muted">
               {new Date(a.dialogTime).toLocaleString('zh-CN')} · {a.orgName || a.orgId}
+              {a.slaDueAt && (
+                <>
+                  {' '}
+                  · SLA 截止 {new Date(a.slaDueAt).toLocaleString('zh-CN')}
+                </>
+              )}
             </small>
 
             <div className="school-alert-actions">

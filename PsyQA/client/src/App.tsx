@@ -11,6 +11,9 @@ const SchoolAlerts = React.lazy(() => import('./school/SchoolAlerts'));
 const SchoolStudents = React.lazy(() => import('./school/SchoolStudents'));
 const SchoolStudentDetail = React.lazy(() => import('./school/SchoolStudentDetail'));
 const SchoolAdminUsers = React.lazy(() => import('./school/SchoolAdminUsers'));
+const SchoolHeatmap = React.lazy(() => import('./school/SchoolHeatmap'));
+const SchoolInterventionLedgers = React.lazy(() => import('./school/SchoolInterventionLedgers'));
+const SchoolKnowledgeAdmin = React.lazy(() => import('./school/SchoolKnowledgeAdmin'));
 
 export const GUEST_MODE_KEY = 'psyqa_guest_mode';
 
@@ -191,6 +194,30 @@ function App() {
               element={
                 <Suspense fallback={<RouteFallback label="加载档案…" />}>
                   <SchoolStudentDetail />
+                </Suspense>
+              }
+            />
+            <Route
+              path="heatmap"
+              element={
+                <Suspense fallback={<RouteFallback label="加载热力图…" />}>
+                  <SchoolHeatmap />
+                </Suspense>
+              }
+            />
+            <Route
+              path="intervention-ledgers"
+              element={
+                <Suspense fallback={<RouteFallback label="加载台账…" />}>
+                  <SchoolInterventionLedgers />
+                </Suspense>
+              }
+            />
+            <Route
+              path="admin/knowledge"
+              element={
+                <Suspense fallback={<RouteFallback label="加载知识库…" />}>
+                  <SchoolKnowledgeAdmin />
                 </Suspense>
               }
             />

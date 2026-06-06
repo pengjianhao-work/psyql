@@ -1,5 +1,5 @@
 import { callZhipuGenerate, callZhipuGenerateStream, checkZhipuHealth, getZhipuModel, isZhipuConfigured } from './zhipuClient';
-import { callOllamaGenerateOnly, resolveOllamaModel } from './ollamaClient';
+import { callOllamaGenerateOnly, callOllamaGenerateStream, resolveOllamaModel } from './ollamaClient';
 import { checkOllamaHealth } from './ollamaClient';
 import { isProviderCircuitOpen, recordLlmFailure, recordLlmSuccess } from './llmCircuitBreaker';
 
@@ -12,6 +12,14 @@ const inflight = new Map<string, Promise<string | null>>();
 
 function dedupeKey(prompt: string, provider: string): string {
   return `${provider}:${prompt.slice(0, 120)}`;
+}
+
+/** 非流式回退时模拟逐字输出，避免前端长时间无反馈 */
+export function emitChunkedTokens(text: string, onToken?: (chunk: string) => void, chunkSize = 20): void {
+  if (!onToken || !text) return;
+  for (let i = 0; i < text.length; i += chunkSize) {
+    onToken(text.slice(i, i + chunkSize));
+  }
 }
 export function shouldUseLlm(): boolean {
   if (process.env.PSYQA_SKIP_OLLAMA === '1' || process.env.PSYQA_FAST_ANSWER === '1') {
@@ -222,11 +230,32 @@ export async function callLlmGenerateStream(
       return text;
     }
     recordLlmFailure('zhipu');
+    if (pref === 'zhipu') {
+      /* fall through to ollama stream */
+    }
+  }
+
+  const tryOllama = pref === 'ollama' || pref === 'auto';
+  if (tryOllama && process.env.PSYQA_SKIP_OLLAMA !== '1' && !isProviderCircuitOpen('ollama')) {
+    const ollamaPrompt = options?.systemPrompt ? `${options.systemPrompt}\n\n${prompt}` : prompt;
+    const text = await callOllamaGenerateStream(ollamaPrompt, {
+      model: options?.model,
+      temperature: options?.temperature,
+      maxTokens: options?.maxTokens,
+      timeoutMs: options?.timeoutMs,
+      onToken: options?.onToken
+    });
+    if (text) {
+      lastActiveProvider = 'ollama';
+      recordLlmSuccess('ollama');
+      return text;
+    }
+    recordLlmFailure('ollama');
   }
 
   const text = await callLlmGenerate(prompt, options);
-  if (text && options?.onToken) {
-    options.onToken(text);
+  if (text) {
+    emitChunkedTokens(text, options?.onToken);
   }
   return text;
 }

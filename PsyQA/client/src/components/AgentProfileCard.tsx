@@ -5,6 +5,12 @@ import {
   getErrorMessage,
   patchAgentProfile,
   downloadAgentProfileExport,
+  listAgentMemories,
+  deleteAgentMemory,
+  fetchMemoryTags,
+  patchMemoryTag,
+  batchArchiveMemories,
+  AgentMemoryRow,
   UserStaticProfile,
   InterventionProfile
 } from '../api';
@@ -34,6 +40,16 @@ function joinList(items?: string[]): string {
   return items?.join('、') ?? '';
 }
 
+const TAG_LABEL: Record<string, string> = {
+  academic: '学业',
+  relationship: '人际',
+  family: '家庭',
+  romance: '恋爱',
+  crisis: '危机',
+  emotion: '情绪',
+  other: '其他'
+};
+
 interface AgentProfileCardProps {
   userId: string;
 }
@@ -46,6 +62,9 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [memories, setMemories] = useState<AgentMemoryRow[]>([]);
+  const [tagFilter, setTagFilter] = useState('');
+  const [selectedMem, setSelectedMem] = useState<Set<string>>(new Set());
 
   const [basicAge, setBasicAge] = useState('');
   const [basicOccupation, setBasicOccupation] = useState('');
@@ -84,6 +103,29 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
       setLoading(false);
     }
   }, [userId, fillForm]);
+
+  const loadMemories = useCallback(async () => {
+    const [rows, tagData] = await Promise.all([
+      listAgentMemories(userId),
+      fetchMemoryTags(userId).catch(() => ({ memories: [] as Array<{ dialogTime: string; tags: string[]; locked: boolean; archived: boolean }> }))
+    ]);
+    const metaMap = new Map(tagData.memories.map((m) => [m.dialogTime, m]));
+    setMemories(
+      rows.map((r) => {
+        const meta = metaMap.get(r.dialogTime);
+        return {
+          ...r,
+          tags: meta?.tags?.length ? meta.tags : r.tags || [],
+          locked: meta?.locked ?? r.locked ?? false,
+          archived: meta?.archived ?? r.archived ?? false
+        };
+      })
+    );
+  }, [userId]);
+
+  useEffect(() => {
+    void loadMemories();
+  }, [loadMemories, profile?.updatedAt]);
 
   useEffect(() => {
     void load();
@@ -358,6 +400,97 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
 
       {message && <p className="agent-profile-success">{message}</p>}
       {error && profile && <p className="agent-profile-error">{error}</p>}
+
+      {memories.length > 0 && (
+        <div className="agent-memory-list">
+          <div className="agent-memory-head">
+            <h4>对话记忆 · 标签归档</h4>
+            <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+              <option value="">全部标签</option>
+              {Object.entries(TAG_LABEL).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedMem.size > 0 && (
+            <button
+              type="button"
+              className="agent-profile-btn small"
+              onClick={() => {
+                void batchArchiveMemories(userId, Array.from(selectedMem), true).then(() => {
+                  setSelectedMem(new Set());
+                  void loadMemories();
+                  setMessage('已批量归档选中记忆');
+                });
+              }}
+            >
+              批量归档（{selectedMem.size}）
+            </button>
+          )}
+          <ul>
+            {memories
+              .filter((m) => !tagFilter || m.tags?.includes(tagFilter))
+              .filter((m) => !m.archived || tagFilter)
+              .slice(0, 12)
+              .map((m) => (
+                <li key={m.dialogTime} className={m.archived ? 'agent-memory-archived' : ''}>
+                  <input
+                    type="checkbox"
+                    checked={selectedMem.has(m.dialogTime)}
+                    onChange={() => {
+                      setSelectedMem((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(m.dialogTime)) next.delete(m.dialogTime);
+                        else next.add(m.dialogTime);
+                        return next;
+                      });
+                    }}
+                  />
+                  <div className="agent-memory-body">
+                    <span>{m.contentPreview || m.dialogTime}</span>
+                    <div className="agent-memory-tags">
+                      {(m.tags || []).map((t) => (
+                        <span key={t} className="group-tag">
+                          {TAG_LABEL[t] || t}
+                        </span>
+                      ))}
+                      {m.locked && <span className="group-tag locked">已锁定·RAG加权</span>}
+                      {m.archived && <span className="group-tag archived">已归档</span>}
+                    </div>
+                  </div>
+                  <div className="agent-memory-actions">
+                    <button
+                      type="button"
+                      className="agent-profile-btn small"
+                      onClick={() => {
+                        void patchMemoryTag(userId, m.dialogTime, { locked: !m.locked }).then(() => {
+                          void loadMemories();
+                          setMessage(m.locked ? '已取消锁定' : '已锁定，RAG 检索权重提升');
+                        });
+                      }}
+                    >
+                      {m.locked ? '解锁' : '锁定'}
+                    </button>
+                    <button
+                      type="button"
+                      className="agent-profile-btn small"
+                      onClick={() => {
+                        void deleteAgentMemory(userId, m.dialogTime).then(() => {
+                          void loadMemories();
+                          setMessage('已删除该条记忆');
+                        });
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
 
       <div className="agent-profile-actions">
         {!editing ? (

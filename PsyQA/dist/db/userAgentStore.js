@@ -5,10 +5,13 @@ exports.ensureUserAgentProfile = ensureUserAgentProfile;
 exports.updateUserAgentProfile = updateUserAgentProfile;
 exports.recordDialogVectorMeta = recordDialogVectorMeta;
 exports.getFirstDialogTime = getFirstDialogTime;
+exports.countUserDialogVectors = countUserDialogVectors;
 exports.listUserIdsWithDialogs = listUserIdsWithDialogs;
 exports.getDialogsForMonth = getDialogsForMonth;
 exports.getDialogsForYear = getDialogsForYear;
 exports.clearUserAgentData = clearUserAgentData;
+exports.listUserDialogVectorMeta = listUserDialogVectorMeta;
+exports.deleteUserDialogVectorMeta = deleteUserDialogVectorMeta;
 const database_1 = require("./database");
 function parseJson(raw, fallback) {
     if (!raw)
@@ -109,6 +112,13 @@ function getFirstDialogTime(userId) {
         .get(userId);
     return (_a = row === null || row === void 0 ? void 0 : row.t) !== null && _a !== void 0 ? _a : null;
 }
+function countUserDialogVectors(userId) {
+    var _a;
+    const row = (0, database_1.getDb)()
+        .prepare('SELECT COUNT(*) as c FROM user_dialog_vectors WHERE user_id = ?')
+        .get(userId);
+    return (_a = row === null || row === void 0 ? void 0 : row.c) !== null && _a !== void 0 ? _a : 0;
+}
 function listUserIdsWithDialogs() {
     const rows = (0, database_1.getDb)()
         .prepare('SELECT DISTINCT user_id FROM dialogs WHERE user_id IS NOT NULL AND user_id != ?')
@@ -133,4 +143,17 @@ function getDialogsForYear(userId, year) {
 function clearUserAgentData(userId) {
     (0, database_1.getDb)().prepare('DELETE FROM user_agent_profile WHERE user_id = ?').run(userId);
     (0, database_1.getDb)().prepare('DELETE FROM user_dialog_vectors WHERE user_id = ?').run(userId);
+}
+function listUserDialogVectorMeta(userId) {
+    return (0, database_1.getDb)()
+        .prepare(`SELECT dialog_time as dialogTime, chroma_id as chromaId, month,
+              emotion, content_preview as contentPreview, created_at as createdAt
+       FROM user_dialog_vectors WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`)
+        .all(userId);
+}
+function deleteUserDialogVectorMeta(userId, dialogTime) {
+    const r = (0, database_1.getDb)()
+        .prepare('DELETE FROM user_dialog_vectors WHERE user_id = ? AND dialog_time = ?')
+        .run(userId, dialogTime);
+    return r.changes > 0;
 }

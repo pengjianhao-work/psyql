@@ -5,7 +5,10 @@ import {
   CollegeOption,
   fetchCollegeOptions,
   getErrorMessage,
-  updateStudentProfileRequest
+  GENDER_OPTIONS,
+  formatGender,
+  updateStudentProfileRequest,
+  type StudentGender
 } from '../api';
 
 interface StudentProfileCardProps {
@@ -30,6 +33,10 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
   const [studentNoDraft, setStudentNoDraft] = useState(user.studentNo ?? '');
   const [classDraft, setClassDraft] = useState(user.className ?? '');
   const [orgDraft, setOrgDraft] = useState(user.orgId ?? '');
+  const [genderDraft, setGenderDraft] = useState<StudentGender | ''>(user.gender ?? '');
+  const [allowTranscriptDraft, setAllowTranscriptDraft] = useState(
+    user.allowSchoolTranscriptView !== false
+  );
   const [colleges, setColleges] = useState<CollegeOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +54,8 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
     setStudentNoDraft(user.studentNo ?? '');
     setClassDraft(user.className ?? '');
     setOrgDraft(user.orgId ?? '');
+    setGenderDraft(user.gender ?? '');
+    setAllowTranscriptDraft(user.allowSchoolTranscriptView !== false);
   };
 
   useEffect(() => {
@@ -69,7 +78,9 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
         avatar: avatarDraft,
         studentNo: studentNoDraft,
         className: classDraft,
-        orgId: orgDraft
+        orgId: orgDraft,
+        gender: genderDraft || undefined,
+        allowSchoolTranscriptView: allowTranscriptDraft
       });
       onUserUpdate(updated);
       setEditing(false);
@@ -188,6 +199,32 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
               />
             </label>
 
+            <label className="student-profile-field">
+              <span className="student-profile-label">性别</span>
+              <select
+                className="student-profile-input"
+                value={genderDraft}
+                onChange={(e) => setGenderDraft(e.target.value as StudentGender | '')}
+                disabled={saving}
+              >
+                {GENDER_OPTIONS.map((opt) => (
+                  <option key={opt.value || 'unset'} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="student-profile-field student-profile-checkbox">
+              <input
+                type="checkbox"
+                checked={allowTranscriptDraft}
+                onChange={(e) => setAllowTranscriptDraft(e.target.checked)}
+                disabled={saving}
+              />
+              <span>允许学校端查看我的对话原文（辅导员需授权才可查看）</span>
+            </label>
+
             <p className="student-profile-meta">账号 @{user.username} · 咨询记录已绑定</p>
 
             <div className="student-profile-actions">
@@ -214,6 +251,14 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
             <p className="student-profile-field">
               <span className="student-profile-label">班级</span>
               <span>{user.className || '未填写'}</span>
+            </p>
+            <p className="student-profile-field">
+              <span className="student-profile-label">性别</span>
+              <span>{formatGender(user.gender)}</span>
+            </p>
+            <p className="student-profile-field">
+              <span className="student-profile-label">对话原文</span>
+              <span>{user.allowSchoolTranscriptView === false ? '未授权学校查看' : '已授权学校查看'}</span>
             </p>
             <button type="button" className="student-profile-edit-btn block" onClick={startEdit}>
               编辑资料

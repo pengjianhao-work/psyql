@@ -47,6 +47,12 @@ exports.getChromaStatus = getChromaStatus;
 exports.searchChroma = searchChroma;
 exports.upsertChromaBatch = upsertChromaBatch;
 exports.resetChromaCache = resetChromaCache;
+exports.getPublicCollectionName = getPublicCollectionName;
+exports.deletePublicChromaCollection = deletePublicChromaCollection;
+exports.getUserChromaCollectionName = getUserChromaCollectionName;
+exports.deleteUserChromaCollection = deleteUserChromaCollection;
+exports.deleteUserChromaVectors = deleteUserChromaVectors;
+exports.searchBlendedChromaHotFirst = searchBlendedChromaHotFirst;
 exports.searchPublicChromaCollection = searchPublicChromaCollection;
 exports.searchUserChromaCollection = searchUserChromaCollection;
 exports.upsertUserDialogVector = upsertUserDialogVector;
@@ -195,8 +201,77 @@ function resetChromaCache() {
     collectionPromise = null;
     chromaAvailable = null;
 }
+function getPublicCollectionName() {
+    return COLLECTION;
+}
+function deletePublicChromaCollection() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const client = yield getClient();
+        if (!client)
+            return false;
+        try {
+            yield client.deleteCollection({ name: COLLECTION });
+            collectionPromise = null;
+            return true;
+        }
+        catch (_a) {
+            return false;
+        }
+    });
+}
 function sanitizeUserCollectionName(userId) {
     return `user_${userId.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 48)}`;
+}
+function getUserChromaCollectionName(userId) {
+    return sanitizeUserCollectionName(userId);
+}
+function deleteUserChromaCollection(userId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const client = yield getClient();
+        if (!client)
+            return false;
+        try {
+            yield client.deleteCollection({ name: sanitizeUserCollectionName(userId) });
+            return true;
+        }
+        catch (_a) {
+            return false;
+        }
+    });
+}
+function deleteUserChromaVectors(userId, ids) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (!ids.length)
+            return false;
+        const col = yield getUserCollection(userId);
+        if (!col)
+            return false;
+        try {
+            yield col.delete({ ids });
+            return true;
+        }
+        catch (_a) {
+            return false;
+        }
+    });
+}
+/** 优先检索用户热库（近 3 月），再查公共库 */
+function searchBlendedChromaHotFirst(userId_1, query_1) {
+    return __awaiter(this, arguments, void 0, function* (userId, query, topK = 5) {
+        const userHits = yield searchUserChromaCollection(userId, query, topK);
+        const cutoff = Date.now() - 90 * 24 * 3600000;
+        const hot = userHits.filter((h) => {
+            const t = h.dialogTime;
+            if (!t)
+                return true;
+            const ms = new Date(t.replace(/\//g, '-')).getTime();
+            return !Number.isNaN(ms) && ms >= cutoff;
+        });
+        if (hot.length >= topK)
+            return hot.slice(0, topK);
+        const pub = yield searchPublicChromaCollection(query, topK - hot.length);
+        return [...hot, ...pub].slice(0, topK);
+    });
 }
 function getUserCollection(userId) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -247,7 +322,9 @@ function searchUserChromaCollection(userId_1, query_1) {
                     id,
                     question: (_d = (_c = meta.userPreview) !== null && _c !== void 0 ? _c : meta.question) !== null && _d !== void 0 ? _d : '',
                     answer: (_e = meta.content) !== null && _e !== void 0 ? _e : '',
-                    similarity
+                    similarity,
+                    dialogTime: meta.dialogTime,
+                    source: 'user'
                 };
             }).filter((r) => r.question || r.answer);
         }

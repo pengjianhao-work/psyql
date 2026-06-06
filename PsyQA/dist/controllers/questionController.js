@@ -10,23 +10,28 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getSystemStats = exports.clearUserHistoryData = exports.getGroupedHistory = exports.getUserProgressText = exports.getUserProgress = exports.getInsightsStatus = exports.getAllCategories = exports.askQuestionStream = exports.askQuestion = exports.getQuestionById = exports.getQuestions = void 0;
+exports.getAskLoadMetrics = getAskLoadMetrics;
 const questionService_1 = require("../services/questionService");
-const historyManager_1 = require("../services/historyManager");
-const accountService_1 = require("../services/accountService");
+const historyManager_1 = require("../services/common/historyManager");
+const userMemoryService_1 = require("../services/user/userMemoryService");
+const accountService_1 = require("../services/user/accountService");
 const resolveUserId_1 = require("../utils/resolveUserId");
-const schoolAlertService_1 = require("../services/schoolAlertService");
-const schoolStatsCache_1 = require("../services/schoolStatsCache");
-const ragService_1 = require("../services/ragService");
-const vectorDBService_1 = require("../services/vectorDBService");
+const schoolAlertService_1 = require("../services/school/schoolAlertService");
+const schoolStatsCache_1 = require("../services/school/schoolStatsCache");
+const ragService_1 = require("../services/knowledge/ragService");
+const vectorDBService_1 = require("../services/knowledge/vectorDBService");
 const memoryCache_1 = require("../utils/memoryCache");
 const env_1 = require("../config/env");
-const insightsStatus_1 = require("../services/insightsStatus");
+const insightsStatus_1 = require("../services/user/insightsStatus");
 let questions = [];
 let questionsLoadPromise = null;
 const inFlightUsers = new Set();
 let activeRequests = 0;
 const MAX_ACTIVE_REQUESTS = process.env.PSYQA_LOAD_TEST === '1' ? 8 : 4;
 const SLOW_REQUEST_MS = 15000;
+function getAskLoadMetrics() {
+    return { activeAskRequests: activeRequests, maxAskRequests: MAX_ACTIVE_REQUESTS };
+}
 const userMetrics = new Map();
 const updateUserMetrics = (userId, responseTimeMs, isFailure, riskLevel) => {
     const current = userMetrics.get(userId) || {
@@ -121,6 +126,11 @@ function buildAskResponsePayload(userQuestion, description, result, elapsedMs) {
         carePlan: result.carePlan,
         analysisSources: result.analysisSources,
         llmUsed: result.llmUsed,
+        reactUsed: result.reactUsed,
+        reactMode: result.reactMode,
+        reactTrace: result.reactTrace,
+        generationHint: result.generationHint,
+        briefReport: result.briefReport,
         report: result.report,
         statModel: result.statModel,
         responseTimeMs: elapsedMs,
@@ -231,7 +241,8 @@ const askQuestionStream = (req, res) => __awaiter(void 0, void 0, void 0, functi
         yield ensureQuestionsLoaded();
         const similarQuestions = (0, questionService_1.findSimilarQuestions)(userQuestion, questions, 3, description);
         const result = yield (0, questionService_1.generateAIAnswer)(userQuestion, description, similarQuestions, activeUserId, {
-            onToken: (text) => sendEvent({ type: 'token', text })
+            onToken: (text) => sendEvent({ type: 'token', text }),
+            onReactStep: (step) => sendEvent({ type: 'react_step', step })
         });
         const elapsedMs = yield recordAskSideEffects(activeUserId, userQuestion, result, requestStart);
         sendEvent(Object.assign({ type: 'done' }, buildAskResponsePayload(userQuestion, description, result, elapsedMs)));
@@ -241,7 +252,7 @@ const askQuestionStream = (req, res) => __awaiter(void 0, void 0, void 0, functi
         const elapsedMs = Date.now() - requestStart;
         updateUserMetrics(activeUserId, elapsedMs, true, 'unknown');
         console.error('Error generating stream answer:', error);
-        sendEvent({ type: 'error', error: '生成回复失败，请稍后重试' });
+        sendEvent({ type: 'error', error: '生成回复失败，请稍后重试', code: 'llm_error' });
         res.end();
     }
     finally {
@@ -289,14 +300,19 @@ const getGroupedHistory = (req, res) => {
     res.json({ userId, groups });
 };
 exports.getGroupedHistory = getGroupedHistory;
-const clearUserHistoryData = (req, res) => {
+const clearUserHistoryData = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const userId = (0, resolveUserId_1.resolveStudentUserId)(req, res, (_a = req.body) === null || _a === void 0 ? void 0 : _a.userId);
     if (!userId)
         return;
     (0, questionService_1.clearUserHistory)(userId);
-    res.json({ message: 'History cleared successfully' });
-};
+    const { chromaDeleted } = yield (0, userMemoryService_1.clearUserAgentMemory)(userId);
+    res.json({
+        message: 'History cleared successfully',
+        agentProfileCleared: true,
+        chromaUserCollectionDeleted: chromaDeleted
+    });
+});
 exports.clearUserHistoryData = clearUserHistoryData;
 const getSystemStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     yield ensureQuestionsLoaded();

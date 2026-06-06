@@ -16,9 +16,12 @@ import {
   searchPublicChromaCollection,
   upsertUserDialogVector,
   deleteUserChromaCollection,
+  deleteUserChromaVectors,
   getUserChromaCollectionName
 } from '../knowledge/chromaVectorService';
 import { embedText } from '../knowledge/embeddingService';
+import { cacheGetOrSet } from '../../utils/memoryCache';
+import { getLockedMemoryBoost, isMemoryArchived } from './memoryTagService';
 import {
   PHASE_LABELS,
   computeTimelineUserWeight,
@@ -105,6 +108,15 @@ export async function searchBlendedUserMemory(
   query: string,
   totalK = 5
 ): Promise<SearchResult[]> {
+  const cacheKey = `mem:${userId}:${totalK}:${query.slice(0, 200)}`;
+  return cacheGetOrSet(cacheKey, 120_000, () => searchBlendedUserMemoryUncached(userId, query, totalK));
+}
+
+async function searchBlendedUserMemoryUncached(
+  userId: string,
+  query: string,
+  totalK = 5
+): Promise<SearchResult[]> {
   if (!isChromaEnabled() || !userId || userId === 'default_user') {
     const pub = await searchPublicChromaCollection(query, totalK);
     return pub;
@@ -114,13 +126,23 @@ export async function searchBlendedUserMemory(
   const userK = Math.max(1, Math.round(totalK * user));
   const pubK = Math.max(1, totalK - userK);
 
-  const [userHits, pubHits] = await Promise.all([
+  const [userHitsRaw, pubHits] = await Promise.all([
     searchUserChromaCollection(userId, query, userK),
     searchPublicChromaCollection(query, pubK)
   ]);
 
+  const userHits = userHitsRaw.filter(
+    (h) => !h.dialogTime || !isMemoryArchived(userId, h.dialogTime)
+  );
+
   const blend = (hits: SearchResult[], weight: number, source: 'user' | 'public') =>
-    hits.map((h) => applyMemoryTimeDecay({ ...h, source, similarity: h.similarity * weight }));
+    hits.map((h) => {
+      let sim = h.similarity * weight;
+      if (source === 'user' && h.dialogTime) {
+        sim *= getLockedMemoryBoost(userId, h.dialogTime);
+      }
+      return applyMemoryTimeDecay({ ...h, source, similarity: sim });
+    });
 
   const merged = [...blend(userHits, user, 'user'), ...blend(pubHits, pubW, 'public')].sort(
     (a, b) => b.similarity - a.similarity
@@ -248,6 +270,11 @@ export async function indexUserDialogMemory(input: {
       triggerTag: tag,
       contentPreview: userText
     });
+    const { upsertMemoryMeta } = await import('./memoryTagService');
+    upsertMemoryMeta(userId, dialogTime, {
+      content: userText,
+      problem: psych?.problem
+    });
   }
 }
 
@@ -257,6 +284,38 @@ export async function clearUserAgentMemory(userId: string): Promise<{ chromaDele
   clearUserAgentData(userId);
   const chromaDeleted = await deleteUserChromaCollection(userId);
   return { chromaDeleted };
+}
+
+export function listUserDialogMemories(userId: string) {
+  const { listUserDialogVectorMeta } = require('../../db/userAgentStore') as typeof import('../../db/userAgentStore');
+  const { listMemoryMeta } = require('./memoryTagService') as typeof import('./memoryTagService');
+  const rows = listUserDialogVectorMeta(userId);
+  const metaMap = new Map(listMemoryMeta(userId).map((m) => [m.dialogTime, m]));
+  return rows.map((r) => {
+    const meta = metaMap.get(r.dialogTime);
+    return {
+      ...r,
+      tags: meta?.tags || [],
+      locked: meta?.locked || false,
+      archived: meta?.archived || false
+    };
+  });
+}
+
+export async function deleteUserDialogMemory(
+  userId: string,
+  dialogTime: string
+): Promise<{ deleted: boolean; chromaDeleted: boolean }> {
+  const { listUserDialogVectorMeta, deleteUserDialogVectorMeta } =
+    await import('../../db/userAgentStore');
+  const rows = listUserDialogVectorMeta(userId);
+  const row = rows.find((r) => r.dialogTime === dialogTime);
+  let chromaDeleted = false;
+  if (row?.chromaId) {
+    chromaDeleted = await deleteUserChromaVectors(userId, [row.chromaId]);
+  }
+  const deleted = deleteUserDialogVectorMeta(userId, dialogTime);
+  return { deleted, chromaDeleted };
 }
 
 /** 导出专属 Agent 配置包（JSON，不含向量本体） */

@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchSchoolDashboard, getErrorMessage, SchoolDashboardStats } from '../api';
+import { downloadSchoolReport, downloadSchoolMonthlyLedger, fetchSchoolDashboard, getErrorMessage, SchoolDashboardStats } from '../api';
 import { DonutChart, paletteColor } from '../components/charts';
+import { SchoolPermissionsCard } from './SchoolPermissionsCard';
+import { useSchoolSession } from './useSchoolSession';
 import { stressLevelClass } from './schoolLabels';
 
 const EMPTY_STATS: SchoolDashboardStats = {
@@ -79,9 +81,12 @@ function RankBarList({
 }
 
 const SchoolDashboard: React.FC = () => {
+  const { sessionUser } = useSchoolSession();
+  const isAdmin = sessionUser.role === 'admin';
   const [stats, setStats] = useState<SchoolDashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const load = useCallback(async (silent = false) => {
@@ -107,6 +112,28 @@ const SchoolDashboard: React.FC = () => {
     load(true);
   }, [load]);
 
+  const handleExportLedger = async () => {
+    setExporting(true);
+    try {
+      await downloadSchoolMonthlyLedger();
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportReport = async (format: 'csv' | 'json') => {
+    setExporting(true);
+    try {
+      await downloadSchoolReport(format);
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (error && !stats) {
     return (
       <div className="school-card school-error-block">
@@ -126,6 +153,8 @@ const SchoolDashboard: React.FC = () => {
 
   return (
     <div className="school-dashboard">
+      <SchoolPermissionsCard />
+
       <div className="school-page-head">
         <div>
           <h2>数据看板</h2>
@@ -134,14 +163,44 @@ const SchoolDashboard: React.FC = () => {
             {updatedAt ? ` · 更新于 ${updatedAt}` : ''}
           </p>
         </div>
-        <button
-          type="button"
-          className="save-care-btn school-refresh-btn"
-          onClick={() => load()}
-          disabled={refreshing}
-        >
-          {refreshing ? '刷新中…' : '刷新数据'}
-        </button>
+        <div className="school-page-head-actions">
+          {isAdmin && (
+            <>
+              <button
+                type="button"
+                className="save-care-btn"
+                onClick={() => void handleExportLedger()}
+                disabled={exporting}
+              >
+                {exporting ? '导出中…' : '月度台账 Excel'}
+              </button>
+              <button
+                type="button"
+                className="save-care-btn"
+                onClick={() => void handleExportReport('csv')}
+                disabled={exporting}
+              >
+                {exporting ? '导出中…' : '导出 CSV'}
+              </button>
+              <button
+                type="button"
+                className="save-care-btn"
+                onClick={() => void handleExportReport('json')}
+                disabled={exporting}
+              >
+                导出 JSON
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="save-care-btn school-refresh-btn"
+            onClick={() => load()}
+            disabled={refreshing}
+          >
+            {refreshing ? '刷新中…' : '刷新数据'}
+          </button>
+        </div>
       </div>
 
       {!hasData && (

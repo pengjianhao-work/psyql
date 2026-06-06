@@ -117,11 +117,13 @@ function hashPassword(plain) {
     });
 }
 function getPermissionsForRole(role) {
-    if (role === 'admin')
-        return ['admin:*'];
-    if (role === 'counselor')
-        return ['school:read', 'school:write'];
-    return ['student:self'];
+    if (role === 'admin') {
+        return ['admin:*', 'school:manage', 'school:read', 'school:write', 'school:dashboard', 'school:transcripts:full'];
+    }
+    if (role === 'counselor') {
+        return ['school:read', 'school:write', 'school:dashboard', 'school:alerts:read', 'school:students:masked'];
+    }
+    return ['student:self', 'consult:own', 'report:own', 'trend:own'];
 }
 function verifyPassword(plain, stored) {
     return __awaiter(this, void 0, void 0, function* () {

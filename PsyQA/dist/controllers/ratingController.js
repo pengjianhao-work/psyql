@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.postSelfRating = void 0;
-const historyManager_1 = require("../services/historyManager");
-const psychStatsService_1 = require("../services/psychStatsService");
+const historyManager_1 = require("../services/common/historyManager");
+const psychStatsService_1 = require("../services/psych/psychStatsService");
 const postSelfRating = (req, res) => {
     const { userId, dialogTime, moodRating, stressRating, anxietyRating } = req.body;
     const uid = String(userId || 'default_user').trim();

@@ -10,7 +10,9 @@ import type { InterventionProfile, UserStaticProfile } from '../types/userAgent'
 import {
   getRagBlendWeights,
   resolveAgentPhase,
-  buildAgentExportBundle
+  buildAgentExportBundle,
+  listUserDialogMemories,
+  deleteUserDialogMemory
 } from '../services/user/userMemoryService';
 
 export function getUserAgentProfileHandler(req: AuthRequest, res: Response): void {
@@ -94,4 +96,22 @@ export function exportUserAgentProfileHandler(req: AuthRequest, res: Response): 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(JSON.stringify(bundle, null, 2));
+}
+
+export function listUserAgentMemoriesHandler(req: AuthRequest, res: Response): void {
+  const userId = resolveStudentUserId(req, res, req.query.userId);
+  if (!userId) return;
+  res.json({ memories: listUserDialogMemories(userId) });
+}
+
+export async function deleteUserAgentMemoryHandler(req: AuthRequest, res: Response): Promise<void> {
+  const userId = resolveStudentUserId(req, res, req.body?.userId);
+  if (!userId) return;
+  const dialogTime = String(req.body?.dialogTime || '');
+  if (!dialogTime) {
+    res.status(400).json({ error: '缺少 dialogTime' });
+    return;
+  }
+  const result = await deleteUserDialogMemory(userId, dialogTime);
+  res.json({ message: result.deleted ? '记忆已删除' : '未找到该记忆', ...result });
 }

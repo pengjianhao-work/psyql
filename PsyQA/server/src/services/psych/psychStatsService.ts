@@ -718,21 +718,83 @@ export function applyStatisticalFusion(
   problem: ProblemAnalysis,
   statModel: PsychStatModel
 ): { emotion: EmotionAnalysis; risk: RiskAssessment; problem: ProblemAnalysis } {
-  const hidden = statModel.intelligentModel?.hiddenRisk;
-  if (!hidden?.flag) {
-    return { emotion, risk, problem };
-  }
-  if (risk.level === 'critical') {
-    return { emotion, risk, problem };
-  }
-  const elevated: RiskAssessment = {
-    ...risk,
-    level: risk.level === 'low' ? 'medium' : risk.level === 'medium' ? 'high' : 'critical',
-    warningMessage:
-      risk.warningMessage ||
-      `隐层神经网络检测到潜在风险信号（score=${hidden.score}），建议关注情绪变化并必要时寻求专业支持。`
+  let outEmotion = { ...emotion };
+  let outRisk = { ...risk };
+  let outProblem = { ...problem };
+
+  const riskOrder: Record<RiskLevel, number> = {
+    low: 0,
+    medium: 1,
+    high: 2,
+    critical: 3
   };
-  return { emotion, risk: elevated, problem };
+
+  const levelFromScore = (score: number): RiskLevel => {
+    if (score >= 82) return 'critical';
+    if (score >= 68) return 'high';
+    if (score >= 45) return 'medium';
+    return 'low';
+  };
+
+  const elevateRisk = (next: RiskLevel, reason: string): void => {
+    if (outRisk.level === 'critical') return;
+    if (riskOrder[next] > riskOrder[outRisk.level]) {
+      outRisk = {
+        ...outRisk,
+        level: next,
+        warningMessage: outRisk.warningMessage || reason
+      };
+    }
+  };
+
+  const composite = statModel.compositeScores;
+  if (composite) {
+    const statRisk = levelFromScore(composite.riskScore);
+    elevateRisk(
+      statRisk,
+      `统计模型综合风险分 ${composite.riskScore}，建议关注当前情绪与行为变化。`
+    );
+  }
+
+  const hidden = statModel.intelligentModel?.hiddenRisk;
+  if (hidden?.flag) {
+    elevateRisk(
+      outRisk.level === 'low' ? 'medium' : outRisk.level === 'medium' ? 'high' : 'critical',
+      outRisk.warningMessage ||
+        `隐层神经网络检测到潜在风险信号（score=${hidden.score}），建议关注情绪变化并必要时寻求专业支持。`
+    );
+  }
+
+  const stressTrend = statModel.trends?.find((t) => t.metricKey === 'stress');
+  const anxietyTrend = statModel.trends?.find((t) => t.metricKey === 'anxiety');
+  if (
+    (stressTrend?.trend === 'worsening' || anxietyTrend?.trend === 'worsening') &&
+    outEmotion.confidence < 0.88
+  ) {
+    outEmotion = {
+      ...outEmotion,
+      confidence: Math.min(0.92, outEmotion.confidence + 0.08)
+    };
+    if (outRisk.level === 'low') {
+      elevateRisk('medium', '近期压力/焦虑趋势呈恶化，建议加强自我关怀与随访。');
+    }
+  }
+
+  if (composite && composite.problemSalience >= 70 && outProblem.confidence < 0.85) {
+    outProblem = {
+      ...outProblem,
+      confidence: Math.min(0.9, outProblem.confidence + 0.1)
+    };
+  }
+
+  if (composite && composite.emotionIntensity >= 75 && outEmotion.confidence < 0.8) {
+    outEmotion = {
+      ...outEmotion,
+      confidence: Math.min(0.9, outEmotion.confidence + 0.06)
+    };
+  }
+
+  return { emotion: outEmotion, risk: outRisk, problem: outProblem };
 }
 
 export function blendMetricsWithSelfRating(

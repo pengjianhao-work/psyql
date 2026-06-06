@@ -32,7 +32,7 @@ const app = (0, createApp_1.createApp)();
 (0, database_1.getDb)();
 (0, migrateFromJson_1.runJsonMigrationIfNeeded)();
 (0, seedDemoData_1.seedP0DemoData)().catch((err) => logger_1.logger.warn('Demo seed skipped', { err: String(err) }));
-app.listen(env_1.env.port, () => {
+const server = app.listen(env_1.env.port, () => {
     logger_1.logger.info('Server started', { port: env_1.env.port, env: env_1.env.nodeEnv });
     if ((0, llmClient_1.shouldUseLlm)()) {
         if ((0, zhipuClient_1.isZhipuConfigured)()) {
@@ -84,4 +84,15 @@ app.listen(env_1.env.port, () => {
             console.warn(`Ollama 已连接，但未找到模型「${model}」。可执行: ollama pull ${model}`);
         }
     }))();
+});
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`\n[错误] 端口 ${env_1.env.port} 已被占用，后端无法启动（前端会显示「后端未启动」）。\n` +
+            `请先关闭其它 PsyQA 窗口，或在 PsyQA 目录运行: npm run free:ports\n` +
+            `然后重新执行 npm run dev 或「一键启动.bat」。\n`);
+    }
+    else {
+        console.error('[错误] 服务器启动失败:', err.message);
+    }
+    process.exit(1);
 });

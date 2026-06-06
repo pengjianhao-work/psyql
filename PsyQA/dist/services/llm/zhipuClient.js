@@ -20,6 +20,7 @@ exports.markZhipuUnavailable = markZhipuUnavailable;
 exports.clearZhipuHealthCache = clearZhipuHealthCache;
 exports.checkZhipuHealth = checkZhipuHealth;
 exports.callZhipuGenerate = callZhipuGenerate;
+exports.callZhipuGenerateStream = callZhipuGenerateStream;
 const axios_1 = __importDefault(require("axios"));
 const DEFAULT_BASE = 'https://open.bigmodel.cn/api/paas/v4';
 function getZhipuApiKey() {
@@ -118,6 +119,77 @@ function callZhipuGenerate(prompt, options) {
                     yield new Promise((r) => setTimeout(r, 900 * attempt));
                 }
             }
+        }
+        return null;
+    });
+}
+function callZhipuGenerateStream(prompt, options) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c, _d;
+        const key = getZhipuApiKey();
+        if (!key)
+            return null;
+        const model = (options === null || options === void 0 ? void 0 : options.model) || getZhipuModel();
+        const messages = [];
+        if ((_a = options === null || options === void 0 ? void 0 : options.systemPrompt) === null || _a === void 0 ? void 0 : _a.trim()) {
+            messages.push({ role: 'system', content: options.systemPrompt.trim() });
+        }
+        messages.push({ role: 'user', content: prompt });
+        try {
+            const res = yield axios_1.default.post(`${getZhipuBaseUrl()}/chat/completions`, {
+                model,
+                messages,
+                temperature: (_b = options === null || options === void 0 ? void 0 : options.temperature) !== null && _b !== void 0 ? _b : 0.45,
+                max_tokens: (_c = options === null || options === void 0 ? void 0 : options.maxTokens) !== null && _c !== void 0 ? _c : 1024,
+                stream: true
+            }, {
+                headers: {
+                    Authorization: `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: (_d = options === null || options === void 0 ? void 0 : options.timeoutMs) !== null && _d !== void 0 ? _d : 90000,
+                responseType: 'stream'
+            });
+            let full = '';
+            const stream = res.data;
+            yield new Promise((resolve, reject) => {
+                let buffer = '';
+                stream.on('data', (chunk) => {
+                    var _a, _b, _c, _d;
+                    buffer += chunk.toString('utf8');
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed.startsWith('data:'))
+                            continue;
+                        const payload = trimmed.slice(5).trim();
+                        if (payload === '[DONE]')
+                            continue;
+                        try {
+                            const json = JSON.parse(payload);
+                            const delta = (_c = (_b = (_a = json === null || json === void 0 ? void 0 : json.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.delta) === null || _c === void 0 ? void 0 : _c.content;
+                            if (typeof delta === 'string' && delta) {
+                                full += delta;
+                                (_d = options === null || options === void 0 ? void 0 : options.onToken) === null || _d === void 0 ? void 0 : _d.call(options, delta);
+                            }
+                        }
+                        catch (_e) {
+                            /* skip malformed sse */
+                        }
+                    }
+                });
+                stream.on('end', () => resolve());
+                stream.on('error', reject);
+            });
+            if (full.trim()) {
+                healthCache = { ok: true, until: Date.now() + 90000 };
+                return full.trim();
+            }
+        }
+        catch (error) {
+            console.warn('Zhipu stream failed:', error);
+            markZhipuUnavailable();
         }
         return null;
     });

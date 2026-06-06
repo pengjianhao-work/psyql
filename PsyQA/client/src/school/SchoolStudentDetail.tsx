@@ -3,18 +3,23 @@ import { Link, useParams } from 'react-router-dom';
 import {
   fetchSchoolStudentDetail,
   getErrorMessage,
+  postCounselorTranscriptRequest,
   SchoolStudentDetail as StudentDetailData
 } from '../api';
+import { useSchoolSession } from './useSchoolSession';
 import { formatEmotion, formatRisk, riskClass } from './schoolLabels';
 import { TrendChart } from '../components/TrendChart';
 import { HistoryDataPoint } from '../types';
 
 const SchoolStudentDetailPage: React.FC = () => {
   const { studentId } = useParams<{ studentId: string }>();
+  const { sessionUser } = useSchoolSession();
   const [data, setData] = useState<StudentDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedDialog, setExpandedDialog] = useState<string | null>(null);
+  const [transcriptMsg, setTranscriptMsg] = useState<string | null>(null);
+  const [requestingTranscript, setRequestingTranscript] = useState(false);
 
   const load = useCallback(async () => {
     if (!studentId) return;
@@ -85,7 +90,31 @@ const SchoolStudentDetailPage: React.FC = () => {
         <button type="button" className="save-care-btn school-refresh-btn" onClick={load} disabled={loading}>
           {loading ? '刷新中…' : '刷新'}
         </button>
+        {(sessionUser.role === 'counselor' || sessionUser.role === 'admin') &&
+          profile.transcriptMasked !== false && (
+            <button
+              type="button"
+              className="school-btn-secondary"
+              disabled={requestingTranscript || profile.allowSchoolTranscriptView}
+              onClick={() => {
+                if (!studentId) return;
+                setRequestingTranscript(true);
+                setTranscriptMsg(null);
+                void postCounselorTranscriptRequest(studentId)
+                  .then((r) => setTranscriptMsg(r.message))
+                  .catch((e) => setTranscriptMsg(getErrorMessage(e)))
+                  .finally(() => setRequestingTranscript(false));
+              }}
+            >
+              {profile.allowSchoolTranscriptView
+                ? '已授权查看原文'
+                : requestingTranscript
+                  ? '申请中…'
+                  : '申请查看对话原文'}
+            </button>
+          )}
       </div>
+      {transcriptMsg && <p className="muted school-transcript-msg">{transcriptMsg}</p>}
 
       <div className="school-detail-profile-grid">
         <div className="school-card school-detail-stat">

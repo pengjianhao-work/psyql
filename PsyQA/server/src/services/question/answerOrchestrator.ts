@@ -53,6 +53,9 @@ import {
   filterSimilarQuestionsForDisplay,
   filterKnowledgeForDisplay
 } from '../../utils/relevanceFilter';
+import { stripUserQuestionEcho } from '../../utils/answerSanitizer';
+import { mineImplicitNeeds } from '../psych/implicitNeedsService';
+import { getSeasonalRagBoost } from '../knowledge/seasonalRagPolicy';
 
 export interface CombinedAnswer {
   answer: string;
@@ -78,7 +81,21 @@ export interface CombinedAnswer {
   reportPending?: boolean;
   /** ReAct 推理链 */
   reactUsed?: boolean;
+  reactMode?: 'full' | 'prefetch' | 'planner' | 'off';
   reactTrace?: ReActStep[];
+  /** 生成路径提示：检索未命中 / 知识库空 / LLM 回退等 */
+  generationHint?: 'llm_ok' | 'retrieval_miss' | 'kb_empty' | 'llm_fallback' | 'rule_only' | 'fast_kb';
+  /** 对话结束即时简易报告（完整版异步生成） */
+  briefReport?: string;
+  /** 隐性心理诉求挖掘 */
+  implicitNeeds?: Array<{
+    id: string;
+    implicitConcern: string;
+    suggestedPrompt: string;
+    confidence: number;
+  }>;
+  /** 当前季节 RAG 策略标签 */
+  seasonalRagLabel?: string;
 }
 
 interface ModelConfig {
@@ -185,37 +202,7 @@ function normalizeAnswerStructure(answer: string): string {
   return text;
 }
 
-/** 去掉 LLM 开头复述用户原话（如「今天和父母吵架了亲爱的，今天和父母吵架了」） */
-function stripUserQuestionEcho(answer: string, question: string): string {
-  let text = answer.trim();
-  const q = question.trim();
-  if (!q || q.length < 4) return text;
-
-  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const qEsc = escapeRe(q);
-
-  if (text.startsWith(q)) {
-    text = text.slice(q.length).replace(/^[,，、。\s]+/, '').trim();
-  }
-
-  text = text.replace(new RegExp(`^${qEsc}[，,、\\s]*`), '').trim();
-
-  const dearMatch = text.match(/^亲爱的[，,]?\s*/);
-  if (dearMatch && q.length >= 6) {
-    const afterDear = text.slice(dearMatch[0].length).trim();
-    if (afterDear.startsWith(q) || afterDear.startsWith(q.slice(0, Math.min(20, q.length)))) {
-      text = afterDear.replace(new RegExp(`^${qEsc}[，,、\\s]*`), '').trim();
-    }
-  }
-
-  const dupPrefix = q.slice(0, Math.min(24, q.length));
-  if (dupPrefix.length >= 8) {
-    const re = new RegExp(`^(${escapeRe(dupPrefix)}[\\s，,]*){2,}`, 'u');
-    text = text.replace(re, '').trim();
-  }
-
-  return text;
-}
+/** 去掉 LLM 开头复述用户原话 — 见 utils/answerSanitizer.ts */
 
 function simplifyStructureHint(hint: string): string {
   return hint
@@ -225,7 +212,8 @@ function simplifyStructureHint(hint: string): string {
     .filter(Boolean)
     .slice(0, 3)
     .map((s) => (s.length > 28 ? `${s.slice(0, 28)}…` : s))
-    .join(' · ');}
+    .join(' · ');
+}
 
 function truncateSnippet(text: string, maxLen: number): string {
   const t = text.replace(/\s+/g, ' ').trim();
@@ -399,6 +387,7 @@ function ruleOnlyPsychBundle(
 
 export type AnswerStreamCallbacks = {
   onToken?: (chunk: string) => void;
+  onReactStep?: (step: ReActStep) => void;
 };
 
 export const generateAIAnswer = async (
@@ -508,14 +497,16 @@ export const generateAIAnswer = async (
     ? analyzePsychState(fullText, priorEmotion, { tryLlm: true })
     : Promise.resolve(ruleBundle);
 
-  const retrievalPromise = retrieveKnowledge(
-    ruleRetrievalQuery,
-    3,
-    ruleProblem.category,
-    ruleEmotion.emotion
+  const retrievalPromise = Promise.resolve(
+    retrieveKnowledge(ruleRetrievalQuery, 3, ruleProblem.category, ruleEmotion.emotion)
   );
+  const memoryPromise = searchBlendedUserMemory(userId, ruleRetrievalQuery, 5);
 
-  const [psychBundle, retrievedKnowledge] = await Promise.all([psychPromise, retrievalPromise]);
+  const [psychBundle, retrievedKnowledge, vectorDbResults] = await Promise.all([
+    psychPromise,
+    retrievalPromise,
+    memoryPromise
+  ]);
   const { emotion: rawEmotion, risk: rawRisk, problem: rawProblem, sources, llmUsed: psychLlmUsed, llmRationale } =
     psychBundle;
 
@@ -538,7 +529,6 @@ export const generateAIAnswer = async (
     ...problem.keywords,
     ...problem.subcategories
   ]);
-  const vectorDbResults: SearchResult[] = await searchBlendedUserMemory(userId, retrievalQuery, 5);
 
   const rerankedKnowledge = filterKnowledgeForDisplay(
     fullText,
@@ -654,6 +644,7 @@ ${description ? `补充描述：${description}` : ''}
   let answer: string;
   let answerLlmUsed = false;
   let reactUsed = false;
+  let reactMode: CombinedAnswer['reactMode'] = 'off';
   let reactTrace: ReActStep[] | undefined;
 
   const cachedAnswer =
@@ -689,16 +680,18 @@ ${description ? `补充描述：${description}` : ''}
           {
             temperature: modelConfig.options.temperature,
             timeoutMs: 90_000,
-            onToken: stream?.onToken
+            onToken: stream?.onToken,
+            onStep: stream?.onReactStep
           }
         );
         reactTrace = agentResult.steps;
-        if (agentResult.success && agentResult.answer) {
+        reactMode = agentResult.reactMode;
+        reactUsed = agentResult.reactMode === 'full' || agentResult.reactMode === 'planner';
+        if (agentResult.success && agentResult.answer.length >= MIN_ANSWER_CHARS) {
           llmAnswer = agentResult.answer;
-          reactUsed = true;
         }
-      } catch {
-        /* fallback to direct prompt */
+      } catch (err) {
+        console.warn('[counsel-agent]', err instanceof Error ? err.message : err);
       }
     }
 
@@ -750,17 +743,16 @@ ${description ? `补充描述：${description}` : ''}
 
   if (llmOk && answer.length >= MIN_ANSWER_CHARS) {
     try {
-      const llmFollowUps = await generateFollowUpQuestions(
-        question,
-        answer,
-        getProblemLabel(problem.category)
-      );
+      const llmFollowUps = await Promise.race([
+        generateFollowUpQuestions(question, answer, getProblemLabel(problem.category)),
+        new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 4_000))
+      ]);
       const mapped = mapFollowUpsToSimilarQuestions(llmFollowUps);
       if (mapped.length > 0) {
         displaySimilarQuestions = mapped;
       }
-    } catch {
-      /* 保留题库相似?*/
+    } catch (err) {
+      console.warn('[follow-up-questions]', err instanceof Error ? err.message : err);
     }
   }
 
@@ -819,6 +811,32 @@ ${answer}
   });
   const responseTime = Date.now() - startTime;
 
+  let generationHint: CombinedAnswer['generationHint'] = 'llm_ok';
+  if (!useLlm || loadTestFast) {
+    generationHint = rerankedKnowledge.length > 0 ? 'fast_kb' : 'rule_only';
+  } else if (!llmOk) {
+    generationHint = 'rule_only';
+  } else if (!answerLlmUsed) {
+    generationHint = rerankedKnowledge.length === 0 ? 'kb_empty' : 'llm_fallback';
+  }
+
+  const implicitHints = mineImplicitNeeds(userId, question);
+  const seasonal = getSeasonalRagBoost();
+
+  const briefReportLines = [
+    `【即时简易报告】`,
+    summary,
+    `情绪：${emotion.emotion}（置信 ${(emotion.confidence * 100).toFixed(0)}%）`,
+    `风险：${risk.level}${risk.warningMessage ? ` · ${risk.warningMessage.slice(0, 40)}` : ''}`,
+    `关注领域：${getCategoryName(problem.category)}`,
+    `干预框架：${intervention.frameworkName}`
+  ];
+  if (implicitHints.length) {
+    briefReportLines.push('', '【隐性关注提示】', ...implicitHints.map((h) => `· ${h.implicitConcern}`));
+  }
+  briefReportLines.push('', '完整评估报告正在后台生成，稍后可在侧栏查看。');
+  const briefReport = briefReportLines.join('\n');
+
   return {
     answer,
     knowledgeSources: rerankedKnowledge,
@@ -837,7 +855,17 @@ ${answer}
     analysisSources: sources,
     llmUsed: answerLlmUsed || psychLlmUsed,
     reactUsed,
+    reactMode,
     reactTrace,
+    generationHint,
+    briefReport,
+    implicitNeeds: implicitHints.map((h) => ({
+      id: h.id,
+      implicitConcern: h.implicitConcern,
+      suggestedPrompt: h.suggestedPrompt,
+      confidence: h.confidence
+    })),
+    seasonalRagLabel: seasonal.label,
     report: placeholderReport,
     reportPending: true,
     statModel,

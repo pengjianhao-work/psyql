@@ -179,6 +179,37 @@ export async function deleteUserChromaCollection(userId: string): Promise<boolea
   }
 }
 
+export async function deleteUserChromaVectors(userId: string, ids: string[]): Promise<boolean> {
+  if (!ids.length) return false;
+  const col = await getUserCollection(userId);
+  if (!col) return false;
+  try {
+    await col.delete({ ids });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 优先检索用户热库（近 3 月），再查公共库 */
+export async function searchBlendedChromaHotFirst(
+  userId: string,
+  query: string,
+  topK: number = 5
+): Promise<SearchResult[]> {
+  const userHits = await searchUserChromaCollection(userId, query, topK);
+  const cutoff = Date.now() - 90 * 24 * 3600_000;
+  const hot = userHits.filter((h) => {
+    const t = h.dialogTime;
+    if (!t) return true;
+    const ms = new Date(t.replace(/\//g, '-')).getTime();
+    return !Number.isNaN(ms) && ms >= cutoff;
+  });
+  if (hot.length >= topK) return hot.slice(0, topK);
+  const pub = await searchPublicChromaCollection(query, topK - hot.length);
+  return [...hot, ...pub].slice(0, topK);
+}
+
 async function getUserCollection(userId: string): Promise<import('chromadb').Collection | null> {
   const client = await getClient();
   if (!client) return null;

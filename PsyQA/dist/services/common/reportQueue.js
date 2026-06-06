@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.REPORT_PENDING_MARKER = void 0;
 exports.buildPlaceholderReport = buildPlaceholderReport;
 exports.isReportPendingText = isReportPendingText;
+exports.getReportQueueMetrics = getReportQueueMetrics;
 exports.scheduleReportEnrichment = scheduleReportEnrichment;
 const historyManager_1 = require("./historyManager");
 const psychStatsService_1 = require("../psych/psychStatsService");
@@ -32,6 +33,12 @@ function buildPlaceholderReport(psych) {
 }
 function isReportPendingText(report) {
     return Boolean(report === null || report === void 0 ? void 0 : report.includes(exports.REPORT_PENDING_MARKER));
+}
+function getReportQueueMetrics() {
+    return {
+        pending: inFlight.size,
+        inFlightKeys: [...inFlight]
+    };
 }
 function scheduleReportEnrichment(params) {
     const key = `${params.userId}:${params.dialogTime}`;

@@ -43,24 +43,28 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateAIAnswer = void 0;
-const ragService_1 = require("../ragService");
-const historyManager_1 = require("../historyManager");
-const userProfileService_1 = require("../userProfileService");
-const userMemoryService_1 = require("../userMemoryService");
-const psychStatsService_1 = require("../psychStatsService");
-const portraitQueue_1 = require("../portraitQueue");
-const reportQueue_1 = require("../reportQueue");
-const emotionService_1 = require("../emotionService");
-const interventionService_1 = require("../interventionService");
-const psychAnalysisService_1 = require("../psychAnalysisService");
-const llmEnhanceService_1 = require("../llmEnhanceService");
-const carePlanHints_1 = require("../carePlanHints");
-const ollamaClient_1 = require("../ollamaClient");
-const ollamaAvailability_1 = require("../ollamaAvailability");
-const llmClient_1 = require("../llmClient");
-const zhipuClient_1 = require("../zhipuClient");
+const ragService_1 = require("../knowledge/ragService");
+const historyManager_1 = require("../common/historyManager");
+const userProfileService_1 = require("../user/userProfileService");
+const userMemoryService_1 = require("../user/userMemoryService");
+const psychStatsService_1 = require("../psych/psychStatsService");
+const portraitQueue_1 = require("../user/portraitQueue");
+const reportQueue_1 = require("../common/reportQueue");
+const emotionService_1 = require("../psych/emotionService");
+const interventionService_1 = require("../psych/interventionService");
+const psychAnalysisService_1 = require("../psych/psychAnalysisService");
+const llmEnhanceService_1 = require("./llmEnhanceService");
+const carePlanHints_1 = require("../psych/carePlanHints");
+const ollamaClient_1 = require("../llm/ollamaClient");
+const ollamaAvailability_1 = require("../llm/ollamaAvailability");
+const llmClient_1 = require("../llm/llmClient");
+const counselAgent_1 = require("../llm/counselAgent");
+const zhipuClient_1 = require("../llm/zhipuClient");
 const questionCatalog_1 = require("./questionCatalog");
 const relevanceFilter_1 = require("../../utils/relevanceFilter");
+const answerSanitizer_1 = require("../../utils/answerSanitizer");
+const implicitNeedsService_1 = require("../psych/implicitNeedsService");
+const seasonalRagPolicy_1 = require("../knowledge/seasonalRagPolicy");
 const OLLAMA_GENERATE_URL = (0, ollamaClient_1.resolveOllamaGenerateUrl)();
 const MODEL_CONFIGS = {
     'qwen:7b': {
@@ -108,8 +112,24 @@ const RETRY_DELAY = 1000;
 const cache = new Map();
 const CACHE_TTL = 300000;
 const CACHE_MAX_SIZE = 1000;
-function getCacheKey(question, context) {
-    return `v4:${question}:${context}`.substring(0, 256);
+function getCacheKey(userId, question, riskLevel, context) {
+    return `v5:${userId}:${riskLevel}:${question}:${context}`.substring(0, 320);
+}
+function shouldSkipAnswerCache(riskLevel) {
+    return riskLevel === 'high' || riskLevel === 'critical';
+}
+function waitForLlmWithBackoff() {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (yield (0, llmClient_1.isLlmAvailable)())
+            return true;
+        const delays = [300, 600, 1200];
+        for (const ms of delays) {
+            yield new Promise((r) => setTimeout(r, ms));
+            if (yield (0, llmClient_1.isLlmAvailable)(true))
+                return true;
+        }
+        return false;
+    });
 }
 /** 统一回复结构：共情详、建议简；去掉「今日3步」与正文内专业参考长段*/
 function normalizeAnswerStructure(answer) {
@@ -123,32 +143,7 @@ function normalizeAnswerStructure(answer) {
     text = text.replace(/\n{3,}/g, '\n\n').trim();
     return text;
 }
-/** 去掉 LLM 开头复述用户原话（如「今天和父母吵架了亲爱的，今天和父母吵架了」） */
-function stripUserQuestionEcho(answer, question) {
-    let text = answer.trim();
-    const q = question.trim();
-    if (!q || q.length < 4)
-        return text;
-    const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const qEsc = escapeRe(q);
-    if (text.startsWith(q)) {
-        text = text.slice(q.length).replace(/^[,，、。\s]+/, '').trim();
-    }
-    text = text.replace(new RegExp(`^${qEsc}[，,、\\s]*`), '').trim();
-    const dearMatch = text.match(/^亲爱的[，,]?\s*/);
-    if (dearMatch && q.length >= 6) {
-        const afterDear = text.slice(dearMatch[0].length).trim();
-        if (afterDear.startsWith(q) || afterDear.startsWith(q.slice(0, Math.min(20, q.length)))) {
-            text = afterDear.replace(new RegExp(`^${qEsc}[，,、\\s]*`), '').trim();
-        }
-    }
-    const dupPrefix = q.slice(0, Math.min(24, q.length));
-    if (dupPrefix.length >= 8) {
-        const re = new RegExp(`^(${escapeRe(dupPrefix)}[\\s，,]*){2,}`, 'u');
-        text = text.replace(re, '').trim();
-    }
-    return text;
-}
+/** 去掉 LLM 开头复述用户原话 — 见 utils/answerSanitizer.ts */
 function simplifyStructureHint(hint) {
     return hint
         .replace(/[①②③④⑤]/g, '')
@@ -386,8 +381,7 @@ const generateAIAnswer = (question_1, description_1, similarQuestions_1, ...args
     const useLlm = !loadTestFast && (0, llmClient_1.shouldUseLlm)();
     let llmOk = useLlm && (yield (0, llmClient_1.isLlmAvailable)());
     if (useLlm && !llmOk) {
-        yield new Promise((r) => setTimeout(r, 2000));
-        llmOk = yield (0, llmClient_1.isLlmAvailable)(true);
+        llmOk = yield waitForLlmWithBackoff();
     }
     const ruleBundle = ruleOnlyPsychBundle(ruleEmotion, ruleRisk, ruleProblem);
     const ruleRetrievalQuery = (0, questionCatalog_1.enhanceQueryWithKeywords)(fullText, [
@@ -397,8 +391,13 @@ const generateAIAnswer = (question_1, description_1, similarQuestions_1, ...args
     const psychPromise = llmOk
         ? (0, psychAnalysisService_1.analyzePsychState)(fullText, priorEmotion, { tryLlm: true })
         : Promise.resolve(ruleBundle);
-    const retrievalPromise = (0, ragService_1.retrieveKnowledge)(ruleRetrievalQuery, 3, ruleProblem.category, ruleEmotion.emotion);
-    const [psychBundle, retrievedKnowledge] = yield Promise.all([psychPromise, retrievalPromise]);
+    const retrievalPromise = Promise.resolve((0, ragService_1.retrieveKnowledge)(ruleRetrievalQuery, 3, ruleProblem.category, ruleEmotion.emotion));
+    const memoryPromise = (0, userMemoryService_1.searchBlendedUserMemory)(userId, ruleRetrievalQuery, 5);
+    const [psychBundle, retrievedKnowledge, vectorDbResults] = yield Promise.all([
+        psychPromise,
+        retrievalPromise,
+        memoryPromise
+    ]);
     const { emotion: rawEmotion, risk: rawRisk, problem: rawProblem, sources, llmUsed: psychLlmUsed, llmRationale } = psychBundle;
     const historySnapshots = (0, historyManager_1.getUserPsychSnapshots)(userId);
     const metrics = (0, psychStatsService_1.refineMetricsWithSignals)(rawEmotion, rawRisk, rawProblem);
@@ -417,8 +416,7 @@ const generateAIAnswer = (question_1, description_1, similarQuestions_1, ...args
         ...problem.keywords,
         ...problem.subcategories
     ]);
-    const vectorDbResults = yield (0, userMemoryService_1.searchBlendedUserMemory)(userId, retrievalQuery, 5);
-    const rerankedKnowledge = (0, relevanceFilter_1.filterKnowledgeForDisplay)(fullText, (0, ragService_1.mergeRankedReferences)(retrievalQuery, retrievedKnowledge, vectorDbResults, problem.category, emotion.emotion, 3), 2);
+    const rerankedKnowledge = (0, relevanceFilter_1.filterKnowledgeForDisplay)(fullText, (0, ragService_1.mergeRankedReferencesRRF)(retrievalQuery, retrievedKnowledge, vectorDbResults, problem.category, emotion.emotion, 3), 2);
     const knowledgeContext = formatKnowledgeForPrompt(rerankedKnowledge);
     const tone = emotionStyle.tone;
     const intensityLabel = emotion.confidence >= 0.75 ? '较强' : emotion.confidence >= 0.45 ? '中等' : '轻度';
@@ -502,10 +500,13 @@ ${description ? `补充描述：${description}` : ''}
 
 请直接开始回答（不要元话语、不用 Markdown 小标题堆砌）：`.trim();
     let displaySimilarQuestions = (0, relevanceFilter_1.filterSimilarQuestionsForDisplay)(question, description, similarQuestions, 2);
-    const cacheKey = getCacheKey(question, historySummary.substring(0, 100));
+    const cacheKey = getCacheKey(userId, question, risk.level, historySummary.substring(0, 80));
     let answer;
     let answerLlmUsed = false;
-    const cachedAnswer = getCachedAnswer(cacheKey);
+    let reactUsed = false;
+    let reactMode = 'off';
+    let reactTrace;
+    const cachedAnswer = !shouldSkipAnswerCache(risk.level) ? getCachedAnswer(cacheKey) : null;
     if (cachedAnswer && cachedAnswer.length >= MIN_ANSWER_CHARS) {
         console.log('使用缓存答案');
         answer = normalizeAnswerStructure(cachedAnswer);
@@ -516,30 +517,66 @@ ${description ? `补充描述：${description}` : ''}
     }
     else if (llmOk) {
         let llmAnswer = '';
-        try {
-            if (stream === null || stream === void 0 ? void 0 : stream.onToken) {
-                const { callLlmGenerateStream } = yield Promise.resolve().then(() => __importStar(require('../llmClient')));
-                llmAnswer =
-                    (yield callLlmGenerateStream(prompt, {
-                        temperature: modelConfig.options.temperature,
-                        maxTokens: modelConfig.options.num_predict,
-                        timeoutMs: 90000,
-                        onToken: stream.onToken
-                    })) || '';
+        const tryAgent = (0, counselAgent_1.shouldRunCounselAgent)();
+        if (tryAgent) {
+            try {
+                const agentResult = yield (0, counselAgent_1.runCounselAgent)({
+                    userId,
+                    question,
+                    description,
+                    emotion,
+                    risk,
+                    problem,
+                    intervention,
+                    historySummary,
+                    agentContext,
+                    tone,
+                    llmRationale,
+                    prefetchedKnowledge: rerankedKnowledge,
+                    prefetchedMemory: vectorDbResults
+                }, {
+                    temperature: modelConfig.options.temperature,
+                    timeoutMs: 90000,
+                    onToken: stream === null || stream === void 0 ? void 0 : stream.onToken,
+                    onStep: stream === null || stream === void 0 ? void 0 : stream.onReactStep
+                });
+                reactTrace = agentResult.steps;
+                reactMode = agentResult.reactMode;
+                reactUsed = agentResult.reactMode === 'full' || agentResult.reactMode === 'planner';
+                if (agentResult.success && agentResult.answer.length >= MIN_ANSWER_CHARS) {
+                    llmAnswer = agentResult.answer;
+                }
             }
-            else {
-                llmAnswer = yield callLlmServiceWithRetry(prompt, modelConfig);
+            catch (err) {
+                console.warn('[counsel-agent]', err instanceof Error ? err.message : err);
             }
         }
-        catch (_c) {
-            llmAnswer = '';
-            const { markZhipuUnavailable } = yield Promise.resolve().then(() => __importStar(require('../zhipuClient')));
-            markZhipuUnavailable();
+        if (!llmAnswer) {
+            try {
+                if (stream === null || stream === void 0 ? void 0 : stream.onToken) {
+                    const { callLlmGenerateStream } = yield Promise.resolve().then(() => __importStar(require('../llm/llmClient')));
+                    llmAnswer =
+                        (yield callLlmGenerateStream(prompt, {
+                            temperature: modelConfig.options.temperature,
+                            maxTokens: modelConfig.options.num_predict,
+                            timeoutMs: 90000,
+                            onToken: stream.onToken
+                        })) || '';
+                }
+                else {
+                    llmAnswer = yield callLlmServiceWithRetry(prompt, modelConfig);
+                }
+            }
+            catch (_c) {
+                llmAnswer = '';
+                const { markZhipuUnavailable } = yield Promise.resolve().then(() => __importStar(require('../llm/zhipuClient')));
+                markZhipuUnavailable();
+            }
         }
         if (llmAnswer) {
             answerLlmUsed = true;
-            answer = ensureAnswerLength(stripUserQuestionEcho(normalizeAnswerStructure(llmAnswer), question), question, intervention, rerankedKnowledge);
-            if (answer.length >= MIN_ANSWER_CHARS) {
+            answer = ensureAnswerLength((0, answerSanitizer_1.stripUserQuestionEcho)(normalizeAnswerStructure(llmAnswer), question), question, intervention, rerankedKnowledge);
+            if (answer.length >= MIN_ANSWER_CHARS && !shouldSkipAnswerCache(risk.level)) {
                 setCachedAnswer(cacheKey, answer);
             }
         }
@@ -559,14 +596,17 @@ ${description ? `补充描述：${description}` : ''}
     }
     if (llmOk && answer.length >= MIN_ANSWER_CHARS) {
         try {
-            const llmFollowUps = yield (0, llmEnhanceService_1.generateFollowUpQuestions)(question, answer, (0, llmEnhanceService_1.getProblemLabel)(problem.category));
+            const llmFollowUps = yield Promise.race([
+                (0, llmEnhanceService_1.generateFollowUpQuestions)(question, answer, (0, llmEnhanceService_1.getProblemLabel)(problem.category)),
+                new Promise((resolve) => setTimeout(() => resolve([]), 4000))
+            ]);
             const mapped = (0, llmEnhanceService_1.mapFollowUpsToSimilarQuestions)(llmFollowUps);
             if (mapped.length > 0) {
                 displaySimilarQuestions = mapped;
             }
         }
-        catch (_d) {
-            /* 保留题库相似?*/
+        catch (err) {
+            console.warn('[follow-up-questions]', err instanceof Error ? err.message : err);
         }
     }
     if (risk.level === 'high') {
@@ -582,14 +622,14 @@ ${interventionService_1.HIGH_RISK_CLARIFICATION}
 ${answer}
     `.trim();
     }
-    answer = clampAnswerLength(stripUserQuestionEcho(normalizeAnswerStructure(answer), question));
+    answer = clampAnswerLength((0, answerSanitizer_1.stripUserQuestionEcho)(normalizeAnswerStructure(answer), question));
     if (!answer.includes('不能替代医疗诊断')) {
         answer = `${answer}\n\n---\n\n${interventionService_1.ETHICS_FOOTER}`;
     }
     const activeModelLabel = (0, llmClient_1.getLastActiveLlmProvider)() === 'zhipu'
-        ? `Zhipu-${(0, zhipuClient_1.getZhipuModel)()}`
+        ? `Zhipu-${(0, zhipuClient_1.getZhipuModel)()}${reactUsed ? '+ReAct' : ''}`
         : answerLlmUsed
-            ? modelConfig.name
+            ? `${modelConfig.name}${reactUsed ? '+ReAct' : ''}`
             : 'Rule+Knowledge';
     const summary = (0, historyManager_1.generateSummary)(question, answer, psychSnapshot);
     const dialogId = (0, historyManager_1.saveDialog)(userId, question, answer, summary, psychSnapshot, placeholderReport);
@@ -603,7 +643,7 @@ ${answer}
             psych: psychSnapshot
         }).catch(() => undefined);
     }
-    catch (_e) {
+    catch (_d) {
         /* profile refresh is best-effort */
     }
     (0, reportQueue_1.scheduleReportEnrichment)({
@@ -619,6 +659,31 @@ ${answer}
         loadTestFast
     });
     const responseTime = Date.now() - startTime;
+    let generationHint = 'llm_ok';
+    if (!useLlm || loadTestFast) {
+        generationHint = rerankedKnowledge.length > 0 ? 'fast_kb' : 'rule_only';
+    }
+    else if (!llmOk) {
+        generationHint = 'rule_only';
+    }
+    else if (!answerLlmUsed) {
+        generationHint = rerankedKnowledge.length === 0 ? 'kb_empty' : 'llm_fallback';
+    }
+    const implicitHints = (0, implicitNeedsService_1.mineImplicitNeeds)(userId, question);
+    const seasonal = (0, seasonalRagPolicy_1.getSeasonalRagBoost)();
+    const briefReportLines = [
+        `【即时简易报告】`,
+        summary,
+        `情绪：${emotion.emotion}（置信 ${(emotion.confidence * 100).toFixed(0)}%）`,
+        `风险：${risk.level}${risk.warningMessage ? ` · ${risk.warningMessage.slice(0, 40)}` : ''}`,
+        `关注领域：${(0, emotionService_1.getCategoryName)(problem.category)}`,
+        `干预框架：${intervention.frameworkName}`
+    ];
+    if (implicitHints.length) {
+        briefReportLines.push('', '【隐性关注提示】', ...implicitHints.map((h) => `· ${h.implicitConcern}`));
+    }
+    briefReportLines.push('', '完整评估报告正在后台生成，稍后可在侧栏查看。');
+    const briefReport = briefReportLines.join('\n');
     return {
         answer,
         knowledgeSources: rerankedKnowledge,
@@ -636,6 +701,18 @@ ${answer}
         carePlan: { categoryName: carePlan.categoryName, suggestion: carePlan.suggestion },
         analysisSources: sources,
         llmUsed: answerLlmUsed || psychLlmUsed,
+        reactUsed,
+        reactMode,
+        reactTrace,
+        generationHint,
+        briefReport,
+        implicitNeeds: implicitHints.map((h) => ({
+            id: h.id,
+            implicitConcern: h.implicitConcern,
+            suggestedPrompt: h.suggestedPrompt,
+            confidence: h.confidence
+        })),
+        seasonalRagLabel: seasonal.label,
         report: placeholderReport,
         reportPending: true,
         statModel,
