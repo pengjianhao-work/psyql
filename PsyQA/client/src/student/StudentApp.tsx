@@ -1,0 +1,1083 @@
+﻿import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { GroupedHistoryItem, Message, QuestionResponse, HistoryDataPoint, UserProgress } from '../types';
+import {
+  askQuestion,
+  askQuestionStream,
+  getCategories,
+  getUserProgress,
+  clearUserHistory,
+  CategoryInfo,
+  getErrorMessage,
+  isAskInFlightError,
+  isBackendNetworkError,
+  getGroupedHistory,
+  getInsightsStatus,
+  pollInsightsUntilReady,
+  fetchRuntimeHealth,
+  getUserProfile,
+  UserProfilePayload,
+  AuthUserPublic
+} from '../api';
+import { Sidebar } from '../components/Sidebar';
+import { ChatContainer } from '../components/ChatContainer';
+import { recordResponseTimeMs, getEstimatedWaitSec } from '../utils/responseTimeEstimate';
+import { TrendChart } from '../components/TrendChart';
+import { ReportPanel } from '../components/ReportPanel';
+import { PortraitHistoryList, ConversationPortraitPanel } from '../components/ConversationPortraitPanel';
+import { UserProfile, UserSelector } from '../components/UserSelector';
+import { SelfRatingPanel } from '../components/SelfRatingPanel';
+import { SessionFeedbackPanel } from '../components/SessionFeedbackPanel';
+import { UserProfileCard } from '../components/UserProfileCard';
+import { AgentProfileCard } from '../components/AgentProfileCard';
+import { StudentProfileCard } from '../components/StudentProfileCard';
+import { PrivacyEthicsModal, ethicsStorageKey, reportEthicsSessionKey } from '../components/PrivacyEthicsModal';
+import {
+  formatStudentIdentityLine,
+  getStudentProfileCompleteness
+} from '../utils/profileCompleteness';
+import { StudentStatusBar } from '../components/StudentStatusBar';
+import { GuestModeBanner } from '../components/GuestModeBanner';
+import { CrisisSupportBanner } from '../components/CrisisSupportBanner';
+import { ExportMenu, ExportFormat } from '../components/ExportMenu';
+import { ToastStack, ToastMessage } from '../components/Toast';
+import { RuntimeStatusBar } from '../components/RuntimeStatusBar';
+import { BackendOfflineBanner } from '../components/BackendOfflineBanner';
+import { BrandSchoolChip } from '../components/BrandSchoolChip';
+import { profilesStorageKey } from '../userStorage';
+import { progressHistoryToMessages, restoreSessionSummary } from '../utils/chatHistory';
+import '../App.css';
+
+export interface StudentAppProps {
+  sessionUser: AuthUserPublic | null;
+  guestMode: boolean;
+  onLogout: () => void;
+  onSessionUserUpdate?: (user: AuthUserPublic) => void;
+}
+
+const DEMO_QUESTIONS = [
+  '最近学习压力很大，学不进去怎么办？',
+  '我感觉很孤独，没有朋友',
+  '和室友关系不好，很烦恼',
+  '担心未来找不到工作',
+  '总是情绪低落，提不起劲'
+];
+
+const CATEGORY_PROMPT_MAP: Record<string, string[]> = {
+  academic_stress: ['最近学习压力很大，学不进去怎么办？', '担心未来找不到工作'],
+  interpersonal: ['和室友关系不好，很烦恼', '我感觉很孤独，没有朋友'],
+  career_future: ['担心未来找不到工作'],
+  emotion_regulation: ['总是情绪低落，提不起劲'],
+  romantic_relationship: ['和恋人经常吵架，不知道怎么办', '暧昧关系让我很焦虑'],
+  family_relationship: ['和父母沟通困难，压力很大', '家里期望和我自己的想法冲突'],
+  self_identity: ['不确定自己适合什么方向', '总觉得自己不够好'],
+  other: DEMO_QUESTIONS
+};
+const DEFAULT_USERS: UserProfile[] = [
+  { id: 'user1', name: '小明', avatar: '👦' },
+  { id: 'user2', name: '小红', avatar: '👧' },
+  { id: 'user3', name: '小李', avatar: '👨' }
+];
+
+const profilesToRecord = (list: UserProfile[]): Record<string, UserProfile> =>
+  list.reduce<Record<string, UserProfile>>((acc, user) => {
+    acc[user.id] = user;
+    return acc;
+  }, {});
+
+const createWelcomeMessage = (): Message => ({
+  id: '1',
+  type: 'bot',
+  content: '你好，欢迎来到心理港湾 🌿\n\n这里是安全、私密的倾诉空间。你可以描述最近的心情、人际或学业压力，我会认真倾听并给出参考建议。',
+  timestamp: new Date().toLocaleString('zh-CN')
+});
+
+const progressToTrendData = (progress: UserProgress): HistoryDataPoint[] =>
+  progress.history.map((h, index) => ({
+    date: `第${index + 1}次`,
+    stressLevel: h.stressLevel ?? 45,
+    anxietyLevel: h.anxietyLevel ?? 40,
+    moodStability: h.moodStability ?? 65
+  }));
+
+function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: StudentAppProps) {
+  const [messages, setMessages] = useState<Message[]>([
+    createWelcomeMessage()
+  ]);
+  const [categories, setCategories] = useState<CategoryInfo[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [userProfiles, setUserProfiles] = useState<Record<string, UserProfile>>({});
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [trendData, setTrendData] = useState<HistoryDataPoint[]>([]);
+  const [latestReport, setLatestReport] = useState<{
+    emotion: QuestionResponse['emotion'];
+    risk: QuestionResponse['risk'];
+    problem?: QuestionResponse['problem'];
+    intervention?: QuestionResponse['intervention'];
+    carePlan?: QuestionResponse['carePlan'];
+    analysisSources?: QuestionResponse['analysisSources'];
+    llmUsed?: boolean;
+    emotionStyle: QuestionResponse['emotionStyle'];
+    report: string;
+    statModel?: QuestionResponse['statModel'];
+    portrait?: QuestionResponse['portrait'];
+  } | null>(null);
+  const [lastDialogTime, setLastDialogTime] = useState<string | undefined>();
+  const [showSelfRating, setShowSelfRating] = useState(false);
+  const [showSessionFeedback, setShowSessionFeedback] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfilePayload | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [groupedHistory, setGroupedHistory] = useState<Record<string, GroupedHistoryItem[]>>({});
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [ethicsLoginOpen, setEthicsLoginOpen] = useState(false);
+  const [reportEthicsOpen, setReportEthicsOpen] = useState(false);
+  const [reportEthicsOk, setReportEthicsOk] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [portraitPending, setPortraitPending] = useState(false);
+  const [reportPending, setReportPending] = useState(false);
+  const [insightsRefreshing, setInsightsRefreshing] = useState(false);
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [estimatedWaitSec] = useState(() => getEstimatedWaitSec());
+  const sendLockRef = useRef(false);
+  const refreshInsightsRef = useRef<(() => Promise<void>) | undefined>(undefined);
+
+  const pushToast = useCallback(
+    (text: string, tone: ToastMessage['tone'] = 'info', action?: { label: string; onClick: () => void }) => {
+      const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setToasts((prev) => [
+        ...prev,
+        {
+          id,
+          text,
+          tone,
+          actionLabel: action?.label,
+          onAction: action?.onClick
+        }
+      ]);
+    },
+    []
+  );
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const checkBackendOnline = useCallback(async () => {
+    try {
+      const h = await fetchRuntimeHealth();
+      setBackendOnline(h.status === 'ok');
+      return h.status === 'ok';
+    } catch {
+      setBackendOnline(false);
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkBackendOnline();
+    const id = window.setInterval(() => void checkBackendOnline(), 10000);
+    return () => window.clearInterval(id);
+  }, [checkBackendOnline]);
+
+  const filteredQuickPrompts = useMemo(() => {
+    if (!activeCategory) return DEMO_QUESTIONS;
+    const list = CATEGORY_PROMPT_MAP[activeCategory];
+    return list?.length ? list : DEMO_QUESTIONS;
+  }, [activeCategory]);
+
+  const portraitHistoryItems = useMemo(() => {
+    const rows: Array<{ time: string; summary: string; llmUsed?: boolean; group?: string }> = [];
+    Object.entries(groupedHistory).forEach(([group, items]) => {
+      items.forEach((item) => {
+        if (item.portrait?.summary) {
+          rows.push({
+            time: item.time,
+            summary: item.portrait.summary,
+            llmUsed: item.portrait.llmUsed,
+            group
+          });
+        }
+      });
+    });
+    return rows.sort((a, b) => b.time.localeCompare(a.time)).slice(0, 6);
+  }, [groupedHistory]);
+
+  const storageNamespace = guestMode ? 'guest' : sessionUser?.id ?? '';
+  const guestFallback = useMemo(() => DEFAULT_USERS, []);
+  const accountFallback = useMemo(
+    () =>
+      sessionUser
+        ? [{ id: sessionUser.id, name: sessionUser.displayName, avatar: sessionUser.avatar }]
+        : [],
+    [sessionUser]
+  );
+  const rosterFallbackDefaults = guestMode ? guestFallback : accountFallback;
+  const isAccountStudent = !guestMode && !!sessionUser;
+
+  const handleSessionUserUpdate = useCallback(
+    (user: AuthUserPublic) => {
+      onSessionUserUpdate?.(user);
+      setUserProfiles((prev) => ({
+        ...prev,
+        [user.id]: { id: user.id, name: user.displayName, avatar: user.avatar }
+      }));
+    },
+    [onSessionUserUpdate]
+  );
+
+  const syncRoster = useCallback((list: UserProfile[]) => {
+    if (!list.length || isAccountStudent) return;
+    setUserProfiles(profilesToRecord(list));
+    setCurrentUserId((prev) => (prev && list.some((u) => u.id === prev) ? prev : list[0].id));
+  }, [isAccountStudent]);
+
+  useEffect(() => {
+    if (guestMode) {
+      const key = profilesStorageKey('guest');
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, JSON.stringify(DEFAULT_USERS));
+      }
+      setUserProfiles(profilesToRecord(DEFAULT_USERS));
+      setCurrentUserId('user1');
+      setLatestReport(null);
+      return;
+    }
+    if (sessionUser) {
+      const roster = [{ id: sessionUser.id, name: sessionUser.displayName, avatar: sessionUser.avatar }];
+      setUserProfiles(profilesToRecord(roster));
+      setCurrentUserId(sessionUser.id);
+    }
+  }, [guestMode, sessionUser]);
+
+  const loadSessionFromServer = useCallback(async (userId: string) => {
+    if (!userId) return;
+    setHistoryLoading(true);
+    try {
+      const [progress, grouped] = await Promise.all([
+        getUserProgress(userId),
+        getGroupedHistory(userId)
+      ]);
+      const groups = grouped.groups || {};
+      setTrendData(progressToTrendData(progress));
+      setGroupedHistory(groups);
+
+      const restoredMessages = progressHistoryToMessages(progress.history);
+      setMessages(restoredMessages.length ? restoredMessages : [createWelcomeMessage()]);
+
+      const restored = restoreSessionSummary(progress, groups);
+      setLatestReport(restored.latestReport);
+      setLastDialogTime(restored.lastDialogTime);
+      setShowSelfRating(false);
+      try {
+        const status = await getInsightsStatus(userId);
+        setPortraitPending(status.portraitPending);
+        setReportPending(status.reportPending);
+        if (!status.ready && (status.reportPending || status.portraitPending)) {
+          void pollInsightsUntilReady(userId).then((progress) => {
+            if (!progress) return;
+            setPortraitPending(false);
+            setReportPending(false);
+            const groups = grouped.groups || {};
+            const again = restoreSessionSummary(progress, groups);
+            if (again.latestReport) setLatestReport(again.latestReport);
+            pushToast('历史会话的报告与画像已同步', 'success');
+          });
+        }
+      } catch {
+        setPortraitPending(
+          Boolean(restored.latestReport?.portrait?.summary?.includes('生成中'))
+        );
+        setReportPending(
+          Boolean(restored.latestReport?.report?.includes('详细心理评估报告生成中'))
+        );
+      }
+    } catch (error) {
+      console.error('Failed to load session history:', error);
+      setMessages([createWelcomeMessage()]);
+      setTrendData([]);
+      setGroupedHistory({});
+      setLatestReport(null);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!storageNamespace) return;
+    const accepted = localStorage.getItem(ethicsStorageKey(storageNamespace)) === '1';
+    setEthicsLoginOpen(!accepted);
+  }, [storageNamespace]);
+
+  useEffect(() => {
+    if (!latestReport) {
+      setReportEthicsOk(false);
+      return;
+    }
+    const ok = sessionStorage.getItem(reportEthicsSessionKey) === '1';
+    setReportEthicsOk(ok);
+    setReportEthicsOpen(!ok);
+  }, [latestReport]);
+
+  const handleLogoutAccount = useCallback(() => {
+    onLogout();
+  }, [onLogout]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      return;
+    }
+    const fetchCategories = async () => {
+      const maxAttempts = 5;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const cats = await getCategories();
+          setCategories(cats);
+          return;
+        } catch (error) {
+          if (attempt === maxAttempts) {
+            console.error('Failed to fetch categories:', error);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `sys-${Date.now()}`,
+                type: 'bot',
+                content: `分类加载失败：${getErrorMessage(error)}`,
+                timestamp: new Date().toLocaleString('zh-CN')
+              }
+            ]);
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, attempt * 600));
+        }
+      }
+    };
+    fetchCategories();
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      return;
+    }
+    loadSessionFromServer(currentUserId);
+  }, [currentUserId, loadSessionFromServer]);
+
+  const loadUserProfileFromServer = useCallback(async (userId: string, refresh = false) => {
+    setProfileLoading(true);
+    try {
+      const profile = await getUserProfile(userId, refresh);
+      setUserProfile(profile);
+    } catch {
+      /* keep previous profile on failure */
+    } finally {
+      setProfileLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setUserProfile(null);
+      return;
+    }
+    void loadUserProfileFromServer(currentUserId);
+  }, [currentUserId, loadUserProfileFromServer]);
+
+  const handleSend = useCallback(async (question: string, description: string) => {
+    if (sendLockRef.current || historyLoading) {
+      pushToast('正在回复上一条消息，请稍候', 'info');
+      return;
+    }
+    if (backendOnline === false) {
+      pushToast('后端未连接，请先启动系统', 'warning', {
+        label: '检测',
+        onClick: () => void checkBackendOnline()
+      });
+      return;
+    }
+    sendLockRef.current = true;
+    setIsLoading(true);
+    const requestStart = Date.now();
+
+    setMessages((prev) => [
+      ...prev,
+      { id: Date.now().toString(), type: 'user', content: question, timestamp: new Date().toLocaleString('zh-CN') }
+    ]);
+
+    try {
+      const botId = (Date.now() + 1).toString();
+      const botTime = new Date().toLocaleString('zh-CN');
+      let response: QuestionResponse | null = null;
+      let streamOk = false;
+
+      await askQuestionStream(question, description, currentUserId, {
+        onToken: (text) => {
+          streamOk = true;
+          setIsLoading(false);
+          setMessages((prev) => {
+            const existing = prev.find((m) => m.id === botId);
+            if (!existing) {
+              return [
+                ...prev,
+                {
+                  id: botId,
+                  type: 'bot',
+                  content: text,
+                  timestamp: botTime
+                }
+              ];
+            }
+            return prev.map((m) =>
+              m.id === botId ? { ...m, content: `${m.content}${text}` } : m
+            );
+          });
+        },
+        onDone: (payload) => {
+          response = payload;
+        },
+        onError: () => {
+          /* fallback below */
+        }
+      });
+
+      if (!response) {
+        setMessages((prev) => prev.filter((m) => m.id !== botId));
+        response = await askQuestion(question, description, currentUserId);
+      } else if (!streamOk) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === botId
+              ? {
+                  ...m,
+                  content: response!.answer,
+                  knowledgeSources: response!.knowledgeSources,
+                  similarQuestions: response!.similarQuestions,
+                  emotion: response!.emotion,
+                  risk: response!.risk,
+                  problem: response!.problem,
+                  emotionStyle: response!.emotionStyle,
+                  report: response!.report,
+                  llmUsed: response!.llmUsed,
+                  reactUsed: response!.reactUsed,
+                  reactTrace: response!.reactTrace
+                }
+              : m
+          )
+        );
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === botId
+              ? {
+                  ...m,
+                  content: response!.answer,
+                  knowledgeSources: response!.knowledgeSources,
+                  similarQuestions: response!.similarQuestions,
+                  emotion: response!.emotion,
+                  risk: response!.risk,
+                  problem: response!.problem,
+                  emotionStyle: response!.emotionStyle,
+                  report: response!.report,
+                  llmUsed: response!.llmUsed,
+                  reactUsed: response!.reactUsed,
+                  reactTrace: response!.reactTrace
+                }
+              : m
+          )
+        );
+      }
+
+      const finalResponse = response!;
+      recordResponseTimeMs(Date.now() - requestStart);
+      setLatestReport({
+        emotion: finalResponse.emotion,
+        risk: finalResponse.risk,
+        problem: finalResponse.problem,
+        emotionStyle: finalResponse.emotionStyle,
+        intervention: finalResponse.intervention,
+        carePlan: finalResponse.carePlan,
+        analysisSources: finalResponse.analysisSources,
+        llmUsed: finalResponse.llmUsed,
+        report: finalResponse.report,
+        statModel: finalResponse.statModel,
+        portrait: finalResponse.portrait
+      });
+      setLastDialogTime(botTime);
+      setShowSelfRating(true);
+      setShowSessionFeedback(true);
+      setInsightsOpen(false);
+      setPortraitPending(Boolean(finalResponse.portraitPending));
+      setReportPending(Boolean(finalResponse.reportPending));
+      if (finalResponse.reportPending || finalResponse.portraitPending) {
+        pushToast('回复已生成；详细报告与画像正在后台生成', 'info', {
+          label: '查看报告',
+          onClick: () => {
+            if (!reportEthicsOk) {
+              setReportEthicsOpen(true);
+            } else {
+              setInsightsOpen(true);
+            }
+          }
+        });
+      }
+
+      if (!streamOk) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: botId,
+            type: 'bot',
+            content: finalResponse.answer,
+            knowledgeSources: finalResponse.knowledgeSources,
+            similarQuestions: finalResponse.similarQuestions,
+            emotion: finalResponse.emotion,
+            risk: finalResponse.risk,
+            problem: finalResponse.problem,
+            emotionStyle: finalResponse.emotionStyle,
+            report: finalResponse.report,
+            llmUsed: finalResponse.llmUsed,
+            timestamp: botTime
+          }
+        ]);
+      }
+
+      try {
+        const progress = await getUserProgress(currentUserId);
+        setTrendData(progressToTrendData(progress));
+        const grouped = await getGroupedHistory(currentUserId);
+        setGroupedHistory(grouped.groups || {});
+      } catch {
+        /* keep existing trend on refresh failure */
+      }
+
+      void loadUserProfileFromServer(currentUserId, true);
+
+      if ((finalResponse.reportPending || finalResponse.portraitPending) && currentUserId) {
+        void pollInsightsUntilReady(currentUserId).then((progress) => {
+          if (!progress) {
+            pushToast('报告生成超时，可点击状态栏「刷新报告与趋势」重试', 'warning', {
+              label: '刷新',
+              onClick: () => void refreshInsightsRef.current?.()
+            });
+            return;
+          }
+          setPortraitPending(false);
+          setReportPending(false);
+          pushToast('报告与画像已更新', 'success', {
+            label: '展开查看',
+            onClick: () => {
+              if (!reportEthicsOk) setReportEthicsOpen(true);
+              else setInsightsOpen(true);
+            }
+          });
+          void getGroupedHistory(currentUserId).then((g) => {
+            const groups = g.groups || {};
+            setGroupedHistory(groups);
+            const restored = restoreSessionSummary(progress, groups);
+            if (restored.latestReport) {
+              setLatestReport(restored.latestReport);
+            }
+          });
+        });
+      }
+
+      if (finalResponse.risk.level === 'high' || finalResponse.risk.level === 'critical') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `followup-${Date.now()}`,
+            type: 'bot',
+            content: '我想继续确认你的状态：你现在身边有可以立即联系的人吗？如果愿意，我可以帮你做一份 3 步安全行动清单。',
+            timestamp: new Date().toLocaleString('zh-CN')
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error sending question:', error);
+      if (isAskInFlightError(error)) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.type === 'user' && last.content === question) {
+            return prev.slice(0, -1);
+          }
+          return prev;
+        });
+        pushToast('上一条消息还在处理中，请稍候再试', 'info');
+      } else if (isBackendNetworkError(error)) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.type === 'user' && last.content === question) {
+            return prev.slice(0, -1);
+          }
+          return prev;
+        });
+        pushToast(
+          '无法连接后端。请确认已运行「一键启动.bat」，或重启 npm run dev 后重试',
+          'warning',
+          { label: '重试', onClick: () => void handleSend(question, description) }
+        );
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            type: 'bot',
+            content: `抱歉，我暂时无法回答您的问题：${getErrorMessage(error)}`,
+            timestamp: new Date().toLocaleString('zh-CN')
+          }
+        ]);
+      }
+    } finally {
+      sendLockRef.current = false;
+      setIsLoading(false);
+    }
+  }, [
+    historyLoading,
+    backendOnline,
+    currentUserId,
+    pushToast,
+    checkBackendOnline,
+    reportEthicsOk,
+    loadUserProfileFromServer
+  ]);
+
+  const handleSimilarQuestionClick = (question: string) => {
+    handleSend(question, '');
+  };
+
+  const handleUserChange = (userId: string) => {
+    setCurrentUserId(userId);
+  };
+
+  const handleNewUser = (user: UserProfile) => {
+    setUserProfiles((prev) => ({
+      ...prev,
+      [user.id]: user
+    }));
+    setCurrentUserId(user.id);
+  };
+
+  const handleClearHistory = async () => {
+    if (
+      !window.confirm(
+        '将清空本账号全部对话、报告与趋势记录，且不可恢复。建议先使用「导出」备份。确定继续？'
+      )
+    ) {
+      return;
+    }
+    try {
+      await clearUserHistory(currentUserId);
+      setMessages([createWelcomeMessage()]);
+      setTrendData([]);
+      setGroupedHistory({});
+      setLatestReport(null);
+      setLastDialogTime(undefined);
+      setUserProfile(null);
+      setShowSelfRating(false);
+      setShowSessionFeedback(false);
+    } catch (error) {
+      console.error('Failed to clear history:', error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `clear-${Date.now()}`,
+          type: 'bot',
+          content: `清空历史失败：${getErrorMessage(error)}`,
+          timestamp: new Date().toLocaleString('zh-CN')
+        }
+      ]);
+    }
+  };
+
+  const refreshInsights = useCallback(async () => {
+    if (!currentUserId) return;
+    setInsightsRefreshing(true);
+    try {
+      let status = await getInsightsStatus(currentUserId);
+      if (!status.ready && (status.reportPending || status.portraitPending)) {
+        const polled = await pollInsightsUntilReady(currentUserId, 10, 2000);
+        if (polled) status = await getInsightsStatus(currentUserId);
+      }
+      const [progress, grouped] = await Promise.all([
+        getUserProgress(currentUserId),
+        getGroupedHistory(currentUserId)
+      ]);
+      setTrendData(progressToTrendData(progress));
+      setGroupedHistory(grouped.groups || {});
+      const restored = restoreSessionSummary(progress, grouped.groups || {});
+      if (restored.latestReport) setLatestReport(restored.latestReport);
+      setPortraitPending(status.portraitPending);
+      setReportPending(status.reportPending);
+      if (status.ready) {
+        pushToast('报告与趋势已更新', 'success');
+      } else if (status.reportPending || status.portraitPending) {
+        pushToast('仍在生成中，请稍后再点刷新', 'warning');
+      }
+    } catch (error) {
+      pushToast(`刷新失败：${getErrorMessage(error)}`, 'warning');
+    } finally {
+      setInsightsRefreshing(false);
+    }
+  }, [currentUserId, pushToast]);
+
+  refreshInsightsRef.current = refreshInsights;
+
+  const handleExportHistory = (mode: ExportFormat) => {
+    const historyText = messages.map((m) => {
+      return `${m.type === 'user' ? '用户' : '助手'} [${m.timestamp}]:\n${m.content}\n`;
+    }).join('\n---\n\n');
+    const groupedDigest = Object.entries(groupedHistory)
+      .map(([group, items]) => `${group}：${items.length}条`)
+      .join('\n');
+    const reportText = [
+      `用户：${currentUserLabel}`,
+      `导出时间：${new Date().toLocaleString('zh-CN')}`,
+      `会话分组：\n${groupedDigest || '暂无'}`,
+      latestReport?.report ? `\n【最新心理咨询报告】\n${latestReport.report}\n` : '',
+      `\n对话记录：\n${historyText}`
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    let content = historyText;
+    let fileType = 'text/plain;charset=utf-8';
+    let ext = 'txt';
+    if (mode === 'json') {
+      content = JSON.stringify({ userId: currentUserId, groupedHistory, messages }, null, 2);
+      fileType = 'application/json;charset=utf-8';
+      ext = 'json';
+    } else if (mode === 'report') {
+      content = reportText;
+    }
+
+    const blob = new Blob([content], { type: fileType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `对话记录_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.${ext}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    if (mode === 'print') {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`<pre>${reportText.replace(/</g, '&lt;')}</pre>`);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      }
+    }
+  };
+
+  const refreshTrendFromServer = useCallback(async () => {
+    await refreshInsights();
+  }, [refreshInsights]);
+
+  const consultCount = trendData.length;
+  const crisisLevel =
+    latestReport?.risk?.level === 'critical' || latestReport?.risk?.level === 'high'
+      ? latestReport.risk.level
+      : null;
+
+  const currentUser =
+    userProfiles[currentUserId] ??
+    (sessionUser && currentUserId === sessionUser.id
+      ? { id: sessionUser.id, name: sessionUser.displayName, avatar: sessionUser.avatar }
+      : undefined);
+
+  const sessionBadge = guestMode
+    ? '游客 · 仅本地'
+    : sessionUser
+      ? `已登录 · @${sessionUser.username}`
+      : '';
+
+  const studentIdentityLine =
+    isAccountStudent && sessionUser ? formatStudentIdentityLine(sessionUser) : '';
+
+  const profileIncomplete =
+    isAccountStudent && sessionUser
+      ? !getStudentProfileCompleteness(sessionUser).complete
+      : false;
+
+  const currentUserLabel = currentUser
+    ? `${guestMode ? '游客 · ' : ''}${currentUser.name} ${currentUser.avatar}`
+    : currentUserId || '请选择用户';
+
+  return (
+    <div className="app-container">
+      <PrivacyEthicsModal
+        open={ethicsLoginOpen}
+        onAccept={() => {
+          if (storageNamespace) {
+            localStorage.setItem(ethicsStorageKey(storageNamespace), '1');
+          }
+          setEthicsLoginOpen(false);
+        }}
+      />
+      {isAccountStudent && sessionUser && onSessionUserUpdate && (
+        <StudentProfileCard
+          modal
+          open={profileModalOpen}
+          onClose={() => setProfileModalOpen(false)}
+          user={sessionUser}
+          onUserUpdate={(user) => {
+            handleSessionUserUpdate(user);
+            setProfileModalOpen(false);
+          }}
+        />
+      )}
+      <PrivacyEthicsModal
+        open={reportEthicsOpen}
+        title="查看心理分析报告 · 伦理提示"
+        onAccept={() => {
+          sessionStorage.setItem(reportEthicsSessionKey, '1');
+          setReportEthicsOpen(false);
+          setReportEthicsOk(true);
+        }}
+      />
+      <header className="header header-campus">
+        <div className="header-left">
+          <button
+            type="button"
+            className="sidebar-toggle-btn"
+            onClick={() => setSidebarOpen((v) => !v)}
+            aria-label={sidebarOpen ? '关闭侧边栏' : '打开侧边栏'}
+          >
+            ☰
+          </button>
+          <div className="brand-mark" aria-hidden="true">
+            🏠
+          </div>
+          <div>
+            <BrandSchoolChip schoolName={sessionUser?.schoolName} />
+            <h1>心理港湾 · 学生端</h1>
+            <p>
+              {studentIdentityLine || '温暖的心灵栖息地 · 大学生心理健康陪伴与咨询'}
+            </p>
+          </div>
+        </div>
+        <div className="header-right">
+          {sessionBadge && <div className="session-badge">{sessionBadge}</div>}
+          {isAccountStudent && sessionUser && onSessionUserUpdate && (
+            <button
+              type="button"
+              className="header-profile-btn"
+              onClick={() => setProfileModalOpen(true)}
+              title="点击编辑个人信息"
+            >
+              <span className="header-profile-avatar">{sessionUser.avatar}</span>
+              <span className="header-profile-name">
+                {sessionUser.realName || sessionUser.displayName}
+              </span>
+              {profileIncomplete && (
+                <span className="header-profile-incomplete" title="点击完善个人资料">
+                  待完善
+                </span>
+              )}
+            </button>
+          )}
+          <div className="current-user">
+            {isAccountStudent
+              ? sessionUser?.schoolName
+                ? `${sessionUser.schoolName} · 已登录`
+                : '已登录'
+              : `当前用户: ${currentUserLabel}`}
+          </div>
+          <button type="button" className="account-switch-btn" onClick={handleLogoutAccount}>
+            {guestMode ? '改用账号登录' : sessionUser ? '退出登录' : '返回登录'}
+          </button>
+        </div>
+      </header>
+
+      <RuntimeStatusBar />
+      {backendOnline === false && (
+        <BackendOfflineBanner onRetry={() => void checkBackendOnline()} />
+      )}
+      {guestMode && <GuestModeBanner onLogin={handleLogoutAccount} />}
+      {crisisLevel && reportEthicsOk && (
+        <CrisisSupportBanner
+          level={crisisLevel as 'high' | 'critical'}
+          hotline={latestReport?.risk?.hotline}
+        />
+      )}
+
+      <main className="main-content">
+        {sidebarOpen && (
+          <button
+            type="button"
+            className="sidebar-backdrop"
+            aria-label="关闭侧边栏"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+        <aside className={`sidebar-panel ${sidebarOpen ? 'open' : ''}`}>
+          {storageNamespace && guestMode ? (
+          <UserSelector
+            storageNamespace={storageNamespace}
+            fallbackDefaults={rosterFallbackDefaults.length ? rosterFallbackDefaults : guestFallback}
+            currentUserId={currentUserId}
+            onUserChange={handleUserChange}
+            onNewUser={handleNewUser}
+            onRosterChange={syncRoster}
+          />
+          ) : null}
+          {isAccountStudent && sessionUser && onSessionUserUpdate && (
+            <StudentProfileCard user={sessionUser} onUserUpdate={handleSessionUserUpdate} />
+          )}
+          <Sidebar
+            categories={categories}
+            activeCategory={activeCategory}
+            onCategorySelect={setActiveCategory}
+          />
+          {currentUserId && consultCount > 0 && (
+            <UserProfileCard profile={userProfile} loading={profileLoading} />
+          )}
+          {currentUserId && (isAccountStudent || consultCount > 0) && (
+            <AgentProfileCard userId={currentUserId} />
+          )}
+          {showSelfRating && currentUserId && (
+            <SelfRatingPanel
+              userId={currentUserId}
+              dialogTime={lastDialogTime}
+              onSaved={(payload) => {
+                setShowSelfRating(false);
+                if (payload.statModel || payload.report) {
+                  setLatestReport((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          ...(payload.statModel && { statModel: payload.statModel }),
+                          ...(payload.report && { report: payload.report }),
+                          ...(payload.emotion && { emotion: payload.emotion }),
+                          ...(payload.risk && { risk: payload.risk }),
+                          ...(payload.problem && { problem: payload.problem })
+                        }
+                      : prev
+                  );
+                }
+                refreshTrendFromServer();
+              }}
+            />
+          )}
+          {showSessionFeedback && currentUserId && (
+            <SessionFeedbackPanel
+              userId={currentUserId}
+              dialogTime={lastDialogTime}
+              onSaved={(profile) => {
+                setShowSessionFeedback(false);
+                setUserProfile(profile);
+              }}
+              onSkip={() => setShowSessionFeedback(false)}
+            />
+          )}
+        </aside>
+
+        <div className="main-panel main-panel-chat-first">
+          {(consultCount > 0 || latestReport) && (
+            <div className="student-status-bar-wrap">
+              <StudentStatusBar
+                consultCount={consultCount}
+                latestReport={latestReport}
+                portraitPending={portraitPending}
+                reportPending={reportPending}
+                onRefreshInsights={currentUserId ? refreshInsights : undefined}
+                refreshing={insightsRefreshing}
+              />
+            </div>
+          )}
+          <div className="chat-section">
+            <ChatContainer
+              messages={messages}
+              isLoading={isLoading}
+              initializing={historyLoading}
+              estimatedWaitSec={estimatedWaitSec}
+              onSend={handleSend}
+              onSimilarQuestionClick={handleSimilarQuestionClick}
+              onClearHistory={handleClearHistory}
+              inputLocked={isLoading || historyLoading || backendOnline === false}
+              exportMenu={
+                <ExportMenu
+                  onExport={handleExportHistory}
+                  disabled={messages.length <= 1 || historyLoading}
+                />
+              }
+              quickPrompts={filteredQuickPrompts}
+            />
+          </div>
+          <div className="insights-toolbar">
+            <button
+              type="button"
+              className="insights-toggle-btn"
+              onClick={() => {
+                if (!insightsOpen && !reportEthicsOk && latestReport) {
+                  setReportEthicsOpen(true);
+                  return;
+                }
+                setInsightsOpen((v) => !v);
+              }}
+            >
+              {insightsOpen ? '收起趋势与报告 ▲' : '展开趋势与报告 ▼'}
+              {(portraitPending || reportPending) && ' · 生成中'}
+            </button>
+          </div>
+          {insightsOpen && reportEthicsOk && (
+          <div className="insights-grid">
+            <div className="insights-col insights-col-chart">
+              <TrendChart data={trendData} />
+            </div>
+            {latestReport?.portrait && (
+              <div className="insights-col insights-col-portrait">
+                <ConversationPortraitPanel
+                  portrait={latestReport.portrait}
+                  sessionCount={(latestReport.statModel?.totalSessions ?? consultCount) || 1}
+                  pending={portraitPending}
+                />
+              </div>
+            )}
+            {latestReport && (
+              <div className="insights-col insights-col-report">
+                <ReportPanel
+                  emotion={latestReport.emotion}
+                  risk={latestReport.risk}
+                  problem={latestReport.problem}
+                  intervention={latestReport.intervention}
+                  carePlan={latestReport.carePlan}
+                  analysisSources={latestReport.analysisSources}
+                  llmUsed={latestReport.llmUsed}
+                  reportPending={reportPending}
+                  emotionStyle={latestReport.emotionStyle}
+                  report={latestReport.report}
+                  statModel={latestReport.statModel}
+                  shareContext={
+                    sessionUser
+                      ? {
+                          studentLabel: sessionUser.realName || sessionUser.displayName,
+                          orgName: sessionUser.orgName,
+                          className: sessionUser.className,
+                          studentNo: sessionUser.studentNo,
+                          allowSchoolTranscriptView: sessionUser.allowSchoolTranscriptView !== false
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            )}
+            {portraitHistoryItems.length > 0 && (
+              <div className="insights-col insights-col-history">
+                <h3 className="portrait-history-title">历次咨询画像</h3>
+                <PortraitHistoryList items={portraitHistoryItems} />
+              </div>
+            )}
+          </div>
+          )}
+        </div>
+      </main>
+      <ToastStack messages={toasts} onDismiss={dismissToast} />
+    </div>
+  );
+}
+
+export default StudentApp;

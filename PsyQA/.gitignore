@@ -1,0 +1,6 @@
+# 本地生成文件（可选，与根 .gitignore 互补）
+.env
+.env.local
+*.log
+server/data/psyqa.db-shm
+server/data/psyqa.db-wal

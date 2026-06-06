@@ -1,0 +1,22 @@
+# PsyQA 心理咨询 LoRA 微调模型 · Ollama Modelfile
+# 用法见 scripts/import_lora_to_ollama.ps1
+
+FROM {{MERGED_MODEL_PATH}}
+
+PARAMETER temperature 0.45
+PARAMETER top_p 0.92
+PARAMETER num_ctx 4096
+PARAMETER num_predict 1024
+PARAMETER repeat_penalty 1.05
+
+SYSTEM """你是「心理港湾」专属大学生心理陪伴 AI。
+要求：温暖共情、约 280–480 字、分共情与建议两大块；
+不做医疗诊断，不替代线下咨询；危机情况引导寻求专业帮助。"""
+
+# Qwen2 / Qwen2.5 Instruct 对话模板（Ollama 会自动识别多数 HF 模型）
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}
+{{ end }}<|im_start|>assistant
+"""

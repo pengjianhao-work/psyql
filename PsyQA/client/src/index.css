@@ -1,0 +1,7 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* 布局与组件样式见 App.css；设计令牌见 theme.css */

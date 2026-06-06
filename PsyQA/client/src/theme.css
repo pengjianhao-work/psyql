@@ -1,0 +1,121 @@
+/* 心理港湾 · 设计令牌与全局氛围 */
+:root {
+  --psy-primary: #6366f1;
+  --psy-primary-dark: #4f46e5;
+  --psy-secondary: #8b5cf6;
+  --psy-accent: #ec4899;
+  --psy-accent-soft: #f472b6;
+  --psy-teal: #14b8a6;
+  --psy-bg-deep: #1e1b4b;
+  --psy-bg-mid: #312e81;
+  --psy-surface: rgba(255, 255, 255, 0.92);
+  --psy-surface-solid: #ffffff;
+  --psy-border: rgba(255, 255, 255, 0.45);
+  --psy-border-muted: rgba(99, 102, 241, 0.12);
+  --psy-text: #1e293b;
+  --psy-text-muted: #64748b;
+  --psy-shadow-sm: 0 4px 24px rgba(30, 27, 75, 0.08);
+  --psy-shadow-md: 0 12px 40px rgba(30, 27, 75, 0.12);
+  --psy-shadow-lg: 0 24px 64px rgba(30, 27, 75, 0.18);
+  --psy-radius-sm: 12px;
+  --psy-radius-md: 16px;
+  --psy-radius-lg: 22px;
+  --psy-radius-xl: 28px;
+  --psy-gradient-main: linear-gradient(135deg, #6366f1 0%, #8b5cf6 45%, #a855f7 100%);
+  --psy-gradient-warm: linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
+  --psy-gradient-bg: linear-gradient(145deg, #eef2ff 0%, #e0e7ff 35%, #fce7f3 100%);
+  --psy-font: 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  --psy-header-h: 72px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--psy-font);
+  color: var(--psy-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  background: var(--psy-gradient-bg);
+  background-attachment: fixed;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::before {
+  width: 420px;
+  height: 420px;
+  background: rgba(99, 102, 241, 0.35);
+  top: -120px;
+  right: -80px;
+  animation: psy-float 18s ease-in-out infinite;
+}
+
+body::after {
+  width: 360px;
+  height: 360px;
+  background: rgba(236, 72, 153, 0.25);
+  bottom: -100px;
+  left: -60px;
+  animation: psy-float 22s ease-in-out infinite reverse;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
+@keyframes psy-float {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(24px, 16px) scale(1.05);
+  }
+}
+
+@keyframes psy-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 全局滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.45) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--psy-primary), var(--psy-secondary));
+  border-radius: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: PsyQA
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: PsyQA/package-lock.json
+
+      - name: Install dependencies
+        run: npm run install:all
+
+      - name: Typecheck server
+        run: npx tsc -p server/tsconfig.json --noEmit
+
+      - name: Server unit tests
+        run: npx jest --config server/jest.config.js --passWithNoTests
+        env:
+          NODE_ENV: test
+          AUTH_SECRET: ci-test-secret-key-32chars
+
+      - name: Build client
+        run: npm run build:client
+        env:
+          CI: true
+          GENERATE_SOURCEMAP: false

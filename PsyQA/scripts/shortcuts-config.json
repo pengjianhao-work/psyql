@@ -1,0 +1,43 @@
+{
+  "cleanupPrefix": "心理港湾",
+  "shortcuts": [
+    {
+      "target": "scripts\\一键启动-快捷模式.bat",
+      "name": "心理港湾 - 快捷模式.lnk",
+      "description": "答辩演示推荐：规则+知识库，秒开无需 Ollama",
+      "icon": "%SystemRoot%\\System32\\imageres.dll, 78",
+      "primary": true
+    },
+    {
+      "target": "scripts\\一键启动.bat",
+      "name": "心理港湾.lnk",
+      "description": "完整模式：Ollama 大模型 + Chroma 向量检索",
+      "icon": "%SystemRoot%\\System32\\imageres.dll, 109"
+    },
+    {
+      "target": "scripts\\打开登录页.bat",
+      "name": "心理港湾 - 打开登录页.lnk",
+      "description": "打开 http://localhost:3000/login（需先启动系统）",
+      "icon": "%SystemRoot%\\System32\\url.dll, 0"
+    },
+    {
+      "target": "scripts\\数据处理.bat",
+      "name": "心理港湾 - 数据处理.lnk",
+      "description": "知识库 / 向量 / Chroma / 训练语料一键处理",
+      "icon": "%SystemRoot%\\System32\\imageres.dll, 165",
+      "optional": true
+    },
+    {
+      "target": "scripts\\一键安装.bat",
+      "name": "心理港湾 - 首次安装.lnk",
+      "description": "首次配置 Node 依赖与环境",
+      "icon": "%SystemRoot%\\System32\\imageres.dll, 77"
+    },
+    {
+      "target": "scripts\\创建桌面快捷方式.bat",
+      "name": "心理港湾 - 重建快捷方式.lnk",
+      "description": "重新在桌面生成上述快捷图标",
+      "icon": "%SystemRoot%\\System32\\imageres.dll, 100"
+    }
+  ]
+}

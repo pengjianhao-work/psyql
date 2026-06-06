@@ -1,0 +1,294 @@
+{
+  "version": "2.0",
+  "description": "公开心理健康数据集注册表，配套三层算法架构（统计/ML/深度学习）",
+  "recommendedCombos": {
+    "basic": ["psyqa", "soulchat", "mental_9k", "mental_r1_10k"],
+    "domestic": ["psyqa", "soulchat", "mental_9k", "mental_r1_10k", "tcci_lingxi", "efaqa"],
+    "extended": ["psyqa", "soulchat", "mental_9k", "mental_r1_10k", "sos_hl_1k", "socialcd_3k", "tcci_lingxi"],
+    "offline": ["psyqa", "efaqa", "soulchat", "mental_r1_10k", "tcci_lingxi", "mental_9k"],
+    "risk": ["psycrisis", "sos_hl_1k", "efaqa"],
+    "professional": ["tcci_lingxi", "socialcd_3k", "mentalchat16k"],
+    "premium": ["efaqa", "soulchat", "mental_r1_10k", "sos_hl_1k", "socialcd_3k", "tcci_lingxi", "mental_9k", "psyqa"]
+  },
+  "networkPolicy": {
+    "localFirst": true,
+    "defaultHfMirror": "https://hf-mirror.com",
+    "connectTimeoutSec": 12,
+    "readTimeoutSec": 90,
+    "domesticPlatforms": ["modelscope", "gitcode", "pip_package"]
+  },
+  "datasets": [
+    {
+      "id": "efaqa",
+      "name": "EFAQA 中文心理咨询语料",
+      "scale": "约 20000 条多轮对话",
+      "language": "zh",
+      "accessRegion": "domestic",
+      "license": "Emotional First Aid Dataset License v1.0（需 EFAQA_DL_LICENSE 证书）",
+      "url": "https://gitcode.com/gh_mirrors/ef/efaqa-corpus-zh",
+      "fetchMethod": "pip_package",
+      "priority": 1,
+      "tier": "core",
+      "algorithmTargets": ["statistical", "ml", "neural", "risk"],
+      "tags": ["情绪分类", "问题类型", "压力等级", "风险程度", "多轮对话"]
+    },
+    {
+      "id": "soulchat",
+      "name": "SoulChatCorpus",
+      "scale": "25 万+ 多轮对话",
+      "language": "zh",
+      "accessRegion": "domestic",
+      "license": "开源研究（ModelScope）",
+      "url": "https://www.modelscope.cn/datasets/YIRONGCHEN/SoulChatCorpus",
+      "fetchMethod": "modelscope",
+      "modelscopeId": "YIRONGCHEN/SoulChatCorpus",
+      "priority": 1,
+      "tier": "core",
+      "algorithmTargets": ["ml", "neural", "timeseries"],
+      "tags": ["学业压力", "焦虑", "人际", "心理干预"]
+    },
+    {
+      "id": "psyqa",
+      "name": "PsyQA 中文心理援助策略",
+      "scale": "约 22000 条",
+      "language": "zh",
+      "accessRegion": "hybrid",
+      "license": "CC BY-NC-SA 4.0",
+      "url": "https://huggingface.co/datasets/psychology/PsyQA",
+      "fetchMethod": "multi",
+      "hfId": "psychology/PsyQA",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/thu-coai/PsyQA/main/data/PsyQA_full.json",
+          "path": "psyqa/PsyQA_full.json",
+          "mirrors": [
+            "https://ghproxy.net/https://raw.githubusercontent.com/thu-coai/PsyQA/main/data/PsyQA_full.json"
+          ]
+        }
+      ],
+      "priority": 1,
+      "tier": "core",
+      "algorithmTargets": ["statistical", "ml", "neural"],
+      "tags": ["心理援助策略", "问题归因", "情绪成因"]
+    },
+    {
+      "id": "mentalchat16k",
+      "name": "MentalChat16K",
+      "scale": "约 16000 条",
+      "language": "en",
+      "accessRegion": "foreign",
+      "license": "HuggingFace 公开",
+      "url": "https://huggingface.co/datasets/ShenLab/MentalChat16K",
+      "fetchMethod": "huggingface",
+      "hfId": "ShenLab/MentalChat16K",
+      "priority": 2,
+      "tier": "academic",
+      "algorithmTargets": ["statistical", "ml", "neural"],
+      "tags": ["情绪强度", "困扰度", "风险分级"]
+    },
+    {
+      "id": "psycrisis",
+      "name": "PsyCrisis-Bench",
+      "scale": "危机文本基准",
+      "language": "en",
+      "accessRegion": "foreign",
+      "license": "GitHub 开源",
+      "url": "https://github.com/mental-health-llm-safety-eval/psycrisis-bench",
+      "fetchMethod": "github_raw",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/mental-health-llm-safety-eval/psycrisis-bench/main/Data/PsyCrisis-Bench.xlsx",
+          "path": "psycrisis/PsyCrisis-Bench.xlsx"
+        }
+      ],
+      "priority": 2,
+      "tier": "risk",
+      "algorithmTargets": ["risk", "ml", "neural"],
+      "tags": ["自杀意念", "自伤", "危机预警"]
+    },
+    {
+      "id": "psydial",
+      "name": "PsyDial 长时序心理咨询",
+      "scale": "2382 段，平均 37.8 轮",
+      "language": "zh",
+      "accessRegion": "foreign",
+      "license": "ACL 2025 / HF 公开",
+      "url": "https://huggingface.co/datasets/allenai/psy_dial",
+      "fetchMethod": "multi",
+      "hfId": "allenai/psy_dial",
+      "hfFallbackId": "qiuhuachuan/PsyDial-D3",
+      "files": [
+        {
+          "url": "https://huggingface.co/datasets/qiuhuachuan/PsyDial-D3/resolve/main/PsyDial-D3.json",
+          "path": "psydial/PsyDial-D3.json"
+        }
+      ],
+      "priority": 2,
+      "tier": "academic",
+      "algorithmTargets": ["timeseries", "neural"],
+      "tags": ["长时序", "情绪渐变", "趋势建模"]
+    },
+    {
+      "id": "sos_hl_1k",
+      "name": "SOS-HL-1K 自杀风险分级",
+      "scale": "1249 条专家双标注",
+      "language": "zh",
+      "accessRegion": "hybrid",
+      "license": "GitHub 开源（ACL 2024 论文仓库）",
+      "url": "https://github.com/HongzhiQ/SupervisedVsLLM-EfficacyEval/tree/main/data/suicide",
+      "fetchMethod": "github_raw",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/HongzhiQ/SupervisedVsLLM-EfficacyEval/main/data/suicide/suicide_train_BERT.tsv",
+          "path": "sos_hl_1k/suicide_train_BERT.tsv"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/HongzhiQ/SupervisedVsLLM-EfficacyEval/main/data/suicide/suicide_val_BERT.tsv",
+          "path": "sos_hl_1k/suicide_val_BERT.tsv"
+        }
+      ],
+      "priority": 2,
+      "tier": "risk",
+      "algorithmTargets": ["risk", "ml"],
+      "tags": ["自杀风险", "高/低危二分类", "消极认知"]
+    },
+    {
+      "id": "socialcd_3k",
+      "name": "SocialCD-3K 认知扭曲",
+      "scale": "3407 条多标签",
+      "language": "zh",
+      "accessRegion": "hybrid",
+      "license": "GitHub 开源（ACL 2024 论文仓库）",
+      "url": "https://github.com/HongzhiQ/SupervisedVsLLM-EfficacyEval/tree/main/data/SocialCD-3k",
+      "fetchMethod": "github_raw",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/HongzhiQ/SupervisedVsLLM-EfficacyEval/main/data/SocialCD-3k/SocialCD-3k.tsv",
+          "path": "socialcd_3k/SocialCD-3k.tsv"
+        }
+      ],
+      "priority": 2,
+      "tier": "professional",
+      "algorithmTargets": ["ml", "neural", "cognitive"],
+      "tags": ["认知扭曲", "灾难化", "过度自责", "非黑即白"]
+    },
+    {
+      "id": "mental_r1_10k",
+      "name": "心理健康-R1 10K 推理",
+      "scale": "10000 条 CoT 推理",
+      "language": "zh",
+      "accessRegion": "domestic",
+      "license": "ModelScope 公开",
+      "url": "https://www.modelscope.cn/datasets/AIStudio/mental_health_r1_10k",
+      "fetchMethod": "modelscope",
+      "modelscopeId": "AIStudio/mental_health_r1_10k",
+      "priority": 2,
+      "tier": "core",
+      "algorithmTargets": ["ml", "neural", "statistical"],
+      "tags": ["思维链", "推理", "分值映射"]
+    },
+    {
+      "id": "tcci_lingxi",
+      "name": "TCCI 灵溪临床心理",
+      "scale": "约 4500 例",
+      "language": "zh",
+      "accessRegion": "domestic",
+      "license": "ModelScope 公开",
+      "url": "https://www.modelscope.cn/datasets/TCCI/LingXi_mental_clinic",
+      "fetchMethod": "modelscope",
+      "modelscopeId": "TCCI/LingXi_mental_clinic",
+      "priority": 2,
+      "tier": "professional",
+      "algorithmTargets": ["statistical", "ml", "neural"],
+      "tags": ["抑郁", "焦虑", "临床分级", "PHQ/GAD 对标"]
+    },
+    {
+      "id": "dreaddit",
+      "name": "Dreaddit 压力检测",
+      "scale": "万级社交文本",
+      "language": "en",
+      "accessRegion": "foreign",
+      "license": "Kaggle（需账号/API）",
+      "url": "https://www.kaggle.com/datasets/ruchi798/dreaddit-stress-detection-in-social-media",
+      "fetchMethod": "kaggle",
+      "kaggleSlug": "ruchi798/dreaddit-stress-detection-in-social-media",
+      "priority": 3,
+      "tier": "benchmark",
+      "algorithmTargets": ["ml", "statistical"],
+      "tags": ["压力检测", "SOTA 基线对比"]
+    },
+    {
+      "id": "mental_9k",
+      "name": "9K 中文心理咨询问答",
+      "scale": "9414 条",
+      "language": "zh",
+      "accessRegion": "domestic",
+      "license": "ModelScope 公开",
+      "url": "https://www.modelscope.cn/datasets/datasets/9k_mental_consult",
+      "fetchMethod": "modelscope",
+      "modelscopeId": "datasets/9k_mental_consult",
+      "priority": 2,
+      "tier": "core",
+      "algorithmTargets": ["statistical", "ml", "neural"],
+      "tags": ["轻量", "低噪声", "快速迭代"]
+    },
+    {
+      "id": "qiaoban",
+      "name": "巧板 QiaoBan 儿童心理对话",
+      "scale": "5100 条儿童多轮 + 22341 条指令微调",
+      "language": "zh",
+      "accessRegion": "domestic",
+      "license": "研究用途（本地 data/ 目录）",
+      "url": "https://github.com/HIT-SCIR-SC/QiaoBan",
+      "fetchMethod": "manual",
+      "priority": 2,
+      "tier": "core",
+      "algorithmTargets": ["neural", "ml", "statistical"],
+      "tags": ["儿童心理", "情绪陪伴", "多轮对话", "Alpaca 指令"]
+    },
+    {
+      "id": "chinese_mental_pretrain",
+      "name": "Chinese MentalBERT 领域预训练",
+      "scale": "336 万条语料（预训练权重）",
+      "language": "zh",
+      "accessRegion": "foreign",
+      "license": "开源模型/语料（参考）",
+      "url": "https://huggingface.co/uer/gpt2-chinese-cluecorp-small",
+      "fetchMethod": "manual",
+      "priority": 3,
+      "tier": "pretrain",
+      "algorithmTargets": ["pretrain", "neural"],
+      "tags": ["特征提取", "领域预训练", "情绪/风险任务"]
+    }
+  ],
+  "algorithmMapping": {
+    "statistical": {
+      "description": "统计建模权重校准",
+      "bestSources": ["efaqa", "mentalchat16k", "psyqa", "tcci_lingxi"]
+    },
+    "ml_regression": {
+      "description": "多元线性回归",
+      "bestSources": ["soulchat", "efaqa", "mental_r1_10k", "mental_9k"]
+    },
+    "kmeans": {
+      "description": "K-Means 心理聚类",
+      "bestSources": ["mentalchat16k", "tcci_lingxi"]
+    },
+    "timeseries": {
+      "description": "时序神经网络",
+      "bestSources": ["psydial", "soulchat"]
+    },
+    "risk": {
+      "description": "隐性风险识别",
+      "bestSources": ["psycrisis", "sos_hl_1k", "efaqa"]
+    },
+    "cognitive": {
+      "description": "认知归因与细粒度分析",
+      "bestSources": ["socialcd_3k"]
+    },
+    "pretrain": {
+      "description": "神经网络特征预训练",
+      "bestSources": ["chinese_mental_pretrain"]
+    }
+  }
+}

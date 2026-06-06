@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - AUTH_SECRET=${AUTH_SECRET:-change-me-in-production-min-16-chars}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3001}
+      - OLLAMA_API_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen:7b}
+      - PSYQA_CHROMA_ENABLED=${PSYQA_CHROMA_ENABLED:-0}
+      - CHROMA_URL=http://chroma:8000
+      - PSYQA_SERVE_CLIENT=1
+      - TRUST_PROXY=1
+    volumes:
+      - ./server/user_history.json:/app/server/user_history.json
+      - ./server/data:/app/server/data
+      - ./vector_db:/app/vector_db
+    depends_on:
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+  chroma:
+    profiles: ["chroma"]
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+volumes:
+  ollama:
+    driver: local
+  chroma_data:
+    driver: local

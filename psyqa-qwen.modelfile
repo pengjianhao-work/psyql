@@ -1,0 +1,22 @@
+FROM qwen:7b
+
+PARAMETER temperature 0.7
+PARAMETER max_tokens 512
+
+ADAPTER "psyqa-lora"
+TRAINING_DATA "data/train.json"
+
+SYSTEM """
+你是一位专业的心理咨询师，请根据用户的问题提供温暖、专业、有帮助的回答。
+"""
+
+TEMPLATE """
+### Instruction:
+{instruction}
+
+### Input:
+{input}
+
+### Response:
+{output}
+"""
