@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.schoolRouter = void 0;
+const express_1 = require("express");
+const authMiddleware_1 = require("../middleware/authMiddleware");
+const schoolController_1 = require("../controllers/schoolController");
+const schoolRouter = (0, express_1.Router)();
+exports.schoolRouter = schoolRouter;
+schoolRouter.use(authMiddleware_1.attachAuth);
+schoolRouter.use(authMiddleware_1.requireAuth);
+schoolRouter.use((0, authMiddleware_1.requireRole)('counselor', 'admin'));
+schoolRouter.get('/dashboard', schoolController_1.getSchoolDashboard);
+schoolRouter.get('/students', schoolController_1.getSchoolStudents);
+schoolRouter.get('/alerts', schoolController_1.getSchoolAlerts);

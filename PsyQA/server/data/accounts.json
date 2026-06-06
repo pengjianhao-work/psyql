@@ -1,0 +1,352 @@
+{
+  "users": [
+    {
+      "id": "acc_demo",
+      "displayName": "????",
+      "avatar": "👤",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "??1?",
+      "studentNo": "20240001",
+      "username": "demo",
+      "createdAt": "2026-05-26T06:21:04.091Z",
+      "passwordHash": "e908ffe92a70f08e5094a1082d85af3a:89bb955a0edc773edb71e0f690a9c0c3a313cb69342b1f0463e35479b2d29d5af1e245147eb3d6fe883e9a3fbbd565babe79688008dd48def054b58285f7e5b1"
+    },
+    {
+      "id": "acc_counselor",
+      "displayName": "张老师",
+      "avatar": "🧑‍🏫",
+      "role": "counselor",
+      "orgId": "cs-demo",
+      "managedOrgIds": [
+        "cs-demo"
+      ],
+      "username": "counselor",
+      "createdAt": "2026-05-26T06:21:04.149Z",
+      "passwordHash": "048b87becafaea5e9c6000719daa9780:3ff21d9619a6d5fbda06eb430fae879860a458bf6ecbe5d7fd68dddf1f465a87478d7960eb67d6288a5c97cac75278eeeb5244cb948e680c082fa847f7af04c3"
+    },
+    {
+      "id": "acc_admin",
+      "displayName": "系统管理员",
+      "avatar": "🛡️",
+      "role": "admin",
+      "orgId": "cs-demo",
+      "managedOrgIds": [
+        "cs-demo"
+      ],
+      "username": "admin",
+      "createdAt": "2026-05-26T06:21:04.525Z",
+      "passwordHash": "dffd69ef8a5260cdef389461b1d137a5:8e68e3f93620058c125de04738151d9dcec5b21cef1b57f7ff356115d45b0b50ee62e42b99065f0cdff0d785321a63d923954f326d9177757948a4d304ef1754"
+    },
+    {
+      "id": "acc_0abd63b225db99ec",
+      "username": "彭建昊",
+      "displayName": "彭建昊",
+      "avatar": "🙂",
+      "role": "student",
+      "orgId": "cs-demo",
+      "createdAt": "2026-05-25T15:32:37.580Z",
+      "passwordHash": "4d9b7a2e8b981ebf2adbc06dc2440621:e32235ebcf9d68bdf671f42975da59e2c68ced1ca244714beba2fd6ee8071fce1a91302519f044088b4979787ed8681b40876bb9217c57aeb5067412fab5f3b8"
+    },
+    {
+      "id": "acc_stu_01",
+      "displayName": "李明",
+      "avatar": "👦",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "??2301?",
+      "studentNo": "20240101",
+      "username": "student01",
+      "createdAt": "2026-05-26T04:43:28.649Z",
+      "allowSchoolTranscriptView": true,
+      "gender": "male",
+      "passwordHash": "28e46982dbd237af42b68c099e9e6726:223f9dc855e76854e0387d0360b7f9d320bfbfecae81008811445bd732fdb1717e62deb09f1b202da7803aa32ef8af42b1a0c0c3fa5f5ff089cc96226f81d27b"
+    },
+    {
+      "id": "acc_stu_02",
+      "displayName": "王芳",
+      "avatar": "👧",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "??2301",
+      "studentNo": "20240102",
+      "username": "student02",
+      "createdAt": "2026-05-26T04:43:28.688Z",
+      "passwordHash": "dfca8a6133c103f4cdddc5634e26d799:21a6201e1b4aa37b599fb83e2e206ecb9b14cbf9fcc258e01ffa6b7c32f2abe7b0a89a8e097608fae3470cbd8f653acca7f5fe8e5015c322211d20768ca45a77"
+    },
+    {
+      "id": "acc_stu_03",
+      "displayName": "张伟",
+      "avatar": "👨",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "软件2302",
+      "studentNo": "20240103",
+      "username": "student03",
+      "createdAt": "2026-05-26T04:43:28.725Z",
+      "passwordHash": "b378060a6bdd940f9c449a7853907684:d6202b0edf485599bc2a7d8601b7b424e8d3e6b64c7eb003880f092cf8adcdcb5c22c17aec4935f42b8df47293cfd0564165bdc40986ce5f3ad6f369271c1ffe"
+    },
+    {
+      "id": "acc_stu_04",
+      "displayName": "刘静",
+      "avatar": "👩",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "软件2302",
+      "studentNo": "20240104",
+      "username": "student04",
+      "createdAt": "2026-05-26T04:43:28.763Z",
+      "passwordHash": "91ded6e13e2e4373cd52c5b1cc16fd88:7244b3dfb428ad1c283d5f58ed36b756b0341ffda278c92e3ca632f79219224c1fbbf4fb824df28bf3b554480c1fc0c0c3619bf06c767269577502cc19515077"
+    },
+    {
+      "id": "acc_stu_05",
+      "displayName": "陈浩",
+      "avatar": "🧑",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "计科2301",
+      "studentNo": "20240105",
+      "username": "student05",
+      "createdAt": "2026-05-26T04:43:28.800Z",
+      "passwordHash": "38c04a3c4f15d2be3ca0d28792764eba:239c6bd0d2dfe0823e23b301b5d7dcbe90554925d486ad7b167a5d65b26051a89b8aa834ae56d0841e2b55d12c55356893d64a93b49cfc29af7b1209ffad7678"
+    },
+    {
+      "id": "acc_stu_06",
+      "displayName": "赵敏",
+      "avatar": "👱‍♀️",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "计科2301",
+      "studentNo": "20240106",
+      "username": "student06",
+      "createdAt": "2026-05-26T04:43:28.839Z",
+      "passwordHash": "f5b32640296b091538ef53f93bd92303:603ad2f736902b8d8d74bd9654c498c374f4c08ec329ae0dd95a57424d3f82031fdd2b62060df592aec1fffb749499ae6caa7073eac8a2c92a7447502a5fa62d"
+    },
+    {
+      "id": "acc_stu_07",
+      "displayName": "孙磊",
+      "avatar": "🧔",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "数学2301",
+      "studentNo": "20240107",
+      "username": "student07",
+      "createdAt": "2026-05-26T04:43:28.879Z",
+      "passwordHash": "7c144348dda3e8e69e0c8ad8e59e58e1:650aa01c0be6d7113933102e84e308bea93a23c22e4e9a37354a354f9008994dfc2d3631184047d9a87b6d4640968328a40ebce0e69c8b3e0fc203c3fa62ea08"
+    },
+    {
+      "id": "acc_stu_08",
+      "displayName": "周婷",
+      "avatar": "👩‍🎓",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "数学2301",
+      "studentNo": "20240108",
+      "username": "student08",
+      "createdAt": "2026-05-26T04:43:28.916Z",
+      "passwordHash": "11473fff73ff4ce8f31b52ed78e684ed:2b79b1038f7033ca705f89a096bf169c973e9ab9c6911db5502b46df266c2c842d1e712716006441960d3889aaceea9545fc8d57539d85edbf890c3f44b96d81"
+    },
+    {
+      "id": "acc_stu_09",
+      "displayName": "吴强",
+      "avatar": "👨‍🎓",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "数学2302",
+      "studentNo": "20240109",
+      "username": "student09",
+      "createdAt": "2026-05-26T04:43:28.956Z",
+      "passwordHash": "30aa88d401961741065e0fd7abc3cfb4:0368a5d2b98430c37895d8198e2308fbe5cd4101772c1e56a1a119f71588fd6701bab33291ef85c61fe0ee909a27a85f044bfad7e766990a345871e201908dc1"
+    },
+    {
+      "id": "acc_stu_10",
+      "displayName": "郑雪",
+      "avatar": "🙂",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "数学2302",
+      "studentNo": "20240110",
+      "username": "student10",
+      "createdAt": "2026-05-26T04:43:28.993Z",
+      "passwordHash": "4f567a943420c284a623e8c74f9616a3:228b6efd758a7dc8ebeac2d3c976d6ed1cf921f55aa36c2f84870d296f38ff0453716f1adde8c07704e628e5159c2712cdf14e5da3cc2444ccbb346b4727da0c"
+    },
+    {
+      "id": "acc_mgr_01",
+      "displayName": "王辅导员",
+      "avatar": "🧑‍🏫",
+      "role": "counselor",
+      "orgId": "cs-demo",
+      "managedOrgIds": [
+        "cs-demo",
+        "math-demo"
+      ],
+      "username": "counselor_test",
+      "createdAt": "2026-05-26T04:43:29.030Z",
+      "passwordHash": "28946bf9f636b1a391acc7db65c1da48:f75d83f0424f4223af4330f71684baf8358681da1496ad5787ecaf2720999f2cb1380d0b6574ec2e02d89ab144301fc54c240ae1a8aeabbfe6f0315651bd4b56"
+    },
+    {
+      "id": "acc_mgr_02",
+      "displayName": "李管理员",
+      "avatar": "🛡️",
+      "role": "admin",
+      "orgId": "cs-demo",
+      "managedOrgIds": [
+        "cs-demo",
+        "math-demo"
+      ],
+      "username": "admin_test",
+      "createdAt": "2026-05-26T04:43:29.066Z",
+      "passwordHash": "bd6b48bc73dd6f93cfbb80b626d492c6:2beb81d4260a232f20ff8dc5b0c499b3d14e2c32d7c664a0d81a7aa9b35f16c0a4ea5ad55f4501f5bebcce75ec943b9cc721a5d7f24e6ecfd7c8c10f8a96f1d3"
+    },
+    {
+      "id": "acc_stu_11",
+      "displayName": "黄凯",
+      "avatar": "👦",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "软件2303",
+      "studentNo": "20240111",
+      "username": "student11",
+      "createdAt": "2026-05-26T04:50:05.163Z",
+      "passwordHash": "5266a9194a15094499d601aee5e13347:d160e9fdd925a27bea4178e8f5c41a2b750f208ec3feaa1166d312366f719a3118621adc2f6c18c156a7c2265f49b8f246f27df50a27f14c66ad57923f5c6210"
+    },
+    {
+      "id": "acc_stu_12",
+      "displayName": "林娜",
+      "avatar": "👧",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "软件2303",
+      "studentNo": "20240112",
+      "username": "student12",
+      "createdAt": "2026-05-26T04:50:05.207Z",
+      "passwordHash": "cb3b03b4dd63d2406a18616bc244e7fc:afb63c79e52a61485df4e092e34495c12a562f04ca47d937d32739b6f5b02b50b66d1d65d63f5b6581a54fef81f5e2d26e2af185b1c372a8733af2105dd37578"
+    },
+    {
+      "id": "acc_stu_13",
+      "displayName": "何俊",
+      "avatar": "🧑",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "计科2302",
+      "studentNo": "20240113",
+      "username": "student13",
+      "createdAt": "2026-05-26T04:50:05.248Z",
+      "passwordHash": "af6925e930421865d327d1ef6c8108a5:8f7142f5bb45e4f731b0b8c49ee53fb34263d84732c4e43741c465fbab847523e3ad0c05c4fe492daa7bdcdcc427b6f0d654b5f181f48802c183a9bbacbf394c"
+    },
+    {
+      "id": "acc_stu_14",
+      "displayName": "高雅",
+      "avatar": "👩",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "计科2302",
+      "studentNo": "20240114",
+      "username": "student14",
+      "createdAt": "2026-05-26T04:50:05.287Z",
+      "passwordHash": "b37d1a940af4167348ab46a7f55aeac5:8daafd3084d3f75073f003da47f80ce9eb28150a38e4865e6ae82a10f312fc8a7c37b9cdd5ba3afc3228ff6cce57aae296db3a466d66cf7e63557b5e3e378c97"
+    },
+    {
+      "id": "acc_stu_15",
+      "displayName": "罗斌",
+      "avatar": "👨",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "数学2303",
+      "studentNo": "20240115",
+      "username": "student15",
+      "createdAt": "2026-05-26T04:50:05.324Z",
+      "passwordHash": "7618aaa36379b926b4dd4031d1d4fcbd:f038d98712bcac421eb8c6cff2cb6d8c41148f5a3bbcda88d54ced994b933bb337bc7926d86dfa488fc3fb7a8b7cfed8b6e32c4b1188b7e6b6a47264e6d79797"
+    },
+    {
+      "id": "acc_stu_16",
+      "displayName": "梁悦",
+      "avatar": "👩‍🎓",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "数学2303",
+      "studentNo": "20240116",
+      "username": "student16",
+      "createdAt": "2026-05-26T04:50:05.364Z",
+      "passwordHash": "6d738d9627bc466ca0bbc3297e9d9d73:0b4d1d197cd44a7c8d50d035737d74dd0f5fd7893de82d103c38d833615d4fade982460ff37b295a1e0486674eff8e78244d828d5e579435c0eb560bab07605c"
+    },
+    {
+      "id": "acc_stu_17",
+      "displayName": "宋哲",
+      "avatar": "🧔",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "软件2304",
+      "studentNo": "20240117",
+      "username": "student17",
+      "createdAt": "2026-05-26T04:50:05.404Z",
+      "passwordHash": "7ca4e674c31e41d278a3ff4f1b28d10d:cc6c9a5cdd0004d1ede656d22b8b9561638e3975f9772a6b26fa140b361226b941a1d96d4076e7166b7c7be41a2802434e5fb8ab1c48d066ee930a7a617c033a"
+    },
+    {
+      "id": "acc_stu_18",
+      "displayName": "唐琳",
+      "avatar": "👱‍♀️",
+      "role": "student",
+      "orgId": "cs-demo",
+      "className": "软件2304",
+      "studentNo": "20240118",
+      "username": "student18",
+      "createdAt": "2026-05-26T04:50:05.447Z",
+      "passwordHash": "8ddceeb9eb6c8fd91b624cd13fdd890f:054e519281a0175ecfb053ad0cb73fde75471a550a6c9bd124a87859c9c1e1d82242d8fcc628d6e9672b83e9bdde4e2dc4e733b3a0397f271045bcbaba350008"
+    },
+    {
+      "id": "acc_stu_19",
+      "displayName": "冯刚",
+      "avatar": "👨‍🎓",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "数学2304",
+      "studentNo": "20240119",
+      "username": "student19",
+      "createdAt": "2026-05-26T04:50:05.493Z",
+      "passwordHash": "37eb7efb6a19d7647392d1646db76e02:ce4c62e808651084f2467f6e051383a3da9941278e3399e261baa3101db5ef71ec8de7d8126c7ffb2cf23a52c09c9aa41fb624d6e338e0077846e909558ac573"
+    },
+    {
+      "id": "acc_stu_20",
+      "displayName": "曹慧",
+      "avatar": "🙂",
+      "role": "student",
+      "orgId": "math-demo",
+      "className": "数学2304",
+      "studentNo": "20240120",
+      "username": "student20",
+      "createdAt": "2026-05-26T04:50:05.537Z",
+      "passwordHash": "c287c349a6dd5a934a13800791d13b44:244b38ef3bd2b606b98f7eefee78f5817e3801224706bd687f6d2bab2235ea8f56a804c6717128e786439464a91c6517c26afe96fe12b950d003b0c190084181"
+    },
+    {
+      "id": "acc_c7dc293c5ccfaee8",
+      "username": "student001",
+      "displayName": "student001",
+      "avatar": "🙂",
+      "role": "student",
+      "orgId": "cs-demo",
+      "createdAt": "2026-06-03T07:54:37.893Z",
+      "passwordHash": "dc50108d5ecf48c6ea4b5f9c9debee1e:09f5390da18f198c9f52e26ab3bece4dc5ba0d41d01d54724504452ce0cfca97c434b0b930b8ee3b98418776b0c82cf239e11f062593fc363e5b4be9d505ea87"
+    },
+    {
+      "id": "acc_c1e64c64763d7c5d",
+      "username": "student002",
+      "displayName": "student002",
+      "avatar": "🙂",
+      "role": "student",
+      "orgId": "cs-demo",
+      "createdAt": "2026-06-03T08:03:51.550Z",
+      "passwordHash": "d57a959f3db24c2ed1bf4a78981229c8:2a70b374e596d9066e1e03046ef2d8117c77c7d660d7df369d484944c075c00dee3af061fd77fcac4c4cf854bd85ba128aafb127b9099fc2a37e83e027287a54"
+    },
+    {
+      "id": "acc_5029e2936b419eda",
+      "username": "student005",
+      "passwordHash": "fc0a7a322fe039e09e2b2cdcd23b2851:7ca00540d9f52a0dd744c24e1f9baeaabf6121a8c19970aa2edb9e38db228bcc9402c3891b125c18a38e020379dcef767a64b8447721fe2079581184c8d6d48a",
+      "displayName": "student005",
+      "avatar": "🙂",
+      "role": "student",
+      "orgId": "cs-demo",
+      "createdAt": "2026-06-03T09:00:45.888Z"
+    }
+  ]
+}

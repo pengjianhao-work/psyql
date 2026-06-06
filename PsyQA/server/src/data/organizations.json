@@ -1,0 +1,20 @@
+{
+  "schools": [
+    {
+      "id": "psy-u",
+      "name": "心理港湾示范大学"
+    }
+  ],
+  "colleges": [
+    {
+      "id": "cs-demo",
+      "schoolId": "psy-u",
+      "name": "计算机学院"
+    },
+    {
+      "id": "math-demo",
+      "schoolId": "psy-u",
+      "name": "数学学院"
+    }
+  ]
+}

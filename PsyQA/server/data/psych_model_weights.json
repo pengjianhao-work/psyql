@@ -1,0 +1,53 @@
+{
+  "version": "1.1",
+  "trainedFrom": "unified_corpus.jsonl",
+  "trainingSamples": 34431,
+  "distressWeights": {
+    "stress": 0.5396,
+    "anxiety": 0.4305,
+    "moodInstability": 0.0056
+  },
+  "wellbeingBias": 8,
+  "functionalDistressFactor": 0.55,
+  "populationPrior": {
+    "stress": 55.8,
+    "anxiety": 54.2,
+    "mood": 52.1
+  },
+  "bayesianPriorStrength": 3,
+  "fusionWeights": {
+    "statistical": 0.2,
+    "machineLearning": 0.45,
+    "neuralNetwork": 0.38
+  },
+  "riskClusters": [
+    {
+      "clusterId": 0,
+      "stress": 45.0,
+      "anxiety": 44.9,
+      "mood": 60.0
+    },
+    {
+      "clusterId": 1,
+      "stress": 89.4,
+      "anxiety": 86.9,
+      "mood": 21.7
+    },
+    {
+      "clusterId": 2,
+      "stress": 61.7,
+      "anxiety": 45.2,
+      "mood": 49.8
+    },
+    {
+      "clusterId": 3,
+      "stress": 52.9,
+      "anxiety": 65.8,
+      "mood": 54.8
+    }
+  ],
+  "corpusMeta": {
+    "zh": 31939,
+    "en": 2492
+  }
+}

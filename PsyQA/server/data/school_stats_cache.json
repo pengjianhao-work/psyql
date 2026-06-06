@@ -1,0 +1,107 @@
+{
+  "byOrg": {
+    "math-demo": {
+      "totalConsultations": 2,
+      "activeStudentIds": [
+        "acc_stu_20"
+      ],
+      "highRiskDialogCount": 1,
+      "highRiskStudentIds": [
+        "acc_stu_20"
+      ],
+      "problemCounts": {
+        "其他": 2
+      },
+      "emotionCounts": {
+        "neutral": 2
+      },
+      "stressSum": 99,
+      "stressN": 2,
+      "updatedAt": "2026-05-26T07:37:37.518Z"
+    },
+    "cs-demo": {
+      "totalConsultations": 19,
+      "activeStudentIds": [
+        "acc_demo",
+        "acc_stu_01",
+        "acc_stu_03",
+        "acc_c1e64c64763d7c5d"
+      ],
+      "highRiskDialogCount": 2,
+      "highRiskStudentIds": [
+        "acc_demo"
+      ],
+      "problemCounts": {
+        "其他": 11,
+        "学业压力": 6,
+        "家庭关系": 1,
+        "人际关系": 1
+      },
+      "emotionCounts": {
+        "happy": 2,
+        "hopeful": 6,
+        "anxious": 4,
+        "sad": 2,
+        "frustrated": 1,
+        "angry": 1,
+        "guilty": 1,
+        "neutral": 2
+      },
+      "stressSum": 1001,
+      "stressN": 19,
+      "updatedAt": "2026-06-03T08:13:37.118Z"
+    },
+    "default": {
+      "totalConsultations": 1,
+      "activeStudentIds": [
+        "user1"
+      ],
+      "highRiskDialogCount": 0,
+      "highRiskStudentIds": [],
+      "problemCounts": {
+        "其他": 1
+      },
+      "emotionCounts": {
+        "neutral": 1
+      },
+      "stressSum": 41,
+      "stressN": 1,
+      "updatedAt": "2026-06-03T05:52:46.063Z"
+    }
+  },
+  "global": {
+    "totalConsultations": 22,
+    "activeStudentIds": [
+      "acc_stu_20",
+      "acc_demo",
+      "acc_stu_01",
+      "acc_stu_03",
+      "user1",
+      "acc_c1e64c64763d7c5d"
+    ],
+    "highRiskDialogCount": 3,
+    "highRiskStudentIds": [
+      "acc_stu_20",
+      "acc_demo"
+    ],
+    "problemCounts": {
+      "其他": 14,
+      "学业压力": 6,
+      "家庭关系": 1,
+      "人际关系": 1
+    },
+    "emotionCounts": {
+      "neutral": 5,
+      "happy": 2,
+      "hopeful": 6,
+      "anxious": 4,
+      "sad": 2,
+      "frustrated": 1,
+      "angry": 1,
+      "guilty": 1
+    },
+    "stressSum": 1141,
+    "stressN": 22,
+    "updatedAt": "2026-06-03T08:13:37.118Z"
+  }
+}

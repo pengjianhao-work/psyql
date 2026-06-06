@@ -1,2 +1,12 @@
+*.db filter=lfs diff=lfs merge=lfs -text
+*.db-shm filter=lfs diff=lfs merge=lfs -text
+*.db-wal filter=lfs diff=lfs merge=lfs -text
+PsyQA/PsyQA_full.json filter=lfs diff=lfs merge=lfs -text
+PsyQA/PsyQA_generation_split/** filter=lfs diff=lfs merge=lfs -text
+PsyQA/chroma_data/** filter=lfs diff=lfs merge=lfs -text
+PsyQA/data/** filter=lfs diff=lfs merge=lfs -text
+**/chroma.sqlite3 filter=lfs diff=lfs merge=lfs -text
+**/*.bin filter=lfs diff=lfs merge=lfs -text
+**/*.pickle filter=lfs diff=lfs merge=lfs -text
 processed_data/** filter=lfs diff=lfs merge=lfs -text
 training_data/** filter=lfs diff=lfs merge=lfs -text

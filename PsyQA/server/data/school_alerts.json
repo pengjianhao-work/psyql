@@ -1,0 +1,22 @@
+{
+  "alerts": [
+    {
+      "id": "alert_1779723085955_lelefg",
+      "studentId": "acc_demo",
+      "studentMask": "演**",
+      "orgId": "cs-demo",
+      "level": "high",
+      "source": "risk",
+      "summary": "检测到高危情绪表达：活着没意思（演示预置数据）",
+      "riskKeywords": [
+        "活着没意思"
+      ],
+      "dialogId": "2026/05/19 20:15:00",
+      "dialogTime": "2026-05-19T12:15:00.000Z",
+      "status": "pending",
+      "isFalsePositive": false,
+      "createdAt": "2026-05-25T15:31:25.955Z",
+      "updatedAt": "2026-05-25T15:31:25.955Z"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "time": "2026-06-03 16:33:44",
+  "knowledge_total": 1200,
+  "vector_total": 7392,
+  "merge_stats": {
+    "kept_existing": 800,
+    "added": 400,
+    "skipped_dup": 775,
+    "skipped_quality": 5
+  },
+  "next_steps": [
+    "cd PsyQA && npm run tag:knowledge",
+    "cd PsyQA && npm run reload:knowledge",
+    "cd PsyQA && npm run build:embeddings",
+    "可选: npm run sync:chroma（需 PSYQA_CHROMA_ENABLED=1）",
+    "或一键: python scripts/process_data_pipeline.py --mode rag"
+  ]
+}

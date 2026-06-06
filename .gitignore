@@ -1,11 +1,4 @@
-# 依赖与构建产物
-node_modules/
-**/node_modules/
-**/build/
-**/dist/
-**/.cache/
-
-# 环境
+# 环境密钥（切勿提交，含 API Key）
 .env
 .env.local
 .env.development
@@ -14,21 +7,7 @@ node_modules/
 !**/.env.example
 !**/.env.production.example
 
-# 本地数据库与向量运行时数据
-*.db
-*.db-shm
-*.db-wal
-**/chroma_data/
-**/psyqa.db*
-
-# 大体积数据集（本地拉取/训练用）
-data/
-processed_data/
-**/PsyQA_full.json
-**/PsyQA_generation_split/
-PsyQA/vector_db/documents.json
-
-# 系统
+# 系统与日志
 .DS_Store
 Thumbs.db
 *.log
@@ -38,12 +17,7 @@ Thumbs.db
 .vscode/
 *.swp
 
-# Python
+# Python 虚拟环境
 __pycache__/
 *.pyc
 .venv/
-
-# 训练数据（体积大，本地拉取）
-training_data/**/*
-!training_data/.gitkeep
-!training_data/README.md

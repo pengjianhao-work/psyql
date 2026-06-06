@@ -1,0 +1,27 @@
+{
+  "lastRun": "2026-05-26T00:23:45",
+  "lastSuccessMonth": "2026-05",
+  "lastStatus": "success",
+  "lastLog": "C:\\Users\\lenovo\\Desktop\\PsyQA1\\logs\\knowledge_update\\update_20260526_002345.log",
+  "knowledgeTotal": 200,
+  "vectorTotal": 1350,
+  "training": {
+    "enabled": true,
+    "fetch": {
+      "psyqa": "failed",
+      "soulchat": "skipped"
+    },
+    "corpusTotal": 15000,
+    "weightsVersion": "1.1",
+    "fetchExitCode": 1,
+    "buildExitCode": 0,
+    "corpusBySource": {
+      "psyqa": 22341,
+      "soulchat": 0
+    },
+    "trainExitCode": 0,
+    "trainingSamples": 15000,
+    "lastTrainingMonth": "2026-05"
+  },
+  "nextScheduledHint": "每月 1 日 03:00（含 SoulChat 子集 + EFAQA 若有证书）"
+}

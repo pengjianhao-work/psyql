@@ -1,0 +1,41 @@
+{
+  "users": [
+    {
+      "id": "acc_demo",
+      "displayName": "演示学生",
+      "avatar": "👤",
+      "role": "student",
+      "orgId": "cs-demo",
+      "studentNo": "20240001",
+      "username": "demo",
+      "passwordHash": "bf6329d37744b414e30a3dca44af1060:e237070a3c75e7430b5c14338e2a5dcc24752d5cc6baa903217400623a882268ee1c6da6691c5e2c8051b90a936cc62ff0a6167526a1d975c7eefa539151a85f",
+      "createdAt": "2026-06-03T07:46:41.929Z"
+    },
+    {
+      "id": "acc_counselor",
+      "displayName": "张老师",
+      "avatar": "🧑‍🏫",
+      "role": "counselor",
+      "orgId": "cs-demo",
+      "managedOrgIds": [
+        "cs-demo"
+      ],
+      "username": "counselor",
+      "passwordHash": "c2bc05e54dd5fc73d6135134bd1a6869:6920d65e023115564c618e5914241f9102eaf4a18d227a006ab9c44477bce3b26828d129d61d14690486bab4e1fa72dd28155e927e7b63fa459567a318daa346",
+      "createdAt": "2026-06-03T07:46:41.998Z"
+    },
+    {
+      "id": "acc_admin",
+      "displayName": "系统管理员",
+      "avatar": "🛡️",
+      "role": "admin",
+      "orgId": "cs-demo",
+      "managedOrgIds": [
+        "cs-demo"
+      ],
+      "username": "admin",
+      "passwordHash": "c16c20cabece792992fe7213732659c6:d7b7abf70c522c81aad0933846378a0fe454b3b920d24fc34cdb7cb0bf87bd466e5d015c254668e8937bc5513f063828588efff50b7f4fc3b0088bf16a5cc186",
+      "createdAt": "2026-06-03T07:46:42.064Z"
+    }
+  ]
+}

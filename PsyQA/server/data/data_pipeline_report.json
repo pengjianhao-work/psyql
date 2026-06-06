@@ -1,0 +1,38 @@
+{
+  "started": "2026-06-03T16:32:13",
+  "mode": "rag",
+  "steps": {},
+  "rag": {
+    "steps": {
+      "expand": 0,
+      "tag": 0,
+      "reload": 0,
+      "embeddings": 0
+    },
+    "expand_report": {
+      "time": "2026-06-03 16:32:15",
+      "knowledge_total": 800,
+      "vector_total": 7107,
+      "merge_stats": {
+        "kept_existing": 800,
+        "added": 0,
+        "skipped_dup": 0,
+        "skipped_quality": 0
+      },
+      "next_steps": [
+        "cd PsyQA && npm run tag:knowledge",
+        "cd PsyQA && npm run reload:knowledge",
+        "cd PsyQA && npm run build:embeddings",
+        "可选: npm run sync:chroma（需 PSYQA_CHROMA_ENABLED=1）",
+        "或一键: python scripts/process_data_pipeline.py --mode rag"
+      ]
+    }
+  },
+  "status": "ok",
+  "finished": "2026-06-03T16:32:21",
+  "log": "C:\\Users\\lenovo\\Desktop\\PsyQA1\\logs\\data_pipeline\\pipeline_20260603_163213.log",
+  "next": [
+    "重启或热加载后端: cd PsyQA && npm run dev",
+    "验证: curl http://localhost:3001/health"
+  ]
+}
