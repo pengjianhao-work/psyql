@@ -9,3 +9,4 @@ CREATE TABLE mental_health_videos (
     is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ALTER TABLE mental_health_videos ADD FULLTEXT INDEX ft_tags (tags);
