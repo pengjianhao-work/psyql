@@ -10,3 +10,7 @@ CREATE TABLE mental_health_videos (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE mental_health_videos ADD FULLTEXT INDEX ft_tags (tags);
+
+INSERT INTO mental_health_videos (title, author, video_url, cover_url, tags)
+VALUES 
+('告别内耗，活得松弛', '李慧心理', 'https://v.douyin.com/9ZruLvCdGzU/', '', '内耗，成长');
