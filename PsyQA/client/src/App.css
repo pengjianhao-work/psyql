@@ -5659,3 +5659,160 @@
 }
 .cbt-choice.picked { border-color: #667eea; background: #eef2ff; }
 .cbt-feedback { font-size: 0.85rem; color: #2e7d32; margin: 0.5rem 0; }
+
+/* 轻量心理训练 MicroTrainingPanel */
+.micro-training-panel {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 18px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+.micro-training-kicker {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+.micro-training-title {
+  margin: 4px 0;
+  font-size: 1.15rem;
+}
+.micro-training-desc {
+  margin: 0;
+  color: #475569;
+  font-size: 0.9rem;
+}
+.micro-training-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.micro-training-card {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: left;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.micro-training-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+}
+.micro-training-card-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.micro-training-card-time {
+  color: #2563eb;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.micro-training-card-desc {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.micro-training-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+.micro-training-modal {
+  width: min(720px, 96vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+}
+.micro-training-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.micro-training-modal-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.micro-training-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  margin-top: 6px;
+  margin-bottom: 12px;
+}
+.micro-training-stress-row {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 10px;
+}
+.micro-training-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  margin-top: 8px;
+  margin-right: 8px;
+}
+.micro-training-btn.primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+.micro-training-btn.secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.micro-training-radio {
+  display: block;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.micro-training-radio span {
+  margin-left: 8px;
+}
+.micro-training-tip {
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+.micro-training-tip.success {
+  background: #ecfdf5;
+}
+.micro-training-tip.warn {
+  background: #fff7ed;
+}
+.micro-training-step-box {
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 14px;
+}
+.micro-training-step-meta {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+.micro-training-step-box h3 {
+  margin-bottom: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+}

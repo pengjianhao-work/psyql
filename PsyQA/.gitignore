@@ -2,3 +2,16 @@
 .env
 .env.local
 *.log
+
+# 依赖与构建
+node_modules/
+dist/
+client/build/
+client/node_modules/.cache/
+
+# 运行时数据
+chroma_data/
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+server/data/school_stats_cache.json

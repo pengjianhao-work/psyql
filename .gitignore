@@ -7,6 +7,24 @@
 !**/.env.example
 !**/.env.production.example
 
+# 依赖与构建产物
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+client/build/
+**/.cache/
+**/.eslintcache
+*.tsbuildinfo
+
+# 本地数据库与向量库运行时数据
+*.db
+*.db-shm
+*.db-wal
+chroma_data/
+server/data/*.json
+!server/data/.gitkeep
+
 # 系统与日志
 .DS_Store
 Thumbs.db
@@ -21,3 +39,7 @@ Thumbs.db
 __pycache__/
 *.pyc
 .venv/
+
+# 临时/重复源码副本
+App(1).tsx
+StudentApp(1).tsx

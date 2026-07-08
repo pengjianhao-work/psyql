@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Message, KnowledgeItem, SimilarQuestion, EmotionType, ReActStep } from '../types';
 import { formatBotMessage, splitBotContent } from '../utils/formatMessage';
 import { truncateText, parseKeywordTags, dedupeSimilarQuestions } from '../utils/refDisplay';
@@ -220,7 +220,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [refsExpanded, setRefsExpanded] = useState(false);
   const [reactPinned, setReactPinned] = useState(false);
 
-  const knowledgeList = knowledgeSources ?? message.knowledgeSources ?? [];
+  const knowledgeList = useMemo(
+    () => knowledgeSources ?? message.knowledgeSources ?? [],
+    [knowledgeSources, message.knowledgeSources]
+  );
   const relatedTopics = useMemo(
     () => dedupeSimilarQuestions(message.similarQuestions ?? [], knowledgeList.map((k) => k.question)),
     [message.similarQuestions, knowledgeList]

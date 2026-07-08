@@ -13,8 +13,16 @@ const api = axios.create({
 
 const AUTH_STORAGE_KEY = 'psyqa_auth_token';
 
-let cachedAuthToken: string | null =
-  typeof window !== 'undefined' ? window.localStorage.getItem(AUTH_STORAGE_KEY) : null;
+/** 会话 token 仅保存在内存；持久化认证依赖 httpOnly Cookie（降低 XSS 窃取风险） */
+let cachedAuthToken: string | null = null;
+
+if (typeof window !== 'undefined') {
+  try {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function getAuthToken(): string | null {
   return cachedAuthToken;
@@ -23,8 +31,11 @@ export function getAuthToken(): string | null {
 export function setAuthToken(token: string | null): void {
   cachedAuthToken = token;
   if (typeof window === 'undefined') return;
-  if (token) window.localStorage.setItem(AUTH_STORAGE_KEY, token);
-  else window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 api.interceptors.request.use((config) => {

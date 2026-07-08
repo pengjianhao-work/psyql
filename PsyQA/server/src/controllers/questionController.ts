@@ -27,11 +27,10 @@ let questions: Question[] = [];
 let questionsLoadPromise: Promise<void> | null = null;
 const inFlightUsers = new Set<string>();
 let activeRequests = 0;
-const MAX_ACTIVE_REQUESTS = process.env.PSYQA_LOAD_TEST === '1' ? 8 : 4;
 const SLOW_REQUEST_MS = 15000;
 
 export function getAskLoadMetrics(): { activeAskRequests: number; maxAskRequests: number } {
-  return { activeAskRequests: activeRequests, maxAskRequests: MAX_ACTIVE_REQUESTS };
+  return { activeAskRequests: activeRequests, maxAskRequests: env.maxAskRequests };
 }
 
 interface UserServiceMetrics {
@@ -103,7 +102,7 @@ function validateAskRequest(
     return null;
   }
 
-  if (activeRequests >= MAX_ACTIVE_REQUESTS) {
+  if (activeRequests >= env.maxAskRequests) {
     res.status(503).json({ error: '服务繁忙，请等待几秒后重试' });
     return null;
   }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LoginPanel } from '../components/LoginPanel';
-import { AuthUserPublic, fetchCurrentUser, getAuthToken, setAuthToken } from '../api';
+import { AuthUserPublic, fetchCurrentUser, setAuthToken } from '../api';
 import { GUEST_MODE_KEY } from '../App';
 
 const LoginPage: React.FC = () => {
@@ -11,11 +11,6 @@ const LoginPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      const token = getAuthToken();
-      if (!token) {
-        if (!cancelled) setChecking(false);
-        return;
-      }
       try {
         const { user } = await fetchCurrentUser();
         if (!cancelled) {

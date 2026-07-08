@@ -11,7 +11,7 @@ PsyQA/
 ├── docs/                文档（见 docs/README.md）
 ├── scripts/             安装、启动、数据处理脚本
 ├── vector_db/           本地向量 JSON（documents.json）
-├── dist/                编译产物（git 忽略）
+├── dist/                编译产物（见 .gitignore，勿提交）
 ├── .env.example         环境变量模板
 ├── package.json         根 npm 脚本
 ├── README.md            项目入口

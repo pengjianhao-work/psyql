@@ -1,7 +1,7 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
-import { AuthUserPublic, fetchCurrentUser, getAuthToken, setAuthToken } from './api';
+import { AuthUserPublic, fetchCurrentUser, setAuthToken } from './api';
 import './App.css';
 
 const StudentApp = React.lazy(() => import('./student/StudentApp'));
@@ -28,11 +28,39 @@ function RouteFallback({ label }: { label: string }) {
 }
 
 function RootRedirect() {
-  const token = getAuthToken();
   const guest = sessionStorage.getItem(GUEST_MODE_KEY) === '1';
   if (guest) return <Navigate to="/student" replace />;
-  if (token) return <Navigate to="/login" replace />;
-  return <Navigate to="/login" replace />;
+  return <AuthAwareRootRedirect />;
+}
+
+function AuthAwareRootRedirect() {
+  const [target, setTarget] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const { user } = await fetchCurrentUser();
+        if (cancelled) return;
+        if (user.role === 'counselor' || user.role === 'admin') {
+          setTarget('/school/dashboard');
+        } else {
+          setTarget('/student');
+        }
+      } catch {
+        if (!cancelled) setTarget('/login');
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!target) {
+    return <RouteFallback label="正在跳转…" />;
+  }
+  return <Navigate to={target} replace />;
 }
 
 function StudentRoute() {
@@ -45,17 +73,12 @@ function StudentRoute() {
     let cancelled = false;
     const run = async () => {
       const guest = sessionStorage.getItem(GUEST_MODE_KEY) === '1';
-      const token = getAuthToken();
-      if (guest && !token) {
+      if (guest) {
         if (!cancelled) {
           setGuestMode(true);
           setSessionUser(null);
           setReady(true);
         }
-        return;
-      }
-      if (!token) {
-        navigate('/login', { replace: true });
         return;
       }
       try {
@@ -111,11 +134,6 @@ function SchoolRoute() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      const token = getAuthToken();
-      if (!token) {
-        navigate('/login', { replace: true });
-        return;
-      }
       try {
         const { user } = await fetchCurrentUser();
         if (user.role !== 'counselor' && user.role !== 'admin') {

@@ -16,7 +16,14 @@ export const env = {
   serveClient: process.env.PSYQA_SERVE_CLIENT !== '0',
   trustProxy: process.env.TRUST_PROXY === '1',
   dashboardCacheTtlMs: Number(process.env.DASHBOARD_CACHE_TTL_MS || 30000),
-  categoriesCacheTtlMs: Number(process.env.CATEGORIES_CACHE_TTL_MS || 300000)
+  categoriesCacheTtlMs: Number(process.env.CATEGORIES_CACHE_TTL_MS || 300000),
+  allowGuest: process.env.PSYQA_ALLOW_GUEST === '1' || process.env.NODE_ENV !== 'production',
+  maxAskRequests: Number(
+    process.env.PSYQA_MAX_ASK_REQUESTS ||
+      (process.env.PSYQA_LOAD_TEST === '1' ? 8 : 4)
+  ),
+  authRateLimitWindowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+  authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX || 20)
 };
 
 export function validateProductionEnv(): void {
@@ -29,5 +36,8 @@ export function validateProductionEnv(): void {
   }
   if (!env.corsOrigin.length) {
     console.warn('[env] 建议设置 CORS_ORIGIN 为前端域名列表，逗号分隔');
+  }
+  if (env.allowGuest) {
+    console.warn('[env] 生产环境建议设置 PSYQA_ALLOW_GUEST=0 关闭游客 API');
   }
 }

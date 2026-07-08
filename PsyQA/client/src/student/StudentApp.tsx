@@ -1,5 +1,5 @@
-﻿import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { GroupedHistoryItem, Message, QuestionResponse, HistoryDataPoint, UserProgress } from '../types';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { Message, QuestionResponse } from '../types';
 import {
   askQuestion,
   askQuestionStream,
@@ -13,12 +13,10 @@ import {
   getGroupedHistory,
   getInsightsStatus,
   pollInsightsUntilReady,
-  fetchRuntimeHealth,
   getUserProfile,
   UserProfilePayload,
   AuthUserPublic,
   fetchStudentTranscriptRequests,
-  resolveStudentTranscriptRequest,
   batchResolveTranscript,
   fetchCbtModule,
   CbtMicroModule,
@@ -26,7 +24,7 @@ import {
 } from '../api';
 import { Sidebar } from '../components/Sidebar';
 import { ChatContainer } from '../components/ChatContainer';
-import { recordResponseTimeMs, computeDynamicWaitSec, getEstimatedWaitSec } from '../utils/responseTimeEstimate';
+import { recordResponseTimeMs, computeDynamicWaitSec } from '../utils/responseTimeEstimate';
 import { checkSensitiveInput, shouldConfirmSensitiveSend } from '../utils/sensitiveInputCheck';
 import { shouldShowTrendCareAlert } from '../utils/trendCareAlert';
 import { TrendCareAlertModal } from '../components/TrendCareAlertModal';
@@ -51,12 +49,18 @@ import { StudentStatusBar } from '../components/StudentStatusBar';
 import { GuestModeBanner } from '../components/GuestModeBanner';
 import { CrisisSupportBanner } from '../components/CrisisSupportBanner';
 import { ExportMenu, ExportFormat } from '../components/ExportMenu';
-import { ToastStack, ToastMessage } from '../components/Toast';
+import { ToastStack } from '../components/Toast';
 import { RuntimeStatusBar } from '../components/RuntimeStatusBar';
 import { BackendOfflineBanner } from '../components/BackendOfflineBanner';
 import { BrandSchoolChip } from '../components/BrandSchoolChip';
 import { profilesStorageKey } from '../userStorage';
-import { progressHistoryToMessages, restoreSessionSummary } from '../utils/chatHistory';
+import { restoreSessionSummary } from '../utils/chatHistory';
+import { MicroTrainingPanel } from '../components/MicroTrainingPanel';
+import { CATEGORY_PROMPT_MAP, DEFAULT_GUEST_USERS, DEMO_QUESTIONS } from './constants';
+import { createWelcomeMessage, profilesToRecord, progressToTrendData } from './studentHelpers';
+import { useToast } from './hooks/useToast';
+import { useBackendHealth } from './hooks/useBackendHealth';
+import { useStudentSession } from './hooks/useStudentSession';
 import '../App.css';
 
 export interface StudentAppProps {
@@ -66,96 +70,52 @@ export interface StudentAppProps {
   onSessionUserUpdate?: (user: AuthUserPublic) => void;
 }
 
-const DEMO_QUESTIONS = [
-  '最近学习压力很大，学不进去怎么办？',
-  '我感觉很孤独，没有朋友',
-  '和室友关系不好，很烦恼',
-  '担心未来找不到工作',
-  '总是情绪低落，提不起劲'
-];
-
-const CATEGORY_PROMPT_MAP: Record<string, string[]> = {
-  academic_stress: ['最近学习压力很大，学不进去怎么办？', '担心未来找不到工作'],
-  interpersonal: ['和室友关系不好，很烦恼', '我感觉很孤独，没有朋友'],
-  career_future: ['担心未来找不到工作'],
-  emotion_regulation: ['总是情绪低落，提不起劲'],
-  romantic_relationship: ['和恋人经常吵架，不知道怎么办', '暧昧关系让我很焦虑'],
-  family_relationship: ['和父母沟通困难，压力很大', '家里期望和我自己的想法冲突'],
-  self_identity: ['不确定自己适合什么方向', '总觉得自己不够好'],
-  other: DEMO_QUESTIONS
-};
-const DEFAULT_USERS: UserProfile[] = [
-  { id: 'user1', name: '小明', avatar: '👦' },
-  { id: 'user2', name: '小红', avatar: '👧' },
-  { id: 'user3', name: '小李', avatar: '👨' }
-];
-
-const profilesToRecord = (list: UserProfile[]): Record<string, UserProfile> =>
-  list.reduce<Record<string, UserProfile>>((acc, user) => {
-    acc[user.id] = user;
-    return acc;
-  }, {});
-
-const createWelcomeMessage = (): Message => ({
-  id: '1',
-  type: 'bot',
-  content: '你好，欢迎来到心理港湾 🌿\n\n这里是安全、私密的倾诉空间。你可以描述最近的心情、人际或学业压力，我会认真倾听并给出参考建议。',
-  timestamp: new Date().toLocaleString('zh-CN')
-});
-
-const progressToTrendData = (progress: UserProgress): HistoryDataPoint[] =>
-  progress.history.map((h, index) => ({
-    date: `第${index + 1}次`,
-    stressLevel: h.stressLevel ?? 45,
-    anxietyLevel: h.anxietyLevel ?? 40,
-    moodStability: h.moodStability ?? 65
-  }));
-
 function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: StudentAppProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    createWelcomeMessage()
-  ]);
+  const { toasts, pushToast, dismissToast } = useToast();
+  const {
+    backendOnline,
+    runtimeHealth,
+    estimatedWaitSec,
+    setEstimatedWaitSec,
+    checkBackendOnline
+  } = useBackendHealth();
+  const {
+    messages,
+    setMessages,
+    trendData,
+    setTrendData,
+    groupedHistory,
+    setGroupedHistory,
+    latestReport,
+    setLatestReport,
+    lastDialogTime,
+    setLastDialogTime,
+    historyLoading,
+    portraitPending,
+    setPortraitPending,
+    reportPending,
+    setReportPending,
+    loadSessionFromServer,
+    refreshProgressAndHistory
+  } = useStudentSession(pushToast);
+
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [userProfiles, setUserProfiles] = useState<Record<string, UserProfile>>({});
   const [currentUserId, setCurrentUserId] = useState('');
-  const [trendData, setTrendData] = useState<HistoryDataPoint[]>([]);
-  const [latestReport, setLatestReport] = useState<{
-    emotion: QuestionResponse['emotion'];
-    risk: QuestionResponse['risk'];
-    problem?: QuestionResponse['problem'];
-    intervention?: QuestionResponse['intervention'];
-    carePlan?: QuestionResponse['carePlan'];
-    analysisSources?: QuestionResponse['analysisSources'];
-    llmUsed?: boolean;
-    emotionStyle: QuestionResponse['emotionStyle'];
-    report: string;
-    statModel?: QuestionResponse['statModel'];
-    portrait?: QuestionResponse['portrait'];
-    implicitNeeds?: QuestionResponse['implicitNeeds'];
-  } | null>(null);
   const [cbtModule, setCbtModule] = useState<CbtMicroModule | null>(null);
-  const [lastDialogTime, setLastDialogTime] = useState<string | undefined>();
   const [showSelfRating, setShowSelfRating] = useState(false);
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfilePayload | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [groupedHistory, setGroupedHistory] = useState<Record<string, GroupedHistoryItem[]>>({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [ethicsLoginOpen, setEthicsLoginOpen] = useState(false);
   const [reportEthicsOpen, setReportEthicsOpen] = useState(false);
   const [reportEthicsOk, setReportEthicsOk] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [portraitPending, setPortraitPending] = useState(false);
-  const [reportPending, setReportPending] = useState(false);
   const [insightsRefreshing, setInsightsRefreshing] = useState(false);
-  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
-  const [runtimeHealth, setRuntimeHealth] = useState<Awaited<ReturnType<typeof fetchRuntimeHealth>> | null>(null);
-  const [estimatedWaitSec, setEstimatedWaitSec] = useState(() => getEstimatedWaitSec());
   const [isGenerating, setIsGenerating] = useState(false);
   const [trendCareOpen, setTrendCareOpen] = useState(false);
   const [trendCareReason, setTrendCareReason] = useState('');
@@ -166,56 +126,6 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   const [streamPaused, setStreamPaused] = useState(false);
   const [pendingTranscriptRequests, setPendingTranscriptRequests] = useState<TranscriptViewRequest[]>([]);
   const refreshInsightsRef = useRef<(() => Promise<void>) | undefined>(undefined);
-
-  const pushToast = useCallback(
-    (text: string, tone: ToastMessage['tone'] = 'info', action?: { label: string; onClick: () => void }) => {
-      const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      setToasts((prev) => [
-        ...prev,
-        {
-          id,
-          text,
-          tone,
-          actionLabel: action?.label,
-          onAction: action?.onClick
-        }
-      ]);
-    },
-    []
-  );
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  const checkBackendOnline = useCallback(async () => {
-    try {
-      const h = await fetchRuntimeHealth();
-      setRuntimeHealth(h);
-      setBackendOnline(h.status === 'ok');
-      setEstimatedWaitSec(
-        computeDynamicWaitSec({
-          fastAnswer: h.fastAnswer,
-          llmAvailable: h.llmAvailable,
-          llmMode: h.llmMode,
-          knowledgeCount: h.knowledge?.knowledgeCount,
-          activeAskRequests: h.load?.activeAskRequests,
-          maxAskRequests: h.load?.maxAskRequests
-        })
-      );
-      return h.status === 'ok';
-    } catch {
-      setRuntimeHealth(null);
-      setBackendOnline(false);
-      return false;
-    }
-  }, []);
-
-  useEffect(() => {
-    void checkBackendOnline();
-    const id = window.setInterval(() => void checkBackendOnline(), 10000);
-    return () => window.clearInterval(id);
-  }, [checkBackendOnline]);
 
   const filteredQuickPrompts = useMemo(() => {
     if (!activeCategory) return DEMO_QUESTIONS;
@@ -241,7 +151,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   }, [groupedHistory]);
 
   const storageNamespace = guestMode ? 'guest' : sessionUser?.id ?? '';
-  const guestFallback = useMemo(() => DEFAULT_USERS, []);
+  const guestFallback = useMemo(() => DEFAULT_GUEST_USERS, []);
   const accountFallback = useMemo(
     () =>
       sessionUser
@@ -273,9 +183,9 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     if (guestMode) {
       const key = profilesStorageKey('guest');
       if (!localStorage.getItem(key)) {
-        localStorage.setItem(key, JSON.stringify(DEFAULT_USERS));
+        localStorage.setItem(key, JSON.stringify(DEFAULT_GUEST_USERS));
       }
-      setUserProfiles(profilesToRecord(DEFAULT_USERS));
+      setUserProfiles(profilesToRecord(DEFAULT_GUEST_USERS));
       setCurrentUserId('user1');
       setLatestReport(null);
       return;
@@ -285,60 +195,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       setUserProfiles(profilesToRecord(roster));
       setCurrentUserId(sessionUser.id);
     }
-  }, [guestMode, sessionUser]);
-
-  const loadSessionFromServer = useCallback(async (userId: string) => {
-    if (!userId) return;
-    setHistoryLoading(true);
-    try {
-      const [progress, grouped] = await Promise.all([
-        getUserProgress(userId),
-        getGroupedHistory(userId)
-      ]);
-      const groups = grouped.groups || {};
-      setTrendData(progressToTrendData(progress));
-      setGroupedHistory(groups);
-
-      const restoredMessages = progressHistoryToMessages(progress.history);
-      setMessages(restoredMessages.length ? restoredMessages : [createWelcomeMessage()]);
-
-      const restored = restoreSessionSummary(progress, groups);
-      setLatestReport(restored.latestReport);
-      setLastDialogTime(restored.lastDialogTime);
-      setShowSelfRating(false);
-      try {
-        const status = await getInsightsStatus(userId);
-        setPortraitPending(status.portraitPending);
-        setReportPending(status.reportPending);
-        if (!status.ready && (status.reportPending || status.portraitPending)) {
-          void pollInsightsUntilReady(userId).then((progress) => {
-            if (!progress) return;
-            setPortraitPending(false);
-            setReportPending(false);
-            const groups = grouped.groups || {};
-            const again = restoreSessionSummary(progress, groups);
-            if (again.latestReport) setLatestReport(again.latestReport);
-            pushToast('历史会话的报告与画像已同步', 'success');
-          });
-        }
-      } catch {
-        setPortraitPending(
-          Boolean(restored.latestReport?.portrait?.summary?.includes('生成中'))
-        );
-        setReportPending(
-          Boolean(restored.latestReport?.report?.includes('详细心理评估报告生成中'))
-        );
-      }
-    } catch (error) {
-      console.error('Failed to load session history:', error);
-      setMessages([createWelcomeMessage()]);
-      setTrendData([]);
-      setGroupedHistory({});
-      setLatestReport(null);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
+  }, [guestMode, sessionUser, setLatestReport]);
 
   useEffect(() => {
     if (!storageNamespace) return;
@@ -407,6 +264,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       return;
     }
     loadSessionFromServer(currentUserId);
+    setShowSelfRating(false);
   }, [currentUserId, loadSessionFromServer]);
 
   const loadUserProfileFromServer = useCallback(async (userId: string, refresh = false) => {
@@ -681,11 +539,13 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       }
 
       try {
-        const progress = await getUserProgress(currentUserId);
-        const trend = shouldShowTrendCareAlert(progress);
-        if (trend.show) {
-          setTrendCareReason(trend.reason);
-          setTrendCareOpen(true);
+        const progress = await refreshProgressAndHistory(currentUserId);
+        if (progress) {
+          const trend = shouldShowTrendCareAlert(progress);
+          if (trend.show) {
+            setTrendCareReason(trend.reason);
+            setTrendCareOpen(true);
+          }
         }
       } catch {
         /* ignore */
@@ -743,15 +603,6 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             timestamp: botTime
           }
         ]);
-      }
-
-      try {
-        const progress = await getUserProgress(currentUserId);
-        setTrendData(progressToTrendData(progress));
-        const grouped = await getGroupedHistory(currentUserId);
-        setGroupedHistory(grouped.groups || {});
-      } catch {
-        /* keep existing trend on refresh failure */
       }
 
       void loadUserProfileFromServer(currentUserId, true);
@@ -845,7 +696,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     checkBackendOnline,
     reportEthicsOk,
     loadUserProfileFromServer,
-    runtimeHealth
+    runtimeHealth,
+    refreshProgressAndHistory
   ]);
 
   const handleSimilarQuestionClick = (question: string) => {
@@ -1235,6 +1087,9 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               />
             </div>
           )}
+
+          <MicroTrainingPanel userId={currentUserId} />
+
           <div className="chat-section">
             <ChatContainer
               messages={messages}

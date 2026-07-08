@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { env } from '../config/env';
 
 const GUEST_USER_PATTERN = /^user\d+$/;
 
@@ -10,7 +11,7 @@ export function normalizeUserId(raw: unknown): string {
 }
 
 export function isGuestApiAllowed(): boolean {
-  return process.env.PSYQA_ALLOW_GUEST === '1' || process.env.NODE_ENV !== 'production';
+  return env.allowGuest;
 }
 
 export function isGuestUserId(userId: string): boolean {
