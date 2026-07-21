@@ -1,5 +1,5 @@
-export type CounselAgentMode = 'react' | 'planner' | 'auto';
-export type ReactMode = 'full' | 'prefetch' | 'planner' | 'off';
+export type CounselAgentMode = 'react' | 'planner' | 'tot' | 'auto';
+export type ReactMode = 'full' | 'prefetch' | 'planner' | 'tot' | 'off';
 
 export interface AgentPolicy {
   counselEnabled: boolean;
@@ -18,11 +18,12 @@ export function resolveAgentPolicy(): AgentPolicy {
   const raw = (process.env.PSYQA_AGENT_MODE || 'auto').trim().toLowerCase();
   let mode: CounselAgentMode = 'auto';
   if (raw === 'planner' || raw === 'planner-responder') mode = 'planner';
+  else if (raw === 'tot' || raw === 'tree-of-thoughts' || raw === 'tree_of_thoughts') mode = 'tot';
   else if (raw === 'react') mode = 'react';
 
   return {
     counselEnabled: !reactDisabled && !fast,
-    reactEnabled: !reactDisabled && !fast && mode !== 'planner',
+    reactEnabled: !reactDisabled && !fast && mode !== 'planner' && mode !== 'tot',
     reactDemo: process.env.PSYQA_REACT_DEMO === '1',
     mode
   };
@@ -34,7 +35,7 @@ export function shouldRunCounselAgent(): boolean {
 
 export function shouldUseReAct(): boolean {
   const p = resolveAgentPolicy();
-  return p.reactEnabled && p.mode !== 'planner';
+  return p.reactEnabled && p.mode !== 'planner' && p.mode !== 'tot';
 }
 
 export function isReactDemoMode(): boolean {

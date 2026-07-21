@@ -104,13 +104,18 @@ const ACTION_LABELS: Record<string, string> = {
   finish: '生成回复',
   parse_error: '解析失败',
   plan: '规划上下文',
-  respond: '生成回复'
+  respond: '生成回复',
+  tot_expand: 'ToT 展开分支',
+  tot_evaluate: 'ToT 评估分支',
+  tot_select: 'ToT 选定路径',
+  tot_respond: 'ToT 生成回复'
 };
 
 const REACT_MODE_LABEL: Record<string, string> = {
   full: 'ReAct 完整推理',
   prefetch: 'ReAct 预检索加速',
-  planner: 'Planner 规划模式'
+  planner: 'Planner 规划模式',
+  tot: 'ToT 思维树推理'
 };
 
 const GENERATION_HINT_LABEL: Record<string, string> = {
@@ -310,7 +315,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         {isBot && message.emotion && (
           <div className="emotion-tag" style={{ color: message.emotionStyle?.color }}>
             {emotionIcons[message.emotion.emotion]} {emotionLabels[message.emotion.emotion]}
-            {message.reactUsed && <span className="react-inline-badge">ReAct</span>}
+            {message.reactUsed && (
+              <span className="react-inline-badge">
+                {message.reactMode === 'tot' ? 'ToT' : message.reactMode === 'planner' ? 'Planner' : 'ReAct'}
+              </span>
+            )}
           </div>
         )}
 

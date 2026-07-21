@@ -81,7 +81,7 @@ export interface CombinedAnswer {
   reportPending?: boolean;
   /** ReAct 推理链 */
   reactUsed?: boolean;
-  reactMode?: 'full' | 'prefetch' | 'planner' | 'off';
+  reactMode?: 'full' | 'prefetch' | 'planner' | 'tot' | 'off';
   reactTrace?: ReActStep[];
   /** 生成路径提示：检索未命中 / 知识库空 / LLM 回退等 */
   generationHint?: 'llm_ok' | 'retrieval_miss' | 'kb_empty' | 'llm_fallback' | 'rule_only' | 'fast_kb';
@@ -686,7 +686,10 @@ ${description ? `补充描述：${description}` : ''}
         );
         reactTrace = agentResult.steps;
         reactMode = agentResult.reactMode;
-        reactUsed = agentResult.reactMode === 'full' || agentResult.reactMode === 'planner';
+        reactUsed =
+          agentResult.reactMode === 'full' ||
+          agentResult.reactMode === 'planner' ||
+          agentResult.reactMode === 'tot';
         if (agentResult.success && agentResult.answer.length >= MIN_ANSWER_CHARS) {
           llmAnswer = agentResult.answer;
         }
@@ -776,11 +779,13 @@ ${answer}
     answer = `${answer}\n\n---\n\n${ETHICS_FOOTER}`;
   }
 
+  const agentTag =
+    reactMode === 'tot' ? '+ToT' : reactMode === 'planner' ? '+Planner' : reactUsed ? '+ReAct' : '';
   const activeModelLabel =
     getLastActiveLlmProvider() === 'zhipu'
-      ? `Zhipu-${getZhipuModelFromEnv()}${reactUsed ? '+ReAct' : ''}`
+      ? `Zhipu-${getZhipuModelFromEnv()}${agentTag}`
       : answerLlmUsed
-        ? `${modelConfig.name}${reactUsed ? '+ReAct' : ''}`
+        ? `${modelConfig.name}${agentTag}`
         : 'Rule+Knowledge';
 
   const summary = generateSummary(question, answer, psychSnapshot);

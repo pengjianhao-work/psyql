@@ -1,6 +1,7 @@
 import { runReActCounselAgent } from './reactCounselAgent';
 import type { ReActCounselContext, ReActCounselResult, ReActStep } from './reactCounselAgent';
 import { runPlannerRespondAgent } from './plannerRespondAgent';
+import { runTotCounselAgent } from './totCounselAgent';
 import {
   resolveAgentPolicy,
   resolveCounselAgentMode,
@@ -31,6 +32,11 @@ export async function runCounselAgent(
   }
 ): Promise<ReActCounselResult> {
   const mode = resolveCounselAgentMode();
+
+  if (mode === 'tot') {
+    return runTotCounselAgent(ctx, options);
+  }
+
   const usePlanner =
     mode === 'planner' ||
     (mode === 'auto' &&

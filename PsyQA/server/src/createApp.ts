@@ -152,6 +152,7 @@ export function createApp(): Express {
       build: BUILD_INFO,
       fastAnswer: process.env.PSYQA_FAST_ANSWER === '1',
       reactDemo: process.env.PSYQA_REACT_DEMO === '1',
+      agentMode: (process.env.PSYQA_AGENT_MODE || 'auto').trim().toLowerCase(),
       env: env.nodeEnv
     });
   });
