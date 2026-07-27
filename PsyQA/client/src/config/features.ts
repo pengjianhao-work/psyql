@@ -1,0 +1,5 @@
+/** 答辩演示时可设 REACT_APP_SHOW_REACT_TRACE=1 */
+export const SHOW_REACT_TRACE = process.env.REACT_APP_SHOW_REACT_TRACE === '1';
+
+/** 答辩演示时可设 REACT_APP_SHOW_KNOWLEDGE_SOURCES=1 */
+export const SHOW_KNOWLEDGE_SOURCES = process.env.REACT_APP_SHOW_KNOWLEDGE_SOURCES === '1';

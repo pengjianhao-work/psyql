@@ -48,3 +48,9 @@ export function isReactDemoMode(): boolean {
 export function resolveCounselAgentMode(): CounselAgentMode {
   return resolveAgentPolicy().mode;
 }
+
+/** PSYQA_AGENT_MODE=react 或 PSYQA_REACT_DEMO=1：强制完整多步 ReAct，禁止预检索单轮捷径 */
+export function isStrictFullReAct(): boolean {
+  const mode = resolveCounselAgentMode();
+  return mode === 'react' || isReactDemoMode();
+}

@@ -1,7 +1,7 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
-import { AuthUserPublic, fetchCurrentUser, setAuthToken } from './api';
+import { AuthUserPublic, fetchCurrentUser, logoutRequest, setAuthToken } from './api';
 import './App.css';
 
 const StudentApp = React.lazy(() => import('./student/StudentApp'));
@@ -104,8 +104,8 @@ function StudentRoute() {
     };
   }, [navigate]);
 
-  const onLogout = useCallback(() => {
-    setAuthToken(null);
+  const onLogout = useCallback(async () => {
+    await logoutRequest();
     sessionStorage.removeItem(GUEST_MODE_KEY);
     navigate('/login', { replace: true });
   }, [navigate]);
@@ -156,8 +156,8 @@ function SchoolRoute() {
     };
   }, [navigate]);
 
-  const onLogout = useCallback(() => {
-    setAuthToken(null);
+  const onLogout = useCallback(async () => {
+    await logoutRequest();
     sessionStorage.removeItem(GUEST_MODE_KEY);
     navigate('/login', { replace: true });
   }, [navigate]);

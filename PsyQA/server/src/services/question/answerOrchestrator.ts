@@ -47,6 +47,7 @@ import { getOllamaModel, resolveOllamaGenerateUrl } from '../llm/ollamaClient';
 import { markOllamaUnavailable } from '../llm/ollamaAvailability';
 import { callLlmGenerate, getLastActiveLlmProvider, isLlmAvailable, shouldUseLlm } from '../llm/llmClient';
 import { shouldRunCounselAgent, runCounselAgent, type ReActStep } from '../llm/counselAgent';
+import { isValidCounselAnswer, sanitizeCounselAnswer } from '../llm/counselAnswerSanitizer';
 import { getZhipuModel as getZhipuModelFromEnv } from '../llm/zhipuClient';
 import { enhanceQueryWithKeywords } from './questionCatalog';
 import {
@@ -56,6 +57,7 @@ import {
 import { stripUserQuestionEcho } from '../../utils/answerSanitizer';
 import { mineImplicitNeeds } from '../psych/implicitNeedsService';
 import { getSeasonalRagBoost } from '../knowledge/seasonalRagPolicy';
+import { env } from '../../config/env';
 
 export interface CombinedAnswer {
   answer: string;
@@ -160,8 +162,40 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
 
 const cache = new Map<string, { answer: string; timestamp: number }>();
-const CACHE_TTL = 300000;
+const CACHE_TTL = env.answerCacheTtlMs;
 const CACHE_MAX_SIZE = 1000;
+const QUESTION_REPEAT_WINDOW_MS = 30 * 60 * 1000;
+const recentQuestionAsks = new Map<string, { count: number; lastAt: number }>();
+
+function normalizeQuestionKey(question: string): string {
+  return question.trim().replace(/\s+/g, '');
+}
+
+/** 同一用户重复问相同问题时递增；用于跳过缓存并提示换表述 */
+function trackQuestionRepeat(userId: string, question: string): number {
+  const key = `${userId}:${normalizeQuestionKey(question)}`;
+  const now = Date.now();
+  const prev = recentQuestionAsks.get(key);
+  if (!prev || now - prev.lastAt > QUESTION_REPEAT_WINDOW_MS) {
+    recentQuestionAsks.set(key, { count: 1, lastAt: now });
+    return 1;
+  }
+  const count = prev.count + 1;
+  recentQuestionAsks.set(key, { count, lastAt: now });
+  return count;
+}
+
+function buildAnswerVariationHint(askRepeat: number): string {
+  if (askRepeat <= 1) return '';
+  const styles = [
+    '从身体感受（失眠、胸闷、走神）切入，再谈学业压力',
+    '用「小步行动」角度给 2–3 条不同建议（如番茄钟、和室友聊一句、写 3 行日记）',
+    '先肯定「愿意反复来问」本身，再换一组放松/时间管理技巧',
+    '用宿舍或课堂具体场景举例，避免空泛鸡汤'
+  ];
+  const style = styles[(askRepeat - 2) % styles.length];
+  return `【重要】用户第 ${askRepeat} 次提出相同或非常相似的问题。请换一种说法与结构，${style}；勿复制「亲爱的同学」等模板开头，避免与上次回复雷同。`;
+}
 
 function getCacheKey(userId: string, question: string, riskLevel: string, context: string): string {
   return `v5:${userId}:${riskLevel}:${question}:${context}`.substring(0, 320);
@@ -169,6 +203,13 @@ function getCacheKey(userId: string, question: string, riskLevel: string, contex
 
 function shouldSkipAnswerCache(riskLevel: string): boolean {
   return riskLevel === 'high' || riskLevel === 'critical';
+}
+
+function shouldUseAnswerCache(riskLevel: string, askRepeat: number): boolean {
+  if (!env.answerCacheEnabled || CACHE_TTL <= 0) return false;
+  if (shouldSkipAnswerCache(riskLevel)) return false;
+  if (askRepeat > 1) return false;
+  return true;
 }
 
 async function waitForLlmWithBackoff(): Promise<boolean> {
@@ -246,6 +287,7 @@ function clampAnswerLength(answer: string, maxLen = MAX_ANSWER_CHARS): string {
 }
 
 function getCachedAnswer(key: string): string | null {
+  if (CACHE_TTL <= 0) return null;
   const cached = cache.get(key);
   if (!cached) {
     return null;
@@ -277,11 +319,15 @@ function setCachedAnswer(key: string, answer: string): void {
   }
 }
 
-async function callLlmServiceWithRetry(prompt: string, config: ModelConfig): Promise<string> {
+async function callLlmServiceWithRetry(
+  prompt: string,
+  config: ModelConfig,
+  temperatureOverride?: number
+): Promise<string> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const text = await callLlmGenerate(prompt, {
-        temperature: config.options.temperature,
+        temperature: temperatureOverride ?? config.options.temperature,
         maxTokens: config.options.num_predict,
         timeoutMs: 45_000
       });
@@ -589,6 +635,12 @@ export const generateAIAnswer = async (
       : '';
 
   const agentContext = buildAgentPromptContext(userId);
+  const askRepeat = trackQuestionRepeat(userId, question);
+  const answerVariationHint = buildAnswerVariationHint(askRepeat);
+  const genTemperature = Math.min(
+    0.85,
+    modelConfig.options.temperature + (askRepeat > 1 ? 0.2 : 0.06)
+  );
 
   const prompt = `
 ${systemPrompt}
@@ -611,6 +663,7 @@ ${llmRationale ? `智能分析要点：${llmRationale}` : ''}
 【咨询干预框架】框架：${intervention.frameworkName}
 请按以下结构展开（每一段都要写完整句子，不要只写标题或关键词）：${intervention.structureHint}
 ${recentRiskNote}
+${answerVariationHint ? `\n${answerVariationHint}\n` : ''}
 
 【回答篇幅与结构 · 必须遵守】
 - 全文约 **280–480 汉字**，分 **两大块**，不要第三块行动清单
@@ -641,21 +694,26 @@ ${description ? `补充描述：${description}` : ''}
   );
 
   const cacheKey = getCacheKey(userId, question, risk.level, historySummary.substring(0, 80));
-  let answer: string;
+  let answer: string | undefined;
   let answerLlmUsed = false;
   let reactUsed = false;
   let reactMode: CombinedAnswer['reactMode'] = 'off';
   let reactTrace: ReActStep[] | undefined;
 
   const cachedAnswer =
-    !shouldSkipAnswerCache(risk.level) ? getCachedAnswer(cacheKey) : null;
+    shouldUseAnswerCache(risk.level, askRepeat) ? getCachedAnswer(cacheKey) : null;
   if (cachedAnswer && cachedAnswer.length >= MIN_ANSWER_CHARS) {
-    console.log('使用缓存答案');
-    answer = normalizeAnswerStructure(cachedAnswer);
-    answerLlmUsed = llmOk;
-  } else if (loadTestFast) {
+    const cleanedCache = sanitizeCounselAnswer(cachedAnswer);
+    if (isValidCounselAnswer(cleanedCache)) {
+      console.log('使用缓存答案');
+      answer = normalizeAnswerStructure(cleanedCache);
+      answerLlmUsed = llmOk;
+    }
+  }
+
+  if (answer === undefined && loadTestFast) {
     answer = buildExpandedFallbackAnswer(question, intervention, rerankedKnowledge, description);
-  } else if (llmOk) {
+  } else if (answer === undefined && llmOk) {
     let llmAnswer = '';
     const tryAgent = shouldRunCounselAgent();
 
@@ -675,10 +733,11 @@ ${description ? `补充描述：${description}` : ''}
             tone,
             llmRationale,
             prefetchedKnowledge: rerankedKnowledge,
-            prefetchedMemory: vectorDbResults
+            prefetchedMemory: vectorDbResults,
+            answerVariationHint: answerVariationHint || undefined
           },
           {
-            temperature: modelConfig.options.temperature,
+            temperature: genTemperature,
             timeoutMs: 90_000,
             onToken: stream?.onToken,
             onStep: stream?.onReactStep
@@ -691,7 +750,8 @@ ${description ? `补充描述：${description}` : ''}
           agentResult.reactMode === 'planner' ||
           agentResult.reactMode === 'tot';
         if (agentResult.success && agentResult.answer.length >= MIN_ANSWER_CHARS) {
-          llmAnswer = agentResult.answer;
+          const cleaned = sanitizeCounselAnswer(agentResult.answer);
+          llmAnswer = isValidCounselAnswer(cleaned) ? cleaned : '';
         }
       } catch (err) {
         console.warn('[counsel-agent]', err instanceof Error ? err.message : err);
@@ -704,18 +764,27 @@ ${description ? `补充描述：${description}` : ''}
           const { callLlmGenerateStream } = await import('../llm/llmClient');
           llmAnswer =
             (await callLlmGenerateStream(prompt, {
-              temperature: modelConfig.options.temperature,
+              temperature: genTemperature,
               maxTokens: modelConfig.options.num_predict,
               timeoutMs: 90_000,
               onToken: stream.onToken
             })) || '';
         } else {
-          llmAnswer = await callLlmServiceWithRetry(prompt, modelConfig);
+          llmAnswer = await callLlmServiceWithRetry(prompt, modelConfig, genTemperature);
         }
       } catch {
         llmAnswer = '';
         const { markZhipuUnavailable } = await import('../llm/zhipuClient');
         markZhipuUnavailable();
+      }
+    }
+
+    if (llmAnswer) {
+      const cleanedDirect = sanitizeCounselAnswer(llmAnswer);
+      if (!isValidCounselAnswer(cleanedDirect)) {
+        llmAnswer = '';
+      } else {
+        llmAnswer = cleanedDirect;
       }
     }
 
@@ -727,7 +796,7 @@ ${description ? `补充描述：${description}` : ''}
         intervention,
         rerankedKnowledge
       );
-      if (answer.length >= MIN_ANSWER_CHARS && !shouldSkipAnswerCache(risk.level)) {
+      if (answer.length >= MIN_ANSWER_CHARS && shouldUseAnswerCache(risk.level, askRepeat)) {
         setCachedAnswer(cacheKey, answer);
       }
     } else if (rerankedKnowledge.length > 0) {
@@ -740,9 +809,11 @@ ${description ? `补充描述：${description}` : ''}
     } else {
       answer = buildExpandedFallbackAnswer(question, intervention, [], description);
     }
-  } else {
+  } else if (answer === undefined) {
     answer = buildExpandedFallbackAnswer(question, intervention, rerankedKnowledge, description);
   }
+
+  answer = answer!;
 
   if (llmOk && answer.length >= MIN_ANSWER_CHARS) {
     try {

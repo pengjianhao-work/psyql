@@ -24,6 +24,11 @@ Action Input: {"query":"宿舍矛盾"}`;
     expect(parsed.action).toBe('finish');
     expect(String(parsed.actionInput.answer)).toContain('测试回复');
   });
+
+  test('normalizes search psych to reflect_psych', () => {
+    const parsed = parseReActOutput('Thought: 回顾\nAction: search psych\nAction Input: {}');
+    expect(parsed.action).toBe('reflect_psych');
+  });
 });
 
 describe('resolveReActPlan', () => {
@@ -60,7 +65,22 @@ describe('resolveReActPlan', () => {
       prefetchedKnowledge: [{ question: 'q', answer: 'a' }]
     });
     expect(plan.prefetchOnly).toBe(false);
+    expect(plan.maxSteps).toBe(4);
     if (prev === undefined) delete process.env.PSYQA_REACT_DEMO;
     else process.env.PSYQA_REACT_DEMO = prev;
+  });
+
+  test('react mode forces 4-step full loop', () => {
+    const prevReact = process.env.PSYQA_AGENT_MODE;
+    process.env.PSYQA_AGENT_MODE = 'react';
+    const plan = resolveReActPlan({
+      ...baseCtx,
+      prefetchedKnowledge: [{ question: 'q', answer: 'a' }]
+    });
+    expect(plan.prefetchOnly).toBe(false);
+    expect(plan.maxSteps).toBe(4);
+    expect(plan.skipSearchTools).toBe(false);
+    if (prevReact === undefined) delete process.env.PSYQA_AGENT_MODE;
+    else process.env.PSYQA_AGENT_MODE = prevReact;
   });
 });

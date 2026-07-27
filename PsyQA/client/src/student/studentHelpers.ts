@@ -1,5 +1,49 @@
-import { HistoryDataPoint, Message, UserProgress } from '../types';
+import { HistoryDataPoint, Message, QuestionResponse, UserProgress } from '../types';
 import { UserProfile } from '../components/UserSelector';
+import { stripReActLeakFromDisplay } from '../utils/formatMessage';
+
+export function createTurnIds(): { turnId: string; userMsgId: string; botMsgId: string } {
+  const turnId =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return { turnId, userMsgId: `user-${turnId}`, botMsgId: `bot-${turnId}` };
+}
+
+export function buildBotMessageFromResponse(
+  botMsgId: string,
+  response: QuestionResponse,
+  timestamp: string,
+  extra?: Partial<Message>
+): Message {
+  return {
+    id: botMsgId,
+    type: 'bot',
+    content: stripReActLeakFromDisplay(response.answer),
+    knowledgeSources: response.knowledgeSources,
+    similarQuestions: response.similarQuestions,
+    emotion: response.emotion,
+    risk: response.risk,
+    problem: response.problem,
+    emotionStyle: response.emotionStyle,
+    report: response.report,
+    llmUsed: response.llmUsed,
+    reactUsed: response.reactUsed,
+    reactMode: response.reactMode,
+    reactTrace: response.reactTrace ?? [],
+    generationHint: response.generationHint,
+    briefReport: response.briefReport,
+    timestamp,
+    streaming: false,
+    ...extra
+  };
+}
+
+export function upsertBotMessage(prev: Message[], botMsg: Message): Message[] {
+  const idx = prev.findIndex((m) => m.id === botMsg.id);
+  if (idx < 0) return [...prev, botMsg];
+  return prev.map((m) => (m.id === botMsg.id ? { ...botMsg, type: 'bot' as const } : m));
+}
 
 export const createWelcomeMessage = (): Message => ({
   id: '1',

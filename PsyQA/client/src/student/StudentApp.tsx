@@ -57,7 +57,14 @@ import { profilesStorageKey } from '../userStorage';
 import { restoreSessionSummary } from '../utils/chatHistory';
 import { MicroTrainingPanel } from '../components/MicroTrainingPanel';
 import { CATEGORY_PROMPT_MAP, DEFAULT_GUEST_USERS, DEMO_QUESTIONS } from './constants';
-import { createWelcomeMessage, profilesToRecord, progressToTrendData } from './studentHelpers';
+import {
+  createWelcomeMessage,
+  createTurnIds,
+  buildBotMessageFromResponse,
+  upsertBotMessage,
+  profilesToRecord,
+  progressToTrendData
+} from './studentHelpers';
 import { useToast } from './hooks/useToast';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { useStudentSession } from './hooks/useStudentSession';
@@ -378,49 +385,26 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       })
     );
 
+    const { userMsgId, botMsgId } = createTurnIds();
+    const botTime = new Date().toLocaleString('zh-CN');
+
     setMessages((prev) => [
       ...prev,
-      { id: Date.now().toString(), type: 'user', content: question, timestamp: new Date().toLocaleString('zh-CN') }
+      { id: userMsgId, type: 'user', content: question, timestamp: botTime }
     ]);
 
     try {
-      const botId = (Date.now() + 1).toString();
-      const botTime = new Date().toLocaleString('zh-CN');
       let response: QuestionResponse | null = null;
-      let streamOk = false;
 
       const { aborted } = await askQuestionStream(question, description, currentUserId, {
-        onToken: (text) => {
-          if (streamPausedRef.current) {
-            streamTokenBufferRef.current += text;
-            return;
-          }
-          streamOk = true;
+        onToken: () => {
+          // 完成后统一写入左侧白色 bot 气泡，流式阶段仅显示「正在思考」
           setIsLoading(false);
-          setMessages((prev) => {
-            const existing = prev.find((m) => m.id === botId);
-            if (!existing) {
-              return [
-                ...prev,
-                {
-                  id: botId,
-                  type: 'bot',
-                  content: text,
-                  timestamp: botTime,
-                  streaming: true,
-                  reactTrace: []
-                }
-              ];
-            }
-            return prev.map((m) =>
-              m.id === botId ? { ...m, content: `${m.content}${text}`, streaming: true } : m
-            );
-          });
         },
         onReactStep: (step) => {
           setIsLoading(false);
           setMessages((prev) => {
-            const existing = prev.find((m) => m.id === botId);
+            const existing = prev.find((m) => m.id === botMsgId);
             const trace = existing?.reactTrace ?? [];
             const nextTrace = [...trace.filter((s) => s.step !== step.step), step].sort(
               (a, b) => a.step - b.step
@@ -429,7 +413,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               return [
                 ...prev,
                 {
-                  id: botId,
+                  id: botMsgId,
                   type: 'bot',
                   content: '',
                   timestamp: botTime,
@@ -439,7 +423,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               ];
             }
             return prev.map((m) =>
-              m.id === botId ? { ...m, reactTrace: nextTrace, streaming: true } : m
+              m.id === botMsgId ? { ...m, type: 'bot' as const, reactTrace: nextTrace, streaming: true } : m
             );
           });
         },
@@ -462,61 +446,21 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       }
 
       if (!response) {
-        setMessages((prev) => prev.filter((m) => m.id !== botId));
+        setMessages((prev) => prev.filter((m) => m.id !== botMsgId));
         response = await askQuestion(question, description, currentUserId);
-      } else if (!streamOk) {
+      }
+
+      if (response) {
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === botId
-              ? {
-                  ...m,
-                  content: response!.answer,
-                  knowledgeSources: response!.knowledgeSources,
-                  similarQuestions: response!.similarQuestions,
-                  emotion: response!.emotion,
-                  risk: response!.risk,
-                  problem: response!.problem,
-                  emotionStyle: response!.emotionStyle,
-                  report: response!.report,
-                  llmUsed: response!.llmUsed,
-                  reactUsed: response!.reactUsed,
-                  reactMode: response!.reactMode,
-                  reactTrace: response!.reactTrace ?? [],
-                  generationHint: response!.generationHint,
-                  briefReport: response!.briefReport,
-                  streaming: false
-                }
-              : m
-          )
-        );
-      } else {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === botId
-              ? {
-                  ...m,
-                  content: response!.answer,
-                  knowledgeSources: response!.knowledgeSources,
-                  similarQuestions: response!.similarQuestions,
-                  emotion: response!.emotion,
-                  risk: response!.risk,
-                  problem: response!.problem,
-                  emotionStyle: response!.emotionStyle,
-                  report: response!.report,
-                  llmUsed: response!.llmUsed,
-                  reactUsed: response!.reactUsed,
-                  reactMode: response!.reactMode,
-                  reactTrace: response!.reactTrace ?? [],
-                  generationHint: response!.generationHint,
-                  briefReport: response!.briefReport,
-                  streaming: false
-                }
-              : m
-          )
+          upsertBotMessage(prev, buildBotMessageFromResponse(botMsgId, response!, botTime))
         );
       }
 
-      const finalResponse = response!;
+      if (!response) {
+        throw new Error('empty answer response');
+      }
+
+      const finalResponse = response;
 
       if (finalResponse.briefReport) {
         setLatestReport((prev) =>
@@ -583,26 +527,6 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             }
           }
         });
-      }
-
-      if (!streamOk) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: botId,
-            type: 'bot',
-            content: finalResponse.answer,
-            knowledgeSources: finalResponse.knowledgeSources,
-            similarQuestions: finalResponse.similarQuestions,
-            emotion: finalResponse.emotion,
-            risk: finalResponse.risk,
-            problem: finalResponse.problem,
-            emotionStyle: finalResponse.emotionStyle,
-            report: finalResponse.report,
-            llmUsed: finalResponse.llmUsed,
-            timestamp: botTime
-          }
-        ]);
       }
 
       void loadUserProfileFromServer(currentUserId, true);

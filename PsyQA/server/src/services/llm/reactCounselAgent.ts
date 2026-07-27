@@ -1,9 +1,10 @@
 import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
-import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { getCategoryName, type EmotionAnalysis, type RiskAssessment, type ProblemAnalysis, type ProblemCategory } from '../psych/emotionService';
-import { isReactDemoMode, resolveCounselAgentMode } from './agentPolicy';
+import { callLlmGenerate, callLlmGenerateStream, emitChunkedTokens } from './llmClient';
+import { isStrictFullReAct } from './agentPolicy';
 import type { ReactMode } from './agentPolicy';
+import { isValidCounselAnswer, sanitizeCounselAnswer } from './counselAnswerSanitizer';
 
 export interface ReActStep {
   step: number;
@@ -32,6 +33,8 @@ export interface ReActCounselContext {
   llmRationale?: string;
   prefetchedKnowledge?: KnowledgeItem[];
   prefetchedMemory?: SearchResult[];
+  /** 重复提问时提示模型换表述，避免与上次雷同 */
+  answerVariationHint?: string;
 }
 
 export interface ReActCounselResult {
@@ -59,8 +62,7 @@ const TOOL_NAMES = [
 const MIN_ANSWER_CHARS = 80;
 
 export function resolveReActPlan(ctx: ReActCounselContext): ReActPlan {
-  const agentMode = resolveCounselAgentMode();
-  if (isReactDemoMode() || agentMode === 'react') {
+  if (isStrictFullReAct()) {
     return { maxSteps: 4, skipSearchTools: false, prefetchOnly: false };
   }
 
@@ -91,23 +93,50 @@ function parseActionInput(raw: string | undefined): Record<string, unknown> {
   }
 }
 
+function parseActionInputJson(raw: string): string | undefined {
+  const start = raw.indexOf('{');
+  if (start < 0) return undefined;
+  let depth = 0;
+  for (let i = start; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return raw.slice(start, i + 1);
+    }
+  }
+  return undefined;
+}
+
+function normalizeReActAction(text: string): string | undefined {
+  const line = text.match(/Action:\s*([^\n]+)/i)?.[1]?.trim().toLowerCase() || '';
+  if (!line) return undefined;
+  if (line.startsWith('finish')) return 'finish';
+  if (line.includes('reflect') || line.includes('psych')) return 'reflect_psych';
+  if (line.includes('memory')) return 'search_user_memory';
+  if (line.includes('knowledge') || line === 'search') return 'search_knowledge';
+  const token = line.replace(/\s+/g, '_');
+  return TOOL_NAMES.includes(token as (typeof TOOL_NAMES)[number]) ? token : undefined;
+}
+
 export function parseReActOutput(text: string): {
   thought?: string;
   action?: string;
   actionInput: Record<string, unknown>;
 } {
   const thoughtMatch = text.match(/Thought:\s*([\s\S]*?)(?=\nAction:|\nAction Input:|$)/i);
-  const actionMatch = text.match(/Action:\s*([a-z_]+)/i);
-  const inputMatch =
-    text.match(/Action Input:\s*(\{[\s\S]*?\})(?:\s*\n|$)/i) ||
-    text.match(/Action Input:\s*([\s\S]*?)(?=\nObservation:|\nThought:|\nAction:|$)/i);
-
-  const action = actionMatch?.[1]?.trim().toLowerCase();
-  const actionInput = parseActionInput(inputMatch?.[1]);
+  const action = normalizeReActAction(text);
+  const inputMarker = text.match(/Action Input:\s*/i);
+  let actionInput: Record<string, unknown> = {};
+  if (inputMarker && inputMarker.index !== undefined) {
+    const tail = text.slice(inputMarker.index + inputMarker[0].length);
+    const jsonBlock = parseActionInputJson(tail);
+    actionInput = parseActionInput(jsonBlock || tail.split('\n')[0]);
+  }
 
   return {
     thought: thoughtMatch?.[1]?.trim(),
-    action: action && TOOL_NAMES.includes(action as (typeof TOOL_NAMES)[number]) ? action : undefined,
+    action,
     actionInput
   };
 }
@@ -184,6 +213,9 @@ function executeReflectPsych(ctx: ReActCounselContext): string {
 }
 
 function buildReActSystemPrompt(ctx: ReActCounselContext, plan: ReActPlan): string {
+  const strictNote = isStrictFullReAct()
+    ? `\n【完整 ReAct】必须严格完成 ${plan.maxSteps} 步：前 ${plan.maxSteps - 1} 步只能使用 search_knowledge、search_user_memory、reflect_psych；第 ${plan.maxSteps} 步才允许 finish。建议顺序：检索知识库 → 检索用户记忆 → 心理回顾 → 生成回复。`
+    : '';
   const prefetchNote = plan.prefetchOnly
     ? '\n编排层已预检索知识与记忆，优先 reflect_psych 后直接 finish，勿重复 search。'
     : '';
@@ -201,7 +233,7 @@ Action: （工具名）
 Action Input: （JSON）
 
 收到 Observation 后继续推理，直到调用 finish。
-最终 answer 须：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。${prefetchNote}
+最终 answer 须：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。${strictNote}${prefetchNote}
 语气：${ctx.tone}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 }
@@ -214,6 +246,10 @@ function buildReActUserPrompt(ctx: ReActCounselContext, trajectory: string): str
     `【开场参考】${ctx.intervention.openingPhrase}`,
     `【结尾参考】${ctx.intervention.closingPhrase}`
   ].filter(Boolean);
+
+  if (ctx.answerVariationHint) {
+    parts.push('', ctx.answerVariationHint);
+  }
 
   if (ctx.prefetchedKnowledge?.length) {
     parts.push('', '【已预检索知识】', formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2)));
@@ -244,24 +280,27 @@ async function generateFinishAnswer(
   ].join('\n');
 
   if (options?.onToken) {
-    return (
+    const full =
       (await callLlmGenerateStream(userPrompt, {
         systemPrompt,
         temperature: options?.temperature ?? 0.45,
         maxTokens: 1024,
-        timeoutMs: options?.timeoutMs ?? 90_000,
-        onToken: options.onToken
-      })) || ''
-    );
+        timeoutMs: options?.timeoutMs ?? 90_000
+      })) || '';
+    const cleaned = sanitizeCounselAnswer(full);
+    if (cleaned.length >= MIN_ANSWER_CHARS) {
+      emitChunkedTokens(cleaned, options.onToken);
+    }
+    return cleaned;
   }
-  return (
+  const raw =
     (await callLlmGenerate(userPrompt, {
       systemPrompt,
       temperature: options?.temperature ?? 0.45,
       maxTokens: 1024,
       timeoutMs: options?.timeoutMs ?? 90_000
-    })) || ''
-  );
+    })) || '';
+  return sanitizeCounselAnswer(raw);
 }
 
 function buildPrefetchTrajectory(ctx: ReActCounselContext): string {
@@ -290,9 +329,10 @@ function buildResult(
   steps: ReActStep[],
   reactMode: ReactMode
 ): ReActCounselResult {
-  const success = answer.length >= MIN_ANSWER_CHARS;
+  const cleaned = sanitizeCounselAnswer(answer);
+  const success = isValidCounselAnswer(cleaned);
   return {
-    answer: success ? answer : '',
+    answer: success ? cleaned : '',
     steps,
     success,
     reactUsed: reactMode === 'full',
@@ -380,10 +420,36 @@ export async function runReActCounselAgent(
     }
 
     if (parsed.action === 'finish') {
-      finalAnswer = String(
-        parsed.actionInput.answer || parsed.actionInput.response || parsed.actionInput.text || ''
-      ).trim();
-      if (!finalAnswer || finalAnswer.length < MIN_ANSWER_CHARS) {
+      if (isStrictFullReAct() && step < maxSteps) {
+        const observation = `第 ${step} 步不可 finish，请先使用 search_knowledge / search_user_memory / reflect_psych 完成推理（共需 ${maxSteps} 步）。`;
+        pushStep(
+          steps,
+          {
+            step,
+            thought: parsed.thought,
+            action: 'finish',
+            actionInput: parsed.actionInput,
+            observation
+          },
+          options?.onStep
+        );
+        trajectory += [
+          trajectory ? '\n' : '',
+          `Step ${step}`,
+          parsed.thought ? `Thought: ${parsed.thought}` : '',
+          'Action: finish',
+          `Action Input: ${JSON.stringify(parsed.actionInput)}`,
+          `Observation: ${observation}`
+        ]
+          .filter(Boolean)
+          .join('\n');
+        continue;
+      }
+
+      finalAnswer = sanitizeCounselAnswer(
+        String(parsed.actionInput.answer || parsed.actionInput.response || parsed.actionInput.text || '')
+      );
+      if (!isValidCounselAnswer(finalAnswer)) {
         finalAnswer = await generateFinishAnswer(ctx, trajectory, options);
       }
       pushStep(
@@ -444,11 +510,13 @@ export async function runReActCounselAgent(
     }
   }
 
-  const reactMode: ReactMode = steps.some((s) => s.action === 'search_knowledge' || s.action === 'search_user_memory')
+  const reactMode: ReactMode = isStrictFullReAct()
     ? 'full'
-    : steps.length > 1
+    : steps.some((s) => s.action === 'search_knowledge' || s.action === 'search_user_memory')
       ? 'full'
-      : 'prefetch';
+      : steps.length > 1
+        ? 'full'
+        : 'prefetch';
 
   return buildResult(finalAnswer, steps, reactMode);
 }

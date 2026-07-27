@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Message, KnowledgeItem, SimilarQuestion, EmotionType, ReActStep } from '../types';
-import { formatBotMessage, splitBotContent } from '../utils/formatMessage';
+import { formatBotMessage, splitBotContent, stripReActLeakFromDisplay } from '../utils/formatMessage';
 import { truncateText, parseKeywordTags, dedupeSimilarQuestions } from '../utils/refDisplay';
+import { SHOW_KNOWLEDGE_SOURCES, SHOW_REACT_TRACE } from '../config/features';
 
 interface ChatMessageProps {
   message: Message;
@@ -250,8 +251,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       return;
     }
 
+    const cleaned = stripReActLeakFromDisplay(message.content);
+
     if (message.streaming) {
-      setDisplayedContent(message.content);
+      setDisplayedContent(cleaned);
       setIsTyping(false);
       return;
     }
@@ -260,7 +263,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     setIsTyping(true);
     setRefsExpanded(false);
 
-    const content = message.content;
+    const content = cleaned;
+    if (!content) {
+      setIsTyping(false);
+      return;
+    }
+
     const { step, ms } = typingInterval(content.length);
     let index = 0;
 
@@ -294,7 +302,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   return (
-    <div className={`message-wrapper ${message.type}`}>
+    <div className={`message-wrapper ${isBot ? 'bot' : 'user'}`}>
       <div className="message-avatar">
         {message.type === 'user' ? (
           <div className="avatar user-avatar" aria-hidden="true">
@@ -323,7 +331,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </div>
         )}
 
-        <div className={`message-bubble ${message.type}`} id={isBot ? `bot-answer-${message.id}` : undefined}>
+        <div className={`message-bubble ${isBot ? 'bot' : 'user'}`} id={isBot ? `bot-answer-${message.id}` : undefined}>
           <div className="message-text">
             {formattedBody ?? (
               <>
@@ -391,7 +399,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </p>
         )}
 
-        {isBot && message.reactTrace && message.reactTrace.length > 0 && (
+        {SHOW_REACT_TRACE && isBot && message.reactTrace && message.reactTrace.length > 0 && (
           <ReActTracePanel
             steps={message.reactTrace}
             reactMode={message.reactMode}
@@ -403,7 +411,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           />
         )}
 
-        {!isTyping && isBot && hasKnowledge && (
+        {SHOW_KNOWLEDGE_SOURCES && !isTyping && isBot && hasKnowledge && (
           <div className="message-refs message-extras">
             <button
               type="button"

@@ -17,6 +17,9 @@ export const env = {
   trustProxy: process.env.TRUST_PROXY === '1',
   dashboardCacheTtlMs: Number(process.env.DASHBOARD_CACHE_TTL_MS || 30000),
   categoriesCacheTtlMs: Number(process.env.CATEGORIES_CACHE_TTL_MS || 300000),
+  /** 咨询答案缓存 TTL（毫秒）；设为 0 关闭。重复提问同一句话会跳过缓存 */
+  answerCacheTtlMs: Number(process.env.PSYQA_ANSWER_CACHE_TTL_MS ?? 120000),
+  answerCacheEnabled: process.env.PSYQA_ANSWER_CACHE !== '0',
   allowGuest: process.env.PSYQA_ALLOW_GUEST === '1' || process.env.NODE_ENV !== 'production',
   maxAskRequests: Number(
     process.env.PSYQA_MAX_ASK_REQUESTS ||

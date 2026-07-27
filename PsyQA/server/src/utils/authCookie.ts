@@ -16,7 +16,8 @@ export function setAuthCookie(res: Response, token: string): void {
 }
 
 export function clearAuthCookie(res: Response): void {
-  res.clearCookie(AUTH_COOKIE_NAME, { path: '/' });
+  const secure = process.env.NODE_ENV === 'production';
+  res.clearCookie(AUTH_COOKIE_NAME, { path: '/', secure, sameSite: 'lax' });
 }
 
 export function getTokenFromRequest(req: Request): string | undefined {
