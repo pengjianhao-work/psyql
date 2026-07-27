@@ -7,7 +7,7 @@ import { seedP0DemoData } from './services/seedDemoData';
 import { startKnowledgeScheduler } from './services/knowledgeScheduler';
 import { checkOllamaHealth, getOllamaModel } from './services/ollamaClient';
 import { shouldUseLlm, resolveActiveLlmProvider } from './services/llmClient';
-import { isZhipuConfigured, getZhipuModel, checkZhipuHealth } from './services/zhipuClient';
+import { isZhipuConfigured, getZhipuModel, checkZhipuHealth } from './services/llm/zhipuClient';
 import { assertAuthSecretConfigured } from './services/sessionService';
 
 try {
@@ -28,7 +28,7 @@ const server = app.listen(env.port, () => {
   logger.info('Server started', { port: env.port, env: env.nodeEnv });
   if (shouldUseLlm()) {
     if (isZhipuConfigured()) {
-      console.log('咨询回复：优先智谱 AI（永久免费 glm-4-flash），Ollama 为备选');
+      console.log('咨询回复：优先智谱 AI（GLM-4.7-Flash），Ollama 为备选');
       console.log(`智谱模型 ${getZhipuModel()} · 需在 .env 配置 ZHIPU_API_KEY`);
     } else {
       console.log('咨询回复：Ollama 大模型（配置 ZHIPU_API_KEY 可优先使用智谱免费 API）');

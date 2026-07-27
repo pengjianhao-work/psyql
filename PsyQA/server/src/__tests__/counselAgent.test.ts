@@ -9,6 +9,8 @@ describe('counselAgent', () => {
     expect(resolveCounselAgentMode()).toBe('react');
     process.env.PSYQA_AGENT_MODE = 'tot';
     expect(resolveCounselAgentMode()).toBe('tot');
+    process.env.PSYQA_AGENT_MODE = 'loop';
+    expect(resolveCounselAgentMode()).toBe('loop');
     if (prev === undefined) delete process.env.PSYQA_AGENT_MODE;
     else process.env.PSYQA_AGENT_MODE = prev;
   });

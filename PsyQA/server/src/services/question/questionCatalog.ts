@@ -23,13 +23,22 @@ export function enhanceQueryWithKeywords(query: string, extraTerms: string[] = [
 export const loadQuestions = async (): Promise<Question[]> => {
   const dataPath = psyqaFullJsonPath();
 
+  if (!fs.existsSync(dataPath)) {
+    console.warn(`[questions] 未找到 ${dataPath}，相似问题库为空（咨询主流程仍可用）`);
+    return [];
+  }
+
   return new Promise((resolve, reject) => {
     fs.readFile(dataPath, 'utf-8', (err, data) => {
-      if (err) return reject(err);
+      if (err) {
+        console.warn(`[questions] 读取失败，已降级为空题库: ${err.message}`);
+        return resolve([]);
+      }
       try {
         resolve(JSON.parse(data) as Question[]);
       } catch (parseError) {
-        reject(parseError);
+        console.warn('[questions] JSON 解析失败，已降级为空题库');
+        resolve([]);
       }
     });
   });

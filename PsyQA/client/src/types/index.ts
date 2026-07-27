@@ -60,7 +60,7 @@ export interface Message {
   llmUsed?: boolean;
   /** 使用 ReAct 推理链生成 */
   reactUsed?: boolean;
-  reactMode?: 'full' | 'prefetch' | 'planner' | 'tot' | 'off';
+  reactMode?: 'full' | 'prefetch' | 'planner' | 'tot' | 'loop' | 'off';
   reactTrace?: ReActStep[];
   generationHint?: 'llm_ok' | 'retrieval_miss' | 'kb_empty' | 'llm_fallback' | 'rule_only' | 'fast_kb';
   briefReport?: string;
@@ -266,7 +266,7 @@ export interface QuestionResponse {
   analysisSources?: AnalysisSources;
   llmUsed?: boolean;
   reactUsed?: boolean;
-  reactMode?: 'full' | 'prefetch' | 'planner' | 'tot' | 'off';
+  reactMode?: 'full' | 'prefetch' | 'planner' | 'tot' | 'loop' | 'off';
   reactTrace?: ReActStep[];
   generationHint?: 'llm_ok' | 'retrieval_miss' | 'kb_empty' | 'llm_fallback' | 'rule_only' | 'fast_kb';
   briefReport?: string;

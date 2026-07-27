@@ -3,16 +3,32 @@ import axios from 'axios';
 const DEFAULT_BASE = 'https://open.bigmodel.cn/api/paas/v4';
 
 export function getZhipuApiKey(): string | null {
-  const key = (process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY || '').trim();
+  const key = (
+    process.env.SILICONFLOW_API_KEY ||
+    process.env.QIANFAN_API_KEY ||
+    process.env.ZHIPU_API_KEY ||
+    process.env.GLM_API_KEY ||
+    ''
+  ).trim();
   return key.length >= 8 ? key : null;
 }
 
 export function getZhipuModel(): string {
-  return (process.env.ZHIPU_MODEL || 'glm-4-flash').trim();
+  return (
+    process.env.SILICONFLOW_MODEL ||
+    process.env.QIANFAN_MODEL ||
+    process.env.ZHIPU_MODEL ||
+    'glm-4-flash'
+  ).trim();
 }
 
 export function getZhipuBaseUrl(): string {
-  const raw = (process.env.ZHIPU_API_URL || DEFAULT_BASE).replace(/\/$/, '');
+  const raw = (
+    process.env.SILICONFLOW_API_URL ||
+    process.env.QIANFAN_API_URL ||
+    process.env.ZHIPU_API_URL ||
+    DEFAULT_BASE
+  ).replace(/\/$/, '');
   return raw;
 }
 

@@ -1,5 +1,5 @@
-export type CounselAgentMode = 'react' | 'planner' | 'tot' | 'auto';
-export type ReactMode = 'full' | 'prefetch' | 'planner' | 'tot' | 'off';
+export type CounselAgentMode = 'react' | 'planner' | 'tot' | 'loop' | 'auto';
+export type ReactMode = 'full' | 'prefetch' | 'planner' | 'tot' | 'loop' | 'off';
 
 export interface AgentPolicy {
   counselEnabled: boolean;
@@ -12,6 +12,8 @@ function isFastOrLoadTest(): boolean {
   return process.env.PSYQA_FAST_ANSWER === '1' || process.env.PSYQA_LOAD_TEST === '1';
 }
 
+const EXCLUSIVE_MODES: CounselAgentMode[] = ['planner', 'tot', 'loop'];
+
 export function resolveAgentPolicy(): AgentPolicy {
   const reactDisabled = process.env.PSYQA_REACT_ENABLED === '0';
   const fast = isFastOrLoadTest();
@@ -19,11 +21,12 @@ export function resolveAgentPolicy(): AgentPolicy {
   let mode: CounselAgentMode = 'auto';
   if (raw === 'planner' || raw === 'planner-responder') mode = 'planner';
   else if (raw === 'tot' || raw === 'tree-of-thoughts' || raw === 'tree_of_thoughts') mode = 'tot';
+  else if (raw === 'loop' || raw === 'core' || raw === 'taor' || raw === 'core-loop') mode = 'loop';
   else if (raw === 'react') mode = 'react';
 
   return {
     counselEnabled: !reactDisabled && !fast,
-    reactEnabled: !reactDisabled && !fast && mode !== 'planner' && mode !== 'tot',
+    reactEnabled: !reactDisabled && !fast && !EXCLUSIVE_MODES.includes(mode),
     reactDemo: process.env.PSYQA_REACT_DEMO === '1',
     mode
   };
@@ -35,7 +38,7 @@ export function shouldRunCounselAgent(): boolean {
 
 export function shouldUseReAct(): boolean {
   const p = resolveAgentPolicy();
-  return p.reactEnabled && p.mode !== 'planner' && p.mode !== 'tot';
+  return p.reactEnabled && !EXCLUSIVE_MODES.includes(p.mode);
 }
 
 export function isReactDemoMode(): boolean {

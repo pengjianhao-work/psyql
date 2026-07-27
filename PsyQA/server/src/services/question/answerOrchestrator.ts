@@ -81,7 +81,7 @@ export interface CombinedAnswer {
   reportPending?: boolean;
   /** ReAct 推理链 */
   reactUsed?: boolean;
-  reactMode?: 'full' | 'prefetch' | 'planner' | 'tot' | 'off';
+  reactMode?: 'full' | 'prefetch' | 'planner' | 'tot' | 'loop' | 'off';
   reactTrace?: ReActStep[];
   /** 生成路径提示：检索未命中 / 知识库空 / LLM 回退等 */
   generationHint?: 'llm_ok' | 'retrieval_miss' | 'kb_empty' | 'llm_fallback' | 'rule_only' | 'fast_kb';

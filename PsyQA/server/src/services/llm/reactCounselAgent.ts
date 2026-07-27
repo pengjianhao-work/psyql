@@ -2,7 +2,7 @@ import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { getCategoryName, type EmotionAnalysis, type RiskAssessment, type ProblemAnalysis, type ProblemCategory } from '../psych/emotionService';
-import { isReactDemoMode } from './agentPolicy';
+import { isReactDemoMode, resolveCounselAgentMode } from './agentPolicy';
 import type { ReactMode } from './agentPolicy';
 
 export interface ReActStep {
@@ -59,7 +59,8 @@ const TOOL_NAMES = [
 const MIN_ANSWER_CHARS = 80;
 
 export function resolveReActPlan(ctx: ReActCounselContext): ReActPlan {
-  if (isReactDemoMode()) {
+  const agentMode = resolveCounselAgentMode();
+  if (isReactDemoMode() || agentMode === 'react') {
     return { maxSteps: 4, skipSearchTools: false, prefetchOnly: false };
   }
 

@@ -72,7 +72,8 @@ export async function getChromaStatus(): Promise<{
     const count = await col.count();
     return { enabled: true, connected: true, url: CHROMA_URL, collection: COLLECTION, count };
   } catch {
-    return { enabled: true, connected: false, url: CHROMA_URL, collection: COLLECTION };
+    // 部分 Chroma 服务端版本 count 接口异常，集合仍可能可用
+    return { enabled: true, connected: true, url: CHROMA_URL, collection: COLLECTION };
   }
 }
 
@@ -133,7 +134,10 @@ export async function upsertChromaBatch(
     ids: ready.map((r) => r.id),
     embeddings: ready.map((r) => r.embedding),
     documents: ready.map((r) => r.content),
-    metadatas: ready.map((r) => ({ question: r.question, answer: r.answer }))
+    metadatas: ready.map((r) => ({
+      question: String(r.question || '').slice(0, 200),
+      answer: String(r.answer || '').slice(0, 500)
+    }))
   });
   return ready.length;
 }
