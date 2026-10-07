@@ -22,6 +22,8 @@ client/build/
 *.db-shm
 *.db-wal
 chroma_data/
+qdrant_data/
+tools/qdrant/
 server/data/*.json
 !server/data/.gitkeep
 

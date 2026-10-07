@@ -279,9 +279,8 @@ def build_vector_documents(
 
     if psyqa_path and psyqa_path.exists() and len(docs) < max_vector:
         data = load_json(psyqa_path)
-        step = max(1, len(data) // max(1, max_vector - len(docs)))
         idx = 0
-        for i in range(0, len(data), step):
+        for i in range(0, len(data)):
             if len(docs) >= max_vector:
                 break
             item = data[i]
@@ -300,7 +299,7 @@ def build_vector_documents(
 def main() -> int:
     parser = argparse.ArgumentParser(description="扩充心理知识库")
     parser.add_argument("--max-knowledge", type=int, default=600, help="mental_dataset 最大条目数")
-    parser.add_argument("--max-vector", type=int, default=6000, help="向量库最大文档数")
+    parser.add_argument("--max-vector", type=int, default=30000, help="向量库最大文档数")
     parser.add_argument("--download", action="store_true", help="缺失时下载 PsyQA")
     parser.add_argument("--psyqa-limit", type=int, default=15000, help="从 PsyQA 读取的上限条数")
     args = parser.parse_args()

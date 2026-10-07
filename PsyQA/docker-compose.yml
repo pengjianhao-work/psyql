@@ -14,6 +14,10 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen:7b}
       - PSYQA_CHROMA_ENABLED=${PSYQA_CHROMA_ENABLED:-0}
       - CHROMA_URL=http://chroma:8000
+      - PSYQA_QDRANT_ENABLED=${PSYQA_QDRANT_ENABLED:-0}
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=psyqa_knowledge
+      - QDRANT_VECTOR_SIZE=1024
       - PSYQA_SERVE_CLIENT=1
       - TRUST_PROXY=1
     volumes:
@@ -50,8 +54,20 @@ services:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
     restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
 volumes:
   ollama:
     driver: local
   chroma_data:
+    driver: local
+  qdrant_data:
     driver: local

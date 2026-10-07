@@ -144,9 +144,9 @@ export const RuntimeStatusBar: React.FC = () => {
 
             )}
 
-            {health.knowledge?.chromaConnected && health.knowledge.chromaCount != null && (
+            {health.knowledge?.qdrantConnected && health.knowledge.qdrantCount != null && (
 
-              <span className="muted"> · Chroma {health.knowledge.chromaCount} 条</span>
+              <span className="muted"> · Qdrant {health.knowledge.qdrantCount} 条</span>
 
             )}
 

@@ -12,6 +12,7 @@ import {
 } from './services/llm/llmClient';
 import { isZhipuConfigured } from './services/llm/zhipuClient';
 import { getChromaStatus } from './services/knowledge/chromaVectorService';
+import { getQdrantStatus } from './services/knowledge/qdrantVectorService';
 import { getKnowledgeEmbedStatus } from './services/knowledge/knowledgeStatus';
 import { BUILD_INFO } from './config/buildInfo';
 import { getAskLoadMetrics } from './controllers/questionController';
@@ -124,6 +125,7 @@ export function createApp(): Express {
     }
 
     const chroma = await getChromaStatus();
+    const qdrant = await getQdrantStatus();
     const knowledge = await getKnowledgeEmbedStatus();
     const load = getAskLoadMetrics();
     const reportQueue = getReportQueueMetrics();
@@ -140,6 +142,10 @@ export function createApp(): Express {
       chroma: {
         ...chroma,
         capacityHint: chroma.count != null ? `${chroma.count} vectors` : undefined
+      },
+      qdrant: {
+        ...qdrant,
+        capacityHint: qdrant.count != null ? `${qdrant.count} vectors` : undefined
       },
       knowledge,
       load,

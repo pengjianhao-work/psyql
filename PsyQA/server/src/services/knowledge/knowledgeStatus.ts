@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import { resolveDataFile } from '../../config/paths';
 import { getKnowledgeBaseCount, loadKnowledgeBase } from './ragService';
-import { getChromaStatus } from './chromaVectorService';
+import { getQdrantStatus } from './qdrantVectorService';
 
 export interface KnowledgeEmbedStatus {
   knowledgeCount: number;
@@ -9,6 +9,8 @@ export interface KnowledgeEmbedStatus {
   datasetBytes?: number;
   chromaConnected: boolean;
   chromaCount?: number;
+  qdrantConnected: boolean;
+  qdrantCount?: number;
   embedReady: boolean;
 }
 
@@ -34,17 +36,19 @@ export async function getKnowledgeEmbedStatus(): Promise<KnowledgeEmbedStatus> {
     /* file missing */
   }
 
-  const chroma = await getChromaStatus();
-  const chromaCount = chroma.count ?? 0;
+  const qdrant = await getQdrantStatus();
+  const qdrantCount = qdrant.count ?? 0;
   const embedReady =
-    knowledgeCount >= 100 && (chroma.connected ? chromaCount >= Math.min(knowledgeCount, 50) : true);
+    knowledgeCount >= 100 && (qdrant.connected ? qdrantCount >= Math.min(knowledgeCount, 50) : true);
 
   return {
     knowledgeCount,
     datasetUpdatedAt,
     datasetBytes,
-    chromaConnected: chroma.connected,
-    chromaCount: chroma.connected ? chromaCount : undefined,
+    chromaConnected: false,
+    chromaCount: undefined,
+    qdrantConnected: qdrant.connected,
+    qdrantCount: qdrant.connected ? qdrantCount : undefined,
     embedReady
   };
 }

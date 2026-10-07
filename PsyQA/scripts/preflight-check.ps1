@@ -51,13 +51,13 @@ try {
     }
 }
 
-# Chroma
-if ($envText -match 'PSYQA_CHROMA_ENABLED=1') {
-    $chromaUrl = if ($env:CHROMA_URL) { $env:CHROMA_URL } else { "http://localhost:8000" }
+# Qdrant
+if ($envText -match 'PSYQA_QDRANT_ENABLED=1') {
+    $qdrantUrl = if ($env:QDRANT_URL) { $env:QDRANT_URL } else { "http://localhost:6333" }
     try {
-        $null = Invoke-RestMethod -Uri "$chromaUrl/api/v1/heartbeat" -TimeoutSec 3
+        $null = Invoke-RestMethod -Uri "$qdrantUrl/healthz" -TimeoutSec 3
     } catch {
-        Add-Warn "Chroma 未连接 ($chromaUrl)，向量 RAG 将降级"
+        Add-Warn "Qdrant 未连接 ($qdrantUrl)，请运行 npm run start:qdrant"
     }
 }
 

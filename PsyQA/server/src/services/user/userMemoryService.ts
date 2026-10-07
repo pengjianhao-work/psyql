@@ -11,14 +11,13 @@ import type { PsychSnapshot } from '../../types/psychHistory';
 import type { RagBlendWeights, AgentPhase } from '../../types/userAgent';
 import type { SearchResult } from '../knowledge/vectorDBService';
 import {
-  isChromaEnabled,
-  searchUserChromaCollection,
-  searchPublicChromaCollection,
-  upsertUserDialogVector,
-  deleteUserChromaCollection,
-  deleteUserChromaVectors,
-  getUserChromaCollectionName
-} from '../knowledge/chromaVectorService';
+  isQdrantEnabled,
+  searchUserQdrant,
+  upsertUserQdrantDialog,
+  deleteUserQdrantMemory,
+  deleteUserQdrantVectors,
+  getUserQdrantCollectionName
+} from '../knowledge/qdrantVectorService';
 import { embedText } from '../knowledge/embeddingService';
 import { cacheGetOrSet } from '../../utils/memoryCache';
 import { getLockedMemoryBoost, isMemoryArchived } from './memoryTagService';
@@ -112,14 +111,18 @@ export async function searchBlendedUserMemory(
   return cacheGetOrSet(cacheKey, 120_000, () => searchBlendedUserMemoryUncached(userId, query, totalK));
 }
 
+async function searchPublicKnowledge(query: string, topK: number): Promise<SearchResult[]> {
+  const { searchVectorDb } = await import('../knowledge/vectorDBService');
+  return searchVectorDb(query, topK);
+}
+
 async function searchBlendedUserMemoryUncached(
   userId: string,
   query: string,
   totalK = 5
 ): Promise<SearchResult[]> {
-  if (!isChromaEnabled() || !userId || userId === 'default_user') {
-    const pub = await searchPublicChromaCollection(query, totalK);
-    return pub;
+  if (!isQdrantEnabled() || !userId || userId === 'default_user') {
+    return searchPublicKnowledge(query, totalK);
   }
 
   const { user, public: pubW, phase } = getRagBlendWeights(userId);
@@ -127,8 +130,8 @@ async function searchBlendedUserMemoryUncached(
   const pubK = Math.max(1, totalK - userK);
 
   const [userHitsRaw, pubHits] = await Promise.all([
-    searchUserChromaCollection(userId, query, userK),
-    searchPublicChromaCollection(query, pubK)
+    searchUserQdrant(userId, query, userK),
+    searchPublicKnowledge(query, pubK)
   ]);
 
   const userHits = userHitsRaw.filter(
@@ -159,7 +162,7 @@ async function searchBlendedUserMemoryUncached(
   }
 
   if (out.length === 0 && phase === 'collect') {
-    return searchPublicChromaCollection(query, totalK);
+    return searchPublicKnowledge(query, totalK);
   }
   return out;
 }
@@ -231,7 +234,7 @@ export async function indexUserDialogMemory(input: {
   const phase = resolveAgentPhase(userId);
   updateUserAgentProfile(userId, { agentPhase: phase });
 
-  if (!isChromaEnabled()) return;
+  if (!isQdrantEnabled()) return;
 
   const month = parseDialogMonth(dialogTime);
   const emotion = psych?.emotion ?? 'neutral';
@@ -245,7 +248,7 @@ export async function indexUserDialogMemory(input: {
   const embedding = await embedText(content);
   if (!embedding) return;
 
-  const ok = await upsertUserDialogVector(userId, {
+  const ok = await upsertUserQdrantDialog(userId, {
     id: chromaId,
     content,
     embedding,
@@ -264,7 +267,7 @@ export async function indexUserDialogMemory(input: {
       userId,
       dialogTime,
       chromaId,
-      collectionName: getUserChromaCollectionName(userId),
+      collectionName: getUserQdrantCollectionName(),
       month,
       emotion,
       triggerTag: tag,
@@ -278,11 +281,11 @@ export async function indexUserDialogMemory(input: {
   }
 }
 
-/** 清空用户专属 Agent 数据（SQLite 画像 + 向量元数据 + Chroma 用户集合） */
+/** 清空用户专属 Agent 数据（SQLite 画像 + 向量元数据 + Qdrant 用户记忆） */
 export async function clearUserAgentMemory(userId: string): Promise<{ chromaDeleted: boolean }> {
   const { clearUserAgentData } = await import('../../db/userAgentStore');
   clearUserAgentData(userId);
-  const chromaDeleted = await deleteUserChromaCollection(userId);
+  const chromaDeleted = await deleteUserQdrantMemory(userId);
   return { chromaDeleted };
 }
 
@@ -312,7 +315,7 @@ export async function deleteUserDialogMemory(
   const row = rows.find((r) => r.dialogTime === dialogTime);
   let chromaDeleted = false;
   if (row?.chromaId) {
-    chromaDeleted = await deleteUserChromaVectors(userId, [row.chromaId]);
+    chromaDeleted = await deleteUserQdrantVectors(userId, [row.chromaId]);
   }
   const deleted = deleteUserDialogVectorMeta(userId, dialogTime);
   return { deleted, chromaDeleted };
@@ -328,7 +331,7 @@ export function buildAgentExportBundle(userId: string) {
     userId,
     phase: weights.phase,
     ragWeights: weights,
-    chromaCollection: getUserChromaCollectionName(userId),
+    chromaCollection: getUserQdrantCollectionName(),
     profile: {
       basicJson: profile.basicJson,
       emotionTimelineJson: profile.emotionTimelineJson,
@@ -339,6 +342,6 @@ export function buildAgentExportBundle(userId: string) {
       annualReportsJson: profile.annualReportsJson,
       updatedAt: profile.updatedAt
     },
-    note: '向量嵌入存储于 Chroma 用户集合，完整迁移需同时备份该 collection'
+    note: '向量嵌入存储于 Qdrant 用户记忆集合，完整迁移需同时备份该 collection'
   };
 }

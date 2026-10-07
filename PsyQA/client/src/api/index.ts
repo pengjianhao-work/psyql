@@ -64,6 +64,8 @@ export interface RuntimeHealth {
     datasetUpdatedAt?: string;
     chromaConnected: boolean;
     chromaCount?: number;
+    qdrantConnected?: boolean;
+    qdrantCount?: number;
     embedReady: boolean;
   };
   build?: {

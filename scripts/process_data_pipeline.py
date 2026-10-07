@@ -164,7 +164,7 @@ def main() -> int:
     parser.add_argument("--offline", action="store_true", help="训练拉取：纯离线扫描")
     parser.add_argument("--tier", default=os.environ.get("KNOWLEDGE_MONTHLY_TIER", "domestic"))
     parser.add_argument("--max-knowledge", type=int, default=int(os.environ.get("KNOWLEDGE_MAX_ITEMS", "800")))
-    parser.add_argument("--max-vector", type=int, default=int(os.environ.get("KNOWLEDGE_MAX_VECTOR", "8000")))
+    parser.add_argument("--max-vector", type=int, default=int(os.environ.get("KNOWLEDGE_MAX_VECTOR", "30000")))
     parser.add_argument("--embed-limit", type=int, default=int(os.environ.get("EMBED_BATCH_LIMIT", "500")))
     parser.add_argument("--skip-embeddings", action="store_true")
     parser.add_argument("--skip-chroma", action="store_true")

@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { preprocessText, computeTextRelevance, extractChineseNGrams } from '../../utils/textProcessor';
 import { getDb } from '../../db/database';
-import { embedText, loadStoredEmbedding, cosineSimilarity as embeddingCosine } from './embeddingService';
 import { resolveDataFile, vectorDbPath } from '../../config/paths';
+import { SparseIndex } from './sparseIndex';
+import { fuseHybridResults } from './hybridRetrieval';
 
 export type { SearchResult } from './searchTypes';
 import type { SearchResult } from './searchTypes';
@@ -18,6 +18,7 @@ interface VectorDocument {
 
 class VectorDatabase {
   private documents: VectorDocument[] = [];
+  private sparse = new SparseIndex();
   private storagePath: string;
 
   constructor() {
@@ -25,27 +26,16 @@ class VectorDatabase {
     this.load();
   }
 
-  private tokenize(text: string): string[] {
-    const processed = preprocessText(text);
-    const tokens = new Set<string>();
-    for (let i = 0; i < processed.length - 1; i++) {
-      tokens.add(processed.substring(i, i + 2));
-    }
-    const words = processed.split(' ').filter((w) => w.length > 0);
-    words.forEach((w) => tokens.add(w));
-    return Array.from(tokens);
-  }
-
   addDocument(question: string, answer: string): void {
     const content = `${question} ${answer}`;
-    const tokens = this.tokenize(content);
     this.documents.push({
       id: Date.now().toString(),
       question,
       answer,
       content,
-      tokens
+      tokens: []
     });
+    this.sparse.add(question, answer);
   }
 
   addDocuments(items: Array<{ question: string; answer: string }>): void {
@@ -54,55 +44,13 @@ class VectorDatabase {
     console.log(`Added ${items.length} documents to vector database`);
   }
 
-  private tfIdfVector(tokens: string[]): Map<string, number> {
-    const tf = new Map<string, number>();
-    for (const t of tokens) {
-      tf.set(t, (tf.get(t) || 0) + 1);
-    }
-    const vec = new Map<string, number>();
-    const docLen = tokens.length || 1;
-    const n = this.documents.length || 1;
-    for (const [term, count] of tf.entries()) {
-      const df = this.documents.filter((d) => d.tokens.includes(term)).length;
-      const idf = Math.log((n + 1) / (df + 1)) + 1;
-      vec.set(term, (count / docLen) * idf);
-    }
-    return vec;
-  }
-
-  private cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
-    let dot = 0;
-    let normA = 0;
-    let normB = 0;
-    for (const v of a.values()) normA += v * v;
-    for (const v of b.values()) normB += v * v;
-    for (const [k, va] of a.entries()) {
-      const vb = b.get(k);
-      if (vb) dot += va * vb;
-    }
-    if (!normA || !normB) return 0;
-    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-  }
-
-  searchTfidf(query: string, topK = 5): SearchResult[] {
+  searchSparse(query: string, topK = 5): SearchResult[] {
     if (this.documents.length === 0) return [];
-
-    const queryTokens = Array.from(new Set(extractChineseNGrams(query)));
-    const queryVec = this.tfIdfVector(queryTokens);
-    const results = this.documents.map((doc) => {
-      const docVec = this.tfIdfVector(doc.tokens);
-      const tfidf = this.cosineSimilarity(queryVec, docVec);
-      const relevance = computeTextRelevance(query, doc.question, doc.answer) / 12;
-      const similarity = tfidf * 0.72 + relevance * 0.28;
-      return { id: doc.id, question: doc.question, answer: doc.answer, similarity };
+    return this.sparse.search(query, topK).flatMap((hit) => {
+      const doc = this.documents[hit.index];
+      if (!doc) return [];
+      return [{ id: doc.id, question: doc.question, answer: doc.answer, similarity: hit.similarity }];
     });
-
-    const sorted = results.filter((r) => r.similarity > 0.18).sort((a, b) => b.similarity - a.similarity);
-    if (sorted.length === 0) {
-      return results.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
-    }
-    const topScore = sorted[0].similarity;
-    return sorted.filter((r) => r.similarity >= topScore * 0.55).slice(0, topK);
   }
 
   save(): void {
@@ -127,10 +75,14 @@ class VectorDatabase {
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
         const data = JSON.parse(content) as Array<Omit<VectorDocument, 'tokens'>>;
+        this.sparse.clear();
         this.documents = data.map((doc) => ({
           ...doc,
-          tokens: this.tokenize(doc.content)
+          tokens: []
         }));
+        for (const doc of this.documents) {
+          this.sparse.add(doc.question, doc.answer);
+        }
         console.log(`Loaded ${this.documents.length} documents from vector database`);
         this.syncToSqlite();
       } else {
@@ -166,6 +118,7 @@ class VectorDatabase {
 
   reloadFromDisk(): number {
     this.documents = [];
+    this.sparse.clear();
     this.load();
     return this.documents.length;
   }
@@ -192,35 +145,14 @@ class VectorDatabase {
 export const vectorDb = new VectorDatabase();
 
 export async function searchVectorDb(query: string, topK = 5): Promise<SearchResult[]> {
-  const { isChromaEnabled, searchChroma } = await import('./chromaVectorService');
-  if (isChromaEnabled()) {
-    const chromaHits = await searchChroma(query, topK);
-    if (chromaHits.length > 0) {
-      return chromaHits;
-    }
-  }
-
-  const tfidf = vectorDb.searchTfidf(query, Math.max(topK * 4, 12));
-  const { isOllamaAvailable } = await import('../llm/ollamaAvailability');
-  if (!(await isOllamaAvailable())) {
-    return tfidf.slice(0, topK);
-  }
-
-  const queryEmbedding = await embedText(query);
-  if (!queryEmbedding) return tfidf.slice(0, topK);
-
-  const candidates = tfidf.slice(0, 40);
-  const rescored: SearchResult[] = [];
-  for (const c of candidates) {
-    const docEmb = loadStoredEmbedding(c.id);
-    if (!docEmb) {
-      rescored.push(c);
-      continue;
-    }
-    const sim = embeddingCosine(queryEmbedding, docEmb);
-    rescored.push({ ...c, similarity: sim * 0.75 + c.similarity * 0.25 });
-  }
-  return rescored.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
+  const pool = Math.max(topK * 4, 12);
+  const { isQdrantEnabled, searchQdrant } = await import('./qdrantVectorService');
+  const densePromise = isQdrantEnabled() ? searchQdrant(query, pool) : Promise.resolve([]);
+  const sparseHits = vectorDb.searchSparse(query, pool);
+  const denseHits = await densePromise;
+  const fused = fuseHybridResults(denseHits, sparseHits, pool);
+  const { rerankResults } = await import('./rerankService');
+  return rerankResults(query, fused, topK);
 }
 
 export const addToVectorDb = (question: string, answer: string): void => {

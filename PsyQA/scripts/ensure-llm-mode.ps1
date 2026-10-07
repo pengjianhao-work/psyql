@@ -36,9 +36,14 @@ if ($content -notmatch '(?m)^\s*OLLAMA_EMBED_MODEL\s*=') {
     $content = $content.TrimEnd() + "`nOLLAMA_EMBED_MODEL=nomic-embed-text`n"
 }
 if ($content -notmatch '(?m)^\s*PSYQA_CHROMA_ENABLED\s*=') {
-    $content = $content.TrimEnd() + "`nPSYQA_CHROMA_ENABLED=1`n"
+    $content = $content.TrimEnd() + "`nPSYQA_CHROMA_ENABLED=0`n"
 } else {
-    $content = $content -replace '(?m)^\s*PSYQA_CHROMA_ENABLED\s*=.*$', 'PSYQA_CHROMA_ENABLED=1'
+    $content = $content -replace '(?m)^\s*PSYQA_CHROMA_ENABLED\s*=.*$', 'PSYQA_CHROMA_ENABLED=0'
+}
+if ($content -notmatch '(?m)^\s*PSYQA_QDRANT_ENABLED\s*=') {
+    $content = $content.TrimEnd() + "`nPSYQA_QDRANT_ENABLED=1`nQDRANT_URL=http://localhost:6333`nQDRANT_COLLECTION=psyqa_knowledge`n"
+} else {
+    $content = $content -replace '(?m)^\s*PSYQA_QDRANT_ENABLED\s*=.*$', 'PSYQA_QDRANT_ENABLED=1'
 }
 
 Set-Content -LiteralPath $envFile -Value ($content.TrimEnd() + "`n") -Encoding UTF8
