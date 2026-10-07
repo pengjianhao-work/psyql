@@ -1,0 +1,137 @@
+{
+  "byUser": {
+    "acc_c1e64c64763d7c5d": {
+      "2026/06/03 16:09:27": {
+        "dialogTime": "2026/06/03 16:09:27",
+        "tags": [
+          "other"
+        ],
+        "locked": true,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-08T18:56:04.453Z"
+      },
+      "2026/06/03 16:13:37": {
+        "dialogTime": "2026/06/03 16:13:37",
+        "tags": [
+          "other"
+        ],
+        "locked": true,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-08T18:56:05.904Z"
+      },
+      "2026/06/03 16:04:44": {
+        "dialogTime": "2026/06/03 16:04:44",
+        "tags": [
+          "other"
+        ],
+        "locked": true,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-08T18:56:07.600Z"
+      }
+    },
+    "acc_c7dc293c5ccfaee8": {
+      "2026/07/27 18:30:09": {
+        "dialogTime": "2026/07/27 18:30:09",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T10:30:09.842Z"
+      },
+      "2026/07/27 18:30:37": {
+        "dialogTime": "2026/07/27 18:30:37",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T10:30:37.577Z"
+      },
+      "2026/07/27 18:33:42": {
+        "dialogTime": "2026/07/27 18:33:42",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T10:33:43.413Z"
+      },
+      "2026/07/27 20:22:41": {
+        "dialogTime": "2026/07/27 20:22:41",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T12:22:41.582Z"
+      },
+      "2026/07/27 20:23:15": {
+        "dialogTime": "2026/07/27 20:23:15",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T12:23:15.311Z"
+      },
+      "2026/07/27 20:23:34": {
+        "dialogTime": "2026/07/27 20:23:34",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T12:23:34.290Z"
+      },
+      "2026/07/27 20:23:55": {
+        "dialogTime": "2026/07/27 20:23:55",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T12:23:55.266Z"
+      },
+      "2026/07/27 20:28:10": {
+        "dialogTime": "2026/07/27 20:28:10",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T12:28:10.581Z"
+      },
+      "2026/07/27 20:28:52": {
+        "dialogTime": "2026/07/27 20:28:52",
+        "tags": [
+          "emotion",
+          "academic"
+        ],
+        "locked": false,
+        "archived": false,
+        "autoTagged": true,
+        "updatedAt": "2026-07-27T12:28:52.605Z"
+      }
+    }
+  }
+}
