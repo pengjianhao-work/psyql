@@ -474,6 +474,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 intervention: finalResponse.intervention,
                 carePlan: finalResponse.carePlan,
                 analysisSources: finalResponse.analysisSources,
+                intent: finalResponse.intent,
                 llmUsed: finalResponse.llmUsed,
                 report: finalResponse.briefReport || finalResponse.report,
                 statModel: finalResponse.statModel,
@@ -504,6 +505,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
         intervention: finalResponse.intervention,
         carePlan: finalResponse.carePlan,
         analysisSources: finalResponse.analysisSources,
+        intent: finalResponse.intent,
         llmUsed: finalResponse.llmUsed,
         report: finalResponse.report,
         statModel: finalResponse.statModel,
@@ -1089,6 +1091,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                     intervention={latestReport.intervention}
                     carePlan={latestReport.carePlan}
                     analysisSources={latestReport.analysisSources}
+                    intentLabel={latestReport.intent?.label}
                     llmUsed={latestReport.llmUsed}
                     reportPending={reportPending}
                     implicitNeeds={latestReport.implicitNeeds}

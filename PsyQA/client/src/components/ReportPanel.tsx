@@ -35,7 +35,8 @@ interface ReportPanelProps {
   problem?: ProblemAnalysis;
   intervention?: InterventionInfo;
   carePlan?: CarePlanSuggestion;
-  analysisSources?: { emotion: string; risk: string; problem: string };
+  analysisSources?: { emotion: string; risk: string; problem: string; intent?: string };
+  intentLabel?: string;
   llmUsed?: boolean;
   emotionStyle: EmotionStyle;
   report: string;
@@ -83,6 +84,7 @@ export const ReportPanel: React.FC<ReportPanelProps> = ({
   intervention,
   carePlan,
   analysisSources,
+  intentLabel,
   llmUsed,
   reportPending,
   implicitNeeds,
@@ -541,6 +543,8 @@ export const ReportPanel: React.FC<ReportPanelProps> = ({
             <p className="report-tech-line">
               分析来源：情绪 {analysisSources?.emotion || 'rule'} · 风险 {analysisSources?.risk || 'rule'} · 问题{' '}
               {analysisSources?.problem || 'rule'}
+              {intentLabel ? ` · 意图 ${intentLabel}` : ''}
+              {analysisSources?.intent ? `（${analysisSources.intent}）` : ''}
               {llmUsed ? ' · 已启用 LLM' : ''}
             </p>
           )}

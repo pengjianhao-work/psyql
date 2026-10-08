@@ -117,6 +117,15 @@ export interface AnalysisSources {
   emotion: 'rule' | 'llm' | 'hybrid';
   risk: 'rule' | 'llm' | 'hybrid';
   problem: 'rule' | 'llm' | 'hybrid';
+  intent?: 'rule' | 'llm' | 'hybrid';
+}
+
+export type IntentKind = 'greeting' | 'venting' | 'advice' | 'followup' | 'crisis' | 'offtopic';
+
+export interface IntentAnalysis {
+  kind: IntentKind;
+  confidence: number;
+  label: string;
 }
 
 export type MetricLevel = 'low' | 'moderate' | 'high' | 'severe';
@@ -260,6 +269,7 @@ export interface QuestionResponse {
   emotion: EmotionAnalysis;
   risk: RiskAssessment;
   problem: ProblemAnalysis;
+  intent?: IntentAnalysis;
   emotionStyle: EmotionStyle;
   intervention?: InterventionInfo;
   carePlan?: CarePlanSuggestion;

@@ -38,6 +38,13 @@ import {
 import { getInterventionPlan, ETHICS_FOOTER, HIGH_RISK_CLARIFICATION } from '../psych/interventionService';
 import { analyzePsychState, PsychAnalysisBundle } from '../psych/psychAnalysisService';
 import {
+  classifyIntent,
+  formatIntentDirective,
+  intentKnowledgeLimit,
+  intentMemoryLimit,
+  IntentAnalysis
+} from '../psych/intentService';
+import {
   generateFollowUpQuestions,
   mapFollowUpsToSimilarQuestions,
   getProblemLabel
@@ -68,6 +75,7 @@ export interface CombinedAnswer {
   emotion?: EmotionAnalysis;
   risk?: RiskAssessment;
   problem?: ProblemAnalysis;
+  intent?: IntentAnalysis;
   emotionStyle?: { greeting: string; tone: string; color: string; emoji: string };
   intervention?: { frameworkId: string; frameworkName: string };
   carePlan?: { categoryName: string; suggestion: string };
@@ -197,8 +205,14 @@ function buildAnswerVariationHint(askRepeat: number): string {
   return `【重要】用户第 ${askRepeat} 次提出相同或非常相似的问题。请换一种说法与结构，${style}；勿复制「亲爱的同学」等模板开头，避免与上次回复雷同。`;
 }
 
-function getCacheKey(userId: string, question: string, riskLevel: string, context: string): string {
-  return `v5:${userId}:${riskLevel}:${question}:${context}`.substring(0, 320);
+function getCacheKey(
+  userId: string,
+  question: string,
+  riskLevel: string,
+  intentKind: string,
+  context: string
+): string {
+  return `v6:${userId}:${riskLevel}:${intentKind}:${question}:${context}`.substring(0, 360);
 }
 
 function shouldSkipAnswerCache(riskLevel: string): boolean {
@@ -420,14 +434,96 @@ const buildPsychSnapshot = (
 function ruleOnlyPsychBundle(
   emotion: EmotionAnalysis,
   risk: RiskAssessment,
-  problem: ProblemAnalysis
+  problem: ProblemAnalysis,
+  intent: IntentAnalysis
 ): PsychAnalysisBundle {
   return {
     emotion,
     risk,
     problem,
-    sources: { emotion: 'rule', risk: 'rule', problem: 'rule' },
+    intent,
+    sources: { emotion: 'rule', risk: 'rule', problem: 'rule', intent: 'rule' },
     llmUsed: false
+  };
+}
+
+function buildIntentShortcutAnswer(kind: 'greeting' | 'offtopic', greeting: string): string {
+  if (kind === 'greeting') {
+    return `${greeting}\n\n我在。你可以直接说说最近让你难受、紧张，或者不知道怎么办的事。${ETHICS_FOOTER}`;
+  }
+  return `我主要陪你聊心情、学业、人际和压力。写作业、写代码或查无关信息，我帮不上忙。\n\n如果这件事让你烦、累或者不知道怎么办，可以直接说感受。${ETHICS_FOOTER}`;
+}
+
+function finishLightweightTurn(input: {
+  userId: string;
+  question: string;
+  answer: string;
+  emotion: EmotionAnalysis;
+  risk: RiskAssessment;
+  problem: ProblemAnalysis;
+  intent: IntentAnalysis;
+  similarQuestions: SimilarQuestion[];
+  startTime: number;
+}): CombinedAnswer {
+  const sources = {
+    emotion: 'rule' as const,
+    risk: 'rule' as const,
+    problem: 'rule' as const,
+    intent: 'rule' as const
+  };
+  const intervention = getInterventionPlan(input.emotion.emotion, input.problem.category, input.risk.level);
+  const carePlan = getCarePlanSuggestion(input.problem.category);
+  const emotionStyle = getEmotionStyle(input.emotion.emotion);
+  const psychSnapshot = buildPsychSnapshot(
+    input.emotion,
+    input.risk,
+    input.problem,
+    intervention.frameworkId,
+    sources
+  );
+  const report =
+    input.intent.kind === 'greeting'
+      ? '本次是寒暄，还没有进入具体困扰。'
+      : '本次问题和情绪陪伴无关，已把对话轻轻拉回来。';
+  const summary = generateSummary(input.question, input.answer, psychSnapshot);
+  const dialogId = saveDialog(input.userId, input.question, input.answer, summary, psychSnapshot, report);
+  try {
+    refreshUserProfile(input.userId);
+  } catch {
+    /* profile refresh is best-effort */
+  }
+  const metrics = refineMetricsWithSignals(input.emotion, input.risk, input.problem);
+  const statModel = buildPsychStatModel(
+    input.emotion,
+    input.risk,
+    input.problem,
+    metrics,
+    getUserPsychSnapshots(input.userId)
+  );
+  return {
+    answer: input.answer,
+    knowledgeSources: [],
+    similarQuestions: input.similarQuestions,
+    vectorDbResults: [],
+    summary,
+    emotion: input.emotion,
+    risk: input.risk,
+    problem: input.problem,
+    intent: input.intent,
+    emotionStyle,
+    intervention: { frameworkId: intervention.frameworkId, frameworkName: intervention.frameworkName },
+    carePlan: { categoryName: carePlan.categoryName, suggestion: carePlan.suggestion },
+    analysisSources: sources,
+    llmUsed: false,
+    generationHint: 'rule_only',
+    briefReport: `${report}\n意图：${input.intent.label}`,
+    report,
+    reportPending: false,
+    statModel,
+    modelUsed: 'Intent-Shortcut',
+    responseTime: Date.now() - input.startTime,
+    dialogId,
+    portrait: buildPlaceholderPortrait()
   };
 }
 
@@ -463,10 +559,12 @@ export const generateAIAnswer = async (
     const intervention = getInterventionPlan(ruleEmotion.emotion, ruleProblem.category, ruleRisk.level);
     const carePlan = getCarePlanSuggestion(ruleProblem.category);
     const emotionStyle = getEmotionStyle(ruleEmotion.emotion);
+    const crisisIntent = classifyIntent(fullText, { hasHistory: Boolean(lastPsych) });
     const psychSnapshot = buildPsychSnapshot(ruleEmotion, ruleRisk, ruleProblem, intervention.frameworkId, {
       emotion: 'rule',
       risk: 'rule',
-      problem: 'rule'
+      problem: 'rule',
+      intent: 'rule'
     });
     const placeholderReport = buildPlaceholderReport(psychSnapshot);
     const priorityAnswer = `
@@ -512,10 +610,11 @@ export const generateAIAnswer = async (
       emotion: ruleEmotion,
       risk: ruleRisk,
       problem: ruleProblem,
+      intent: crisisIntent,
       emotionStyle,
       intervention: { frameworkId: intervention.frameworkId, frameworkName: intervention.frameworkName },
       carePlan: { categoryName: carePlan.categoryName, suggestion: carePlan.suggestion },
-      analysisSources: { emotion: 'rule', risk: 'rule', problem: 'rule' },
+      analysisSources: { emotion: 'rule', risk: 'rule', problem: 'rule', intent: 'rule' },
       llmUsed: false,
       report: placeholderReport,
       reportPending: true,
@@ -527,34 +626,67 @@ export const generateAIAnswer = async (
     };
   }
 
+  const hasHistory = Boolean(lastPsych);
+  const ruleIntent = classifyIntent(fullText, { hasHistory });
+  console.log(`[intent] ${ruleIntent.label} ${(ruleIntent.confidence * 100).toFixed(0)}%`);
+
+  if (ruleIntent.kind === 'greeting' || ruleIntent.kind === 'offtopic') {
+    const emotionStyle = getEmotionStyle(ruleEmotion.emotion);
+    return finishLightweightTurn({
+      userId,
+      question,
+      answer: buildIntentShortcutAnswer(ruleIntent.kind, emotionStyle.greeting),
+      emotion: ruleEmotion,
+      risk: ruleRisk,
+      problem: ruleProblem,
+      intent: ruleIntent,
+      similarQuestions,
+      startTime
+    });
+  }
+
   const useLlm = !loadTestFast && shouldUseLlm();
   let llmOk = useLlm && (await isLlmAvailable());
   if (useLlm && !llmOk) {
     llmOk = await waitForLlmWithBackoff();
   }
 
-  const ruleBundle = ruleOnlyPsychBundle(ruleEmotion, ruleRisk, ruleProblem);
+  const ruleBundle = ruleOnlyPsychBundle(ruleEmotion, ruleRisk, ruleProblem, ruleIntent);
   const ruleRetrievalQuery = enhanceQueryWithKeywords(fullText, [
     ...ruleProblem.keywords,
-    ...ruleProblem.subcategories
+    ...ruleProblem.subcategories,
+    ...(ruleIntent.kind === 'followup' && lastPsych?.problem ? [getCategoryName(lastPsych.problem)] : [])
   ]);
 
   const psychPromise: Promise<PsychAnalysisBundle> = llmOk
-    ? analyzePsychState(fullText, priorEmotion, { tryLlm: true })
+    ? analyzePsychState(fullText, priorEmotion, { tryLlm: true, hasHistory })
     : Promise.resolve(ruleBundle);
 
   const retrievalPromise = Promise.resolve(
-    retrieveKnowledge(ruleRetrievalQuery, 3, ruleProblem.category, ruleEmotion.emotion)
+    retrieveKnowledge(
+      ruleRetrievalQuery,
+      intentKnowledgeLimit(ruleIntent.kind),
+      ruleProblem.category,
+      ruleEmotion.emotion
+    )
   );
-  const memoryPromise = searchBlendedUserMemory(userId, ruleRetrievalQuery, 5);
+  const memoryPromise = searchBlendedUserMemory(userId, ruleRetrievalQuery, intentMemoryLimit(ruleIntent.kind));
 
   const [psychBundle, retrievedKnowledge, vectorDbResults] = await Promise.all([
     psychPromise,
     retrievalPromise,
     memoryPromise
   ]);
-  const { emotion: rawEmotion, risk: rawRisk, problem: rawProblem, sources, llmUsed: psychLlmUsed, llmRationale } =
-    psychBundle;
+  const {
+    emotion: rawEmotion,
+    risk: rawRisk,
+    problem: rawProblem,
+    intent,
+    sources,
+    llmUsed: psychLlmUsed,
+    llmRationale
+  } = psychBundle;
+  const intentDirective = formatIntentDirective(intent);
 
   const historySnapshots = getUserPsychSnapshots(userId);
   const metrics = refineMetricsWithSignals(rawEmotion, rawRisk, rawProblem);
@@ -635,6 +767,25 @@ export const generateAIAnswer = async (
       : '';
 
   const agentContext = buildAgentPromptContext(userId);
+  const answerShape =
+    intent.kind === 'venting'
+      ? `【回答篇幅与结构 · 以倾诉为准】
+- 全文约 220–360 汉字
+- 第一块用 2–3 段回应用户原话，肯定感受，不要诊断
+- 第二块最多一句轻轻的可选建议，不要步骤清单
+- 最后一句：${intervention.closingPhrase}`
+      : intent.kind === 'followup'
+        ? `【回答篇幅与结构 · 以追问为准】
+- 顺着上一轮往下说，约 220–400 汉字，不要重开话题
+- 先接住对方的追问，再补一小段建议
+- 最后一句：${intervention.closingPhrase}`
+        : intent.kind === 'crisis'
+          ? `【回答篇幅与结构 · 以安全为准】
+- 先写人身安全和可以联系的人，再简短共情
+- 不要长篇分析，不要步骤清单
+- 最后一句：${intervention.closingPhrase}`
+          : '';
+
   const askRepeat = trackQuestionRepeat(userId, question);
   const answerVariationHint = buildAnswerVariationHint(askRepeat);
   const genTemperature = Math.min(
@@ -654,6 +805,8 @@ ${agentContext ? `\n${agentContext}\n` : ''}
 可能涉及：${problem.subcategories.length > 0 ? problem.subcategories.join('、') : '暂无'}
 问题相关词：${problem.keywords.length > 0 ? problem.keywords.join('、') : '无'}
 
+${intentDirective}
+
 【当前情绪状态 · 大模型与规则融合】${emotionDescription}
 情绪强度：${intensityLabel}
 检测到的情绪关键词：${emotion.keywords.length > 0 ? emotion.keywords.join('、') : '无'}
@@ -665,12 +818,12 @@ ${llmRationale ? `智能分析要点：${llmRationale}` : ''}
 ${recentRiskNote}
 ${answerVariationHint ? `\n${answerVariationHint}\n` : ''}
 
-【回答篇幅与结构 · 必须遵守】
+${answerShape || `【回答篇幅与结构 · 必须遵守】
 - 全文约 **280–480 汉字**，分 **两大块**，不要第三块行动清单
 - **第一块（详细共情，约 150–220 字）**：用 2–3 段回应用户原话，肯定感受、说明「愿意说出来很不容易」、可点到宿舍/人际/学业等情境，但不要诊断
 - **第二块（简要建议，约 80–120 字）**：只写框架名「${intervention.frameworkName}」+ **2–3 条**极短建议（用「·」分隔，每条不超过 20 字）；知识库最多一句「详见下方参考」
 - 最后单独一句结尾：${intervention.closingPhrase}
-- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何 3 步清单**
+- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何 3 步清单**`}
 
 【参考知识 · 仅提炼要点，勿复制原文】${knowledgeContext || '暂无'}
 
@@ -693,7 +846,7 @@ ${description ? `补充描述：${description}` : ''}
     2
   );
 
-  const cacheKey = getCacheKey(userId, question, risk.level, historySummary.substring(0, 80));
+  const cacheKey = getCacheKey(userId, question, risk.level, intent.kind, historySummary.substring(0, 80));
   let answer: string | undefined;
   let answerLlmUsed = false;
   let reactUsed = false;
@@ -734,7 +887,8 @@ ${description ? `补充描述：${description}` : ''}
             llmRationale,
             prefetchedKnowledge: rerankedKnowledge,
             prefetchedMemory: vectorDbResults,
-            answerVariationHint: answerVariationHint || undefined
+            answerVariationHint: answerVariationHint || undefined,
+            intentDirective
           },
           {
             temperature: genTemperature,
@@ -830,9 +984,10 @@ ${description ? `补充描述：${description}` : ''}
     }
   }
 
-  if (risk.level === 'high') {
+  if (risk.level === 'high' || risk.level === 'critical' || intent.kind === 'crisis') {
+    const safetyLine = risk.warningMessage || '你的安全最重要，请先联系身边可信的人或专业支持。';
     answer = `
-⚠️ ${risk.warningMessage}
+⚠️ ${safetyLine}
 
 📞 ${risk.hotline}
 
@@ -905,6 +1060,7 @@ ${answer}
     `情绪：${emotion.emotion}（置信 ${(emotion.confidence * 100).toFixed(0)}%）`,
     `风险：${risk.level}${risk.warningMessage ? ` · ${risk.warningMessage.slice(0, 40)}` : ''}`,
     `关注领域：${getCategoryName(problem.category)}`,
+    `意图：${intent.label}`,
     `干预框架：${intervention.frameworkName}`
   ];
   if (implicitHints.length) {
@@ -922,6 +1078,7 @@ ${answer}
     emotion,
     risk,
     problem,
+    intent,
     emotionStyle,
     intervention: {
       frameworkId: intervention.frameworkId,

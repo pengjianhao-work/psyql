@@ -171,6 +171,7 @@ function buildAskResponsePayload(
     emotion: result.emotion,
     risk: result.risk,
     problem: result.problem,
+    intent: result.intent,
     emotionStyle: result.emotionStyle,
     intervention: result.intervention,
     carePlan: result.carePlan,

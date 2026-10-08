@@ -16,6 +16,7 @@ export type LatestReportState = {
   intervention?: import('../../types').QuestionResponse['intervention'];
   carePlan?: import('../../types').QuestionResponse['carePlan'];
   analysisSources?: import('../../types').QuestionResponse['analysisSources'];
+  intent?: import('../../types').QuestionResponse['intent'];
   llmUsed?: boolean;
   emotionStyle: import('../../types').QuestionResponse['emotionStyle'];
   report: string;

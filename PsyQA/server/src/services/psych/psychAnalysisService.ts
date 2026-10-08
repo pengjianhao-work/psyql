@@ -10,6 +10,7 @@ import {
   ProblemCategory
 } from './emotionService';
 import { callOllamaGenerate, extractJsonObject } from '../llm/ollamaClient';
+import { classifyIntent, IntentAnalysis, mergeIntent } from './intentService';
 
 export type AnalysisSource = 'rule' | 'llm' | 'hybrid';
 
@@ -17,10 +18,12 @@ export interface PsychAnalysisBundle {
   emotion: EmotionAnalysis;
   risk: RiskAssessment;
   problem: ProblemAnalysis;
+  intent: IntentAnalysis;
   sources: {
     emotion: AnalysisSource;
     risk: AnalysisSource;
     problem: AnalysisSource;
+    intent: AnalysisSource;
   };
   llmUsed: boolean;
   llmRationale?: string;
@@ -48,6 +51,7 @@ interface LlmPsychJson {
   confidence?: number;
   risk?: string;
   problem?: string;
+  intent?: string;
   rationale?: string;
 }
 
@@ -65,14 +69,15 @@ ${text.slice(0, 1500)}
 - confidence: 0到1之间小数
 - risk: low|medium|high|critical（无自伤意图勿用 critical）
 - problem: academic_stress|interpersonal|family_relationship|romantic_relationship|career_future|self_identity|emotion_regulation|body_image|addiction|trauma|other
+- intent: greeting|venting|advice|followup|crisis|offtopic（寒暄、倾诉、求建议、追问上文、危机求助、与情绪陪伴无关的任务）
 - rationale: 一句中文理由
 
 示例输出：
-{"emotion":"anxious","secondaryEmotions":["sad"],"confidence":0.72,"risk":"low","problem":"academic_stress","rationale":"提及考试压力与失眠"}
+{"emotion":"anxious","secondaryEmotions":["sad"],"confidence":0.72,"risk":"low","problem":"academic_stress","intent":"advice","rationale":"提及考试压力与失眠"}
 
 请输出 JSON：`;
 
-  const raw = await callOllamaGenerate(prompt, { temperature: 0.1, maxTokens: 280 });
+  const raw = await callOllamaGenerate(prompt, { temperature: 0.1, maxTokens: 320 });
   if (!raw) return null;
   const obj = extractJsonObject(raw);
   if (!obj) return null;
@@ -157,11 +162,12 @@ function mergeProblem(rule: ProblemAnalysis, llm: LlmPsychJson | null): { proble
 export async function analyzePsychState(
   text: string,
   prior?: Pick<EmotionAnalysis, 'emotion' | 'confidence'>,
-  options?: { tryLlm?: boolean }
+  options?: { tryLlm?: boolean; hasHistory?: boolean }
 ): Promise<PsychAnalysisBundle> {
   const ruleEmotion = analyzeEmotion(text, prior);
   const ruleRisk = assessRisk(text);
   const ruleProblem = analyzeProblem(text);
+  const ruleIntent = classifyIntent(text, { hasHistory: options?.hasHistory });
 
   const tryLlm = options?.tryLlm !== false;
   let llm: LlmPsychJson | null = null;
@@ -172,15 +178,18 @@ export async function analyzePsychState(
   const { emotion, source: emotionSource } = mergeEmotion(ruleEmotion, llm);
   const { risk, source: riskSource } = mergeRisk(ruleRisk, llm);
   const { problem, source: problemSource } = mergeProblem(ruleProblem, llm);
+  const { intent, source: intentSource } = mergeIntent(ruleIntent, llm?.intent);
 
   return {
     emotion,
     risk,
     problem,
+    intent,
     sources: {
       emotion: emotionSource,
       risk: riskSource,
-      problem: problemSource
+      problem: problemSource,
+      intent: intentSource
     },
     llmUsed: Boolean(llm),
     llmRationale: typeof llm?.rationale === 'string' ? llm.rationale : undefined

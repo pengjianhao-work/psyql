@@ -196,7 +196,7 @@ async function generateDraft(
 ): Promise<string> {
   const systemPrompt = `你是大学生心理健康陪伴 AI，运行于「核心任务闭环」（思考→行动→观察→反思）。
 本轮目标：${plan.goal}
-要求：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。
+要求：${ctx.intentDirective || '温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。'}
 语气：${ctx.tone}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 

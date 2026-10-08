@@ -28,7 +28,8 @@ function formatContextBlock(ctx: ReActCounselContext): string {
   const parts: string[] = [
     `【心理分析】情绪 ${ctx.emotion.emotion}；风险 ${ctx.risk.level}；领域 ${getCategoryName(ctx.problem.category as ProblemCategory)}`,
     ctx.llmRationale ? `要点：${ctx.llmRationale}` : '',
-    `干预框架：${ctx.intervention.frameworkName}`
+    `干预框架：${ctx.intervention.frameworkName}`,
+    ctx.intentDirective || ''
   ];
   if (ctx.prefetchedKnowledge?.length) {
     parts.push(

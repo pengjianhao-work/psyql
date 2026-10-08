@@ -35,6 +35,8 @@ export interface ReActCounselContext {
   prefetchedMemory?: SearchResult[];
   /** 重复提问时提示模型换表述，避免与上次雷同 */
   answerVariationHint?: string;
+  /** 本轮意图对回答姿态的要求 */
+  intentDirective?: string;
 }
 
 export interface ReActCounselResult {
@@ -205,6 +207,7 @@ function executeReflectPsych(ctx: ReActCounselContext): string {
     `情绪：${ctx.emotion.emotion}（置信 ${(ctx.emotion.confidence * 100).toFixed(0)}%）`,
     `风险：${ctx.risk.level}`,
     `问题域：${getCategoryName(ctx.problem.category as ProblemCategory)}`,
+    ctx.intentDirective || '',
     `干预框架：${ctx.intervention.frameworkName}`,
     ctx.llmRationale ? `分析要点：${ctx.llmRationale}` : ''
   ]
@@ -233,7 +236,7 @@ Action: （工具名）
 Action Input: （JSON）
 
 收到 Observation 后继续推理，直到调用 finish。
-最终 answer 须：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。${strictNote}${prefetchNote}
+${ctx.intentDirective || '最终 answer 须：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。'}${strictNote}${prefetchNote}
 语气：${ctx.tone}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 }
