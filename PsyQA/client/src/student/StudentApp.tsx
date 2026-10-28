@@ -70,6 +70,13 @@ export interface StudentAppProps {
   onSessionUserUpdate?: (user: AuthUserPublic) => void;
 }
 
+/** 消息 id 必须唯一且与消息创建时机无关：Date.now() 在 React 状态更新函数里可能被延迟/重复执行，导致整型 id 撞车 */
+let messageIdSeq = 0;
+function createMessageId(prefix: string): string {
+  messageIdSeq += 1;
+  return `${prefix}-${Date.now()}-${messageIdSeq}`;
+}
+
 function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: StudentAppProps) {
   const { toasts, pushToast, dismissToast } = useToast();
   const {
@@ -378,13 +385,15 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       })
     );
 
+    const userMessageId = createMessageId('user');
+    const botId = createMessageId('bot');
+
     setMessages((prev) => [
       ...prev,
-      { id: Date.now().toString(), type: 'user', content: question, timestamp: new Date().toLocaleString('zh-CN') }
+      { id: userMessageId, type: 'user', content: question, timestamp: new Date().toLocaleString('zh-CN') }
     ]);
 
     try {
-      const botId = (Date.now() + 1).toString();
       const botTime = new Date().toLocaleString('zh-CN');
       let response: QuestionResponse | null = null;
       let streamOk = false;
@@ -464,6 +473,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       if (!response) {
         setMessages((prev) => prev.filter((m) => m.id !== botId));
         response = await askQuestion(question, description, currentUserId);
+        // 流式已产生的内容已被移除，改由下方非流式分支完整写入回复
+        streamOk = false;
       } else if (!streamOk) {
         setMessages((prev) =>
           prev.map((m) =>
