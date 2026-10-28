@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Message, KnowledgeItem, SimilarQuestion, EmotionType, ReActStep } from '../types';
-import { formatBotMessage, splitBotContent, stripReActLeakFromDisplay } from '../utils/formatMessage';
-import { truncateText, parseKeywordTags, dedupeSimilarQuestions } from '../utils/refDisplay';
-import { SHOW_KNOWLEDGE_SOURCES, SHOW_REACT_TRACE } from '../config/features';
+import { Message, KnowledgeItem, SimilarQuestion, EmotionType } from '../types';
+import { formatBotMessage, splitBotContent } from '../utils/formatMessage';
+import { parseKeywordTags, dedupeSimilarQuestions } from '../utils/refDisplay';
 
 interface ChatMessageProps {
   message: Message;
@@ -47,32 +46,6 @@ function typingInterval(contentLength: number): { step: number; ms: number } {
   return { step: 1, ms: 28 };
 }
 
-function KnowledgeRefCard({ item, index }: { item: KnowledgeItem; index: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const preview = truncateText(item.answer, 90);
-  const needsExpand = item.answer.replace(/\s+/g, ' ').trim().length > 90;
-
-  return (
-    <article className="ref-knowledge-card">
-      <div className="ref-knowledge-header">
-        <span className="ref-index">参考 {index + 1}</span>
-        <h5 className="ref-knowledge-title">{item.question}</h5>
-      </div>
-      <p className="ref-knowledge-preview">{expanded ? item.answer : preview}</p>
-      {needsExpand && (
-        <button
-          type="button"
-          className="ref-expand-btn"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-        >
-          {expanded ? '收起摘要' : '展开全文'}
-        </button>
-      )}
-    </article>
-  );
-}
-
 function RelatedTopicItem({
   item,
   onClick
@@ -98,27 +71,6 @@ function RelatedTopicItem({
   );
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  search_knowledge: '检索知识库',
-  search_user_memory: '检索用户记忆',
-  reflect_psych: '心理分析回顾',
-  finish: '生成回复',
-  parse_error: '解析失败',
-  plan: '规划上下文',
-  respond: '生成回复',
-  tot_expand: 'ToT 展开分支',
-  tot_evaluate: 'ToT 评估分支',
-  tot_select: 'ToT 选定路径',
-  tot_respond: 'ToT 生成回复'
-};
-
-const REACT_MODE_LABEL: Record<string, string> = {
-  full: 'ReAct 完整推理',
-  prefetch: 'ReAct 预检索加速',
-  planner: 'Planner 规划模式',
-  tot: 'ToT 思维树推理'
-};
-
 const GENERATION_HINT_LABEL: Record<string, string> = {
   llm_ok: '',
   fast_kb: '⚡ 知识库 FAST · 规则匹配应答',
@@ -128,94 +80,6 @@ const GENERATION_HINT_LABEL: Record<string, string> = {
   rule_only: '规则模式回复'
 };
 
-const STEP_ERROR_ACTIONS = new Set(['parse_error']);
-
-function ReActTracePanel({
-  steps,
-  reactMode,
-  pinned,
-  onTogglePin,
-  onStepClick
-}: {
-  steps: ReActStep[];
-  reactMode?: Message['reactMode'];
-  pinned?: boolean;
-  onTogglePin?: () => void;
-  onStepClick?: (step: number) => void;
-}) {
-  const [expanded, setExpanded] = useState(steps.length <= 2);
-  if (!steps.length) return null;
-
-  const badgeLabel =
-    (reactMode && REACT_MODE_LABEL[reactMode]) || (steps.length > 1 ? 'ReAct' : 'Agent');
-
-  return (
-    <div className={`message-react message-extras${pinned ? ' react-panel-pinned' : ''}`}>
-      <button
-        type="button"
-        className="refs-toggle react-toggle"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
-        <span className="react-badge">{badgeLabel}</span>
-        {expanded ? '收起推理过程' : '查看推理过程'}
-        <span className="refs-count">{steps.length} 步</span>
-        {onTogglePin && (
-          <span
-            role="button"
-            tabIndex={0}
-            className="react-pin-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onTogglePin();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.stopPropagation();
-                onTogglePin();
-              }
-            }}
-            title={pinned ? '取消固定' : '固定悬浮'}
-          >
-            {pinned ? '📌' : '📍'}
-          </span>
-        )}
-      </button>
-
-      {expanded && (
-        <div className="react-trace-body">
-          {steps.map((s) => (
-            <article
-              key={s.step}
-              id={`react-step-${s.step}`}
-              className={`react-step${STEP_ERROR_ACTIONS.has(s.action) ? ' react-step-error' : ''}`}
-            >
-              <header className="react-step-header">
-                <button
-                  type="button"
-                  className="react-step-jump"
-                  onClick={() => onStepClick?.(s.step)}
-                  title="定位到回答"
-                >
-                  <span className="react-step-num">Step {s.step}</span>
-                </button>
-                <span className="react-step-action">{ACTION_LABELS[s.action] || s.action}</span>
-              </header>
-              {s.thought && <p className="react-step-thought">{s.thought}</p>}
-              {s.action !== 'finish' && Object.keys(s.actionInput).length > 0 && (
-                <p className="react-step-input">
-                  输入：{JSON.stringify(s.actionInput)}
-                </p>
-              )}
-              <p className="react-step-obs">{s.observation}</p>
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   knowledgeSources,
@@ -223,8 +87,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 }) => {
   const [displayedContent, setDisplayedContent] = useState('');
   const [isTyping, setIsTyping] = useState(message.type === 'bot');
-  const [refsExpanded, setRefsExpanded] = useState(false);
-  const [reactPinned, setReactPinned] = useState(false);
 
   const knowledgeList = useMemo(
     () => knowledgeSources ?? message.knowledgeSources ?? [],
@@ -235,7 +97,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     [message.similarQuestions, knowledgeList]
   );
 
-  const hasKnowledge = knowledgeList.length > 0;
   const hasRelated = relatedTopics.length > 0;
   const isBot = message.type === 'bot';
 
@@ -251,24 +112,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       return;
     }
 
-    const cleaned = stripReActLeakFromDisplay(message.content);
-
     if (message.streaming) {
-      setDisplayedContent(cleaned);
+      setDisplayedContent(message.content);
       setIsTyping(false);
       return;
     }
 
     setDisplayedContent('');
     setIsTyping(true);
-    setRefsExpanded(false);
 
-    const content = cleaned;
-    if (!content) {
-      setIsTyping(false);
-      return;
-    }
-
+    const content = message.content;
     const { step, ms } = typingInterval(content.length);
     let index = 0;
 
@@ -302,7 +155,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   return (
-    <div className={`message-wrapper ${isBot ? 'bot' : 'user'}`}>
+    <div className={`message-wrapper ${message.type}`}>
       <div className="message-avatar">
         {message.type === 'user' ? (
           <div className="avatar user-avatar" aria-hidden="true">
@@ -331,7 +184,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </div>
         )}
 
-        <div className={`message-bubble ${isBot ? 'bot' : 'user'}`} id={isBot ? `bot-answer-${message.id}` : undefined}>
+        <div className={`message-bubble ${message.type}`} id={isBot ? `bot-answer-${message.id}` : undefined}>
           <div className="message-text">
             {formattedBody ?? (
               <>
@@ -399,42 +252,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </p>
         )}
 
-        {SHOW_REACT_TRACE && isBot && message.reactTrace && message.reactTrace.length > 0 && (
-          <ReActTracePanel
-            steps={message.reactTrace}
-            reactMode={message.reactMode}
-            pinned={reactPinned}
-            onTogglePin={() => setReactPinned((v) => !v)}
-            onStepClick={() => {
-              document.getElementById(`bot-answer-${message.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          />
-        )}
-
-        {SHOW_KNOWLEDGE_SOURCES && !isTyping && isBot && hasKnowledge && (
-          <div className="message-refs message-extras">
-            <button
-              type="button"
-              className="refs-toggle"
-              onClick={() => setRefsExpanded((v) => !v)}
-              aria-expanded={refsExpanded}
-            >
-              {refsExpanded ? '收起知识库来源' : '查看知识库来源'}
-              <span className="refs-count">{knowledgeList.length} 条</span>
-            </button>
-
-            {refsExpanded && (
-              <div className="refs-body">
-                <p className="refs-intro">以下内容来自心理知识库，已融入上方回答；此处仅供溯源参考。</p>
-                <div className="knowledge-sources">
-                  {knowledgeList.map((item, idx) => (
-                    <KnowledgeRefCard key={idx} item={item} index={idx} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

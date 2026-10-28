@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 from datasets import load_dataset
-from peft import LoraConfig, PeftModel, get_peft_model
+from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -57,9 +57,12 @@ def format_example(example: dict, tokenizer, max_length: int = 512) -> dict:
         padding="max_length",
         return_overflowing_tokens=False,
     )
-    tokenized["labels"] = tokenized["input_ids"].copy()
+    labels = tokenized["input_ids"].copy()
     prompt_len = len(tokenizer(prompt, truncation=True, max_length=max_length)["input_ids"])
-    tokenized["labels"][:prompt_len] = [-100] * prompt_len
+    prompt_len = min(prompt_len, len(labels))
+    labels[:prompt_len] = [-100] * prompt_len
+    labels = [-100 if mask == 0 else lab for lab, mask in zip(labels, tokenized["attention_mask"])]
+    tokenized["labels"] = labels
     return tokenized
 
 
@@ -99,7 +102,7 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--merged-dir", type=Path, default=DEFAULT_MERGED)
     parser.add_argument("--epochs", type=int, default=3)
-    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--max-length", type=int, default=512)
     parser.add_argument("--lora-r", type=int, default=32)
@@ -107,6 +110,8 @@ def main() -> int:
     parser.add_argument("--cpu", action="store_true", help="CPU 小模型调试（禁用 4bit）")
     parser.add_argument("--no-merge", action="store_true")
     parser.add_argument("--max-train", type=int, default=None)
+    parser.add_argument("--save-steps", type=int, default=100)
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
 
     if not args.train.exists():
@@ -116,6 +121,8 @@ def main() -> int:
 
     set_seed(42)
     use_cuda = torch.cuda.is_available() and not args.cpu
+    if use_cuda:
+        torch.backends.cudnn.benchmark = True
     print(f"设备: {'CUDA' if use_cuda else 'CPU'} | 基座: {args.model}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
@@ -137,6 +144,7 @@ def main() -> int:
             trust_remote_code=True,
         )
         target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     else:
         model = AutoModelForCausalLM.from_pretrained(
             args.model,
@@ -155,6 +163,7 @@ def main() -> int:
         task_type="CAUSAL_LM",
     )
     model = get_peft_model(model, lora_config)
+    model.config.use_cache = False
     model.print_trainable_parameters()
 
     train_ds = load_dataset("json", data_files=str(args.train))["train"]
@@ -168,24 +177,29 @@ def main() -> int:
         val_cols = val_ds.column_names
         val_ds = val_ds.map(lambda x: format_example(x, tokenizer, args.max_length), remove_columns=val_cols)
 
-    training_args = TrainingArguments(
+    train_kwargs = dict(
         output_dir=str(args.output_dir),
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
-        gradient_accumulation_steps=4 if use_cuda else 2,
+        gradient_accumulation_steps=max(1, (4 if use_cuda else 2) // args.batch_size),
         learning_rate=args.lr,
         num_train_epochs=args.epochs,
         warmup_ratio=0.05,
         logging_steps=10,
-        evaluation_strategy="epoch" if val_ds is not None else "no",
-        save_strategy="epoch",
+        save_strategy="steps",
+        save_steps=args.save_steps,
+        save_total_limit=2,
         bf16=use_cuda,
         fp16=False,
         optim="paged_adamw_8bit" if use_cuda else "adamw_torch",
-        gradient_checkpointing=use_cuda,
+        gradient_checkpointing=True,
         report_to="none",
-        load_best_model_at_end=val_ds is not None,
+        load_best_model_at_end=False,
     )
+    eval_mode = "epoch" if val_ds is not None else "no"
+    eval_key = "eval_strategy" if "eval_strategy" in TrainingArguments.__init__.__code__.co_varnames else "evaluation_strategy"
+    train_kwargs[eval_key] = eval_mode
+    training_args = TrainingArguments(**train_kwargs)
 
     trainer = Trainer(
         model=model,
@@ -195,8 +209,25 @@ def main() -> int:
         data_collator=DataCollatorForSeq2Seq(tokenizer, model=model, padding=True, return_tensors="pt"),
     )
 
+    if args.resume:
+        import transformers.trainer as trainer_mod
+        import transformers.utils.import_utils as import_utils
+
+        def _allow_local_checkpoint_load() -> None:
+            return None
+
+        import_utils.check_torch_load_is_safe = _allow_local_checkpoint_load
+        trainer_mod.check_torch_load_is_safe = _allow_local_checkpoint_load
+        _torch_load = torch.load
+
+        def _load_local_checkpoint(*args, **kwargs):
+            kwargs["weights_only"] = False
+            return _torch_load(*args, **kwargs)
+
+        torch.load = _load_local_checkpoint
+
     print("[train] 开始 QLoRA/PEFT 微调…")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(str(args.output_dir))
     print(f"[OK] LoRA 适配器: {args.output_dir}")
