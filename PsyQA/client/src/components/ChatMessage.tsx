@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Message, KnowledgeItem, SimilarQuestion, EmotionType, ReActStep } from '../types';
 import { formatBotMessage, splitBotContent } from '../utils/formatMessage';
 import { truncateText, parseKeywordTags, dedupeSimilarQuestions } from '../utils/refDisplay';
+import { VideoCard } from './VideoCard';
 
 interface ChatMessageProps {
   message: Message;
@@ -352,6 +353,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               <div className="warning-hotline">{message.risk.hotline}</div>
             </div>
           </div>
+        )}
+
+        {!isTyping && isBot && message.videos && message.videos.length > 0 && (
+          <section className="video-recommend message-extras" aria-label="心理视频推荐">
+            <div className="video-recommend-header">
+              <span className="video-recommend-icon" aria-hidden="true">
+                🎬
+              </span>
+              <div>
+                <h4 className="video-recommend-title">也许一段视频能帮到你</h4>
+                <p className="video-recommend-hint">来自抖音的心理治愈内容</p>
+              </div>
+            </div>
+            <div className="video-recommend-list">
+              {message.videos.map((video) => (
+                <VideoCard key={video.id} video={video} compact />
+              ))}
+            </div>
+          </section>
         )}
 
         {!isTyping && isBot && hasRelated && (

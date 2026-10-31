@@ -71,6 +71,8 @@ export interface Message {
     confidence: number;
   }>;
   seasonalRagLabel?: string;
+  /** 情绪明显时附带的心理视频推荐 */
+  videos?: VideoItem[];
   /** SSE 流式输出中，跳过打字机动画 */
   streaming?: boolean;
   aborted?: boolean;
@@ -87,6 +89,21 @@ export interface ReActStep {
 export interface KnowledgeItem {
   question: string;
   answer: string;
+}
+
+export interface VideoItem {
+  id: string;
+  title: string;
+  author: string;
+  url: string;
+  tags: string[];
+  emotions: string[];
+  topics: string[];
+  riskLevel: 'low' | 'medium' | 'high';
+  description: string;
+  durationSec?: number;
+  /** 占位条目：链接暂未替换为具体视频 */
+  isPlaceholder?: boolean;
 }
 
 export interface SimilarQuestion {
@@ -278,6 +295,7 @@ export interface QuestionResponse {
   }>;
   seasonalRagLabel?: string;
   report: string;
+  videos?: VideoItem[];
   statModel?: PsychStatModel;
   responseTimeMs?: number;
   dialogId?: string;

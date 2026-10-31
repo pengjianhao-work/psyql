@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { GroupedHistoryItem, QuestionResponse, UserProgress } from '../types';
+import { GroupedHistoryItem, QuestionResponse, UserProgress, VideoItem } from '../types';
 
 const API_BASE_URL = '/api/questions';
 const API_TIMEOUT = 30000;
@@ -521,6 +521,20 @@ export interface CategoryInfo {
   icon: string;
   count: number;
 }
+
+export const fetchVideoLibrary = async (params: {
+  emotion?: string;
+  topic?: string;
+  q?: string;
+  limit?: number;
+} = {}): Promise<{ total: number; videos: VideoItem[] }> => {
+  const response = await axios.get('/api/videos', {
+    params,
+    withCredentials: true,
+    timeout: API_TIMEOUT
+  });
+  return response.data;
+};
 
 export const getCategories = async (): Promise<CategoryInfo[]> => {
   const response = await api.get('/categories');

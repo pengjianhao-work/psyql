@@ -22,6 +22,10 @@ import { vectorDb } from '../services/knowledge/vectorDBService';
 import { cacheGetOrSet } from '../utils/memoryCache';
 import { env } from '../config/env';
 import { getInsightsStatusForUser } from '../services/user/insightsStatus';
+import {
+  recommendVideos,
+  shouldRecommendVideos
+} from '../services/video/videoRecommendationService';
 
 let questions: Question[] = [];
 let questionsLoadPromise: Promise<void> | null = null;
@@ -159,8 +163,18 @@ function buildAskResponsePayload(
   userQuestion: string,
   description: string | undefined,
   result: CombinedAnswer,
-  elapsedMs: number
+  elapsedMs: number,
+  activeUserId: string
 ) {
+  const videos = shouldRecommendVideos(result.emotion, result.risk)
+    ? recommendVideos({
+        userId: activeUserId,
+        question: userQuestion,
+        emotion: result.emotion,
+        problem: result.problem
+      })
+    : [];
+
   return {
     question: userQuestion,
     description,
@@ -187,7 +201,8 @@ function buildAskResponsePayload(
     dialogId: result.dialogId,
     portrait: result.portrait,
     portraitPending: result.portrait?.summary?.includes('生成中') ?? false,
-    reportPending: result.report?.includes('详细心理评估报告生成中') ?? false
+    reportPending: result.report?.includes('详细心理评估报告生成中') ?? false,
+    videos
   };
 }
 
@@ -278,7 +293,7 @@ export const askQuestion = async (req: AuthRequest, res: Response) => {
       activeUserId
     );
     const elapsedMs = await recordAskSideEffects(activeUserId, userQuestion, result, requestStart);
-    res.json(buildAskResponsePayload(userQuestion, description, result, elapsedMs));
+    res.json(buildAskResponsePayload(userQuestion, description, result, elapsedMs, activeUserId));
   } catch (error) {
     const elapsedMs = Date.now() - requestStart;
     updateUserMetrics(activeUserId, elapsedMs, true, 'unknown');
@@ -319,7 +334,7 @@ export const askQuestionStream = async (req: AuthRequest, res: Response) => {
     const elapsedMs = await recordAskSideEffects(activeUserId, userQuestion, result, requestStart);
     sendEvent({
       type: 'done',
-      ...buildAskResponsePayload(userQuestion, description, result, elapsedMs)
+      ...buildAskResponsePayload(userQuestion, description, result, elapsedMs, activeUserId)
     });
     res.end();
   } catch (error) {

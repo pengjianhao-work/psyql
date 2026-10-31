@@ -63,7 +63,7 @@ ${text.slice(0, 1500)}
 - emotion: 主情绪，只能是 happy|sad|anxious|angry|lonely|neutral|hopeful|confused|frustrated|guilty|shameful|proud
 - secondaryEmotions: 次要情绪数组，最多3个
 - confidence: 0到1之间小数
-- risk: low|medium|high|critical（无自伤意图勿用 critical）
+- risk: low|medium|high|critical。critical 仅用于用户明确表达自伤/伤人的意图或计划；仅表达愤怒、情绪失控、压力大或想发泄时最高用 medium，不要用 high 或 critical
 - problem: academic_stress|interpersonal|family_relationship|romantic_relationship|career_future|self_identity|emotion_regulation|body_image|addiction|trauma|other
 - rationale: 一句中文理由
 
