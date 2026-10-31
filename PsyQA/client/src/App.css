@@ -5816,3 +5816,274 @@
   font-weight: 600;
   line-height: 1.5;
 }
+
+/* 心理视频推荐：消息内卡片 */
+.video-recommend {
+  margin-top: 10px;
+}
+
+.video-recommend-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.video-recommend-icon {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.video-recommend-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--psy-text);
+}
+
+.video-recommend-hint {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--psy-text-muted);
+}
+
+.video-recommend-list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.video-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--psy-radius-md);
+  background: var(--psy-surface-solid);
+  border: 1px solid var(--psy-border-muted);
+  box-shadow: var(--psy-shadow-sm);
+}
+
+.video-card-thumb {
+  flex: 0 0 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
+}
+
+.video-card-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.video-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--psy-text-muted);
+}
+
+.video-card-platform {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--psy-primary-dark);
+  font-weight: 600;
+}
+
+.video-card-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(236, 72, 153, 0.12);
+  color: #be185d;
+}
+
+.video-card-title {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--psy-text);
+}
+
+.video-card-desc {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--psy-text-muted);
+}
+
+.video-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.video-card-tag {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.1);
+  color: #6d28d9;
+}
+
+.video-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.video-card-author {
+  font-size: 0.72rem;
+  color: var(--psy-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-card-link {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--psy-primary-dark);
+  text-decoration: none;
+}
+
+.video-card-link:hover {
+  text-decoration: underline;
+}
+
+/* 心理视频独立抽屉 */
+.video-center-entry {
+  white-space: nowrap;
+}
+
+.video-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  border: 0;
+  padding: 0;
+  background: rgba(30, 27, 75, 0.35);
+  cursor: pointer;
+}
+
+.video-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 121;
+  width: min(430px, 92vw);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  background: var(--psy-surface-solid);
+  box-shadow: var(--psy-shadow-lg);
+  border-left: 1px solid var(--psy-border-muted);
+}
+
+.video-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.video-drawer-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--psy-text);
+}
+
+.video-drawer-header p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--psy-text-muted);
+}
+
+.video-drawer-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--psy-border-muted);
+  background: #fff;
+  color: var(--psy-text-muted);
+  cursor: pointer;
+}
+
+.video-drawer-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.video-filter-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--psy-border-muted);
+  background: #fff;
+  color: var(--psy-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.video-filter-chip.active {
+  border-color: transparent;
+  background: var(--psy-gradient-main);
+  color: #fff;
+  font-weight: 600;
+}
+
+.video-drawer-search {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--psy-radius-sm);
+  border: 1px solid var(--psy-border-muted);
+  font-size: 0.85rem;
+  color: var(--psy-text);
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.video-drawer-search:focus {
+  outline: none;
+  border-color: var(--psy-primary);
+}
+
+.video-drawer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.video-drawer-state {
+  margin: 0;
+  padding: 18px 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--psy-text-muted);
+}
+
+.video-drawer-error {
+  color: #be123c;
+}
+
+.video-drawer-note {
+  margin: 4px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--psy-border-muted);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--psy-text-muted);
+}

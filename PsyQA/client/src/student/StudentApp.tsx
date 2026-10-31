@@ -41,6 +41,7 @@ import { UserProfileCard } from '../components/UserProfileCard';
 import { AgentProfileCard } from '../components/AgentProfileCard';
 import { StudentProfileCard } from '../components/StudentProfileCard';
 import { PrivacyEthicsModal, ethicsStorageKey, reportEthicsSessionKey } from '../components/PrivacyEthicsModal';
+import { VideoCenterDrawer } from '../components/VideoCenterDrawer';
 import {
   formatStudentIdentityLine,
   getStudentProfileCompleteness
@@ -117,6 +118,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   const [userProfile, setUserProfile] = useState<UserProfilePayload | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [videoDrawerOpen, setVideoDrawerOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [ethicsLoginOpen, setEthicsLoginOpen] = useState(false);
   const [reportEthicsOpen, setReportEthicsOpen] = useState(false);
@@ -452,7 +454,12 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
 
       if (response) {
         setMessages((prev) =>
-          upsertBotMessage(prev, buildBotMessageFromResponse(botMsgId, response!, botTime))
+          upsertBotMessage(
+            prev,
+            buildBotMessageFromResponse(botMsgId, response!, botTime, {
+              videos: response!.videos
+            })
+          )
         );
       }
 
@@ -870,6 +877,14 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 : '已登录'
               : `当前用户: ${currentUserLabel}`}
           </div>
+          <button
+            type="button"
+            className="account-switch-btn video-center-entry"
+            onClick={() => setVideoDrawerOpen(true)}
+            title="打开心理视频推荐"
+          >
+            🎬 心理视频
+          </button>
           <button type="button" className="account-switch-btn" onClick={handleLogoutAccount}>
             {guestMode ? '改用账号登录' : sessionUser ? '退出登录' : '返回登录'}
           </button>
@@ -1129,6 +1144,11 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           )}
         </div>
       </main>
+      <VideoCenterDrawer
+        open={videoDrawerOpen}
+        onClose={() => setVideoDrawerOpen(false)}
+        emotion={latestReport?.emotion?.emotion}
+      />
       <TrendCareAlertModal
         open={trendCareOpen}
         reason={trendCareReason}

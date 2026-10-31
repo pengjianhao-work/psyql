@@ -32,6 +32,8 @@ export interface EmotionAnalysis {
 export interface RiskAssessment {
   level: RiskLevel;
   keywords: string[];
+  /** 规则层命中的危机类型；LLM 单独上调风险时为空 */
+  crisisTypes?: string[];
   warningMessage: string;
   hotline: string;
 }
@@ -139,6 +141,7 @@ export function analyzeEmotion(text: string, prior?: Pick<EmotionAnalysis, 'emot
 export function assessRisk(text: string): RiskAssessment {
   const textLower = text.toLowerCase();
   const foundKeywords: string[] = [];
+  const foundTypes: string[] = [];
   let level: RiskLevel = 'low';
   let warningMessage = '';
 
@@ -160,6 +163,7 @@ export function assessRisk(text: string): RiskAssessment {
           continue;
         }
         foundKeywords.push(kw);
+        foundTypes.push(type);
         if (type === 'suicide') {
           applyLevel(
             'critical',
@@ -182,6 +186,7 @@ export function assessRisk(text: string): RiskAssessment {
   return {
     level,
     keywords: [...new Set(foundKeywords)],
+    crisisTypes: [...new Set(foundTypes)],
     warningMessage,
     hotline: CRISIS_HOTLINE
   };
