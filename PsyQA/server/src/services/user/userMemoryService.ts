@@ -19,6 +19,7 @@ import {
   getUserQdrantCollectionName
 } from '../knowledge/qdrantVectorService';
 import { embedText } from '../knowledge/embeddingService';
+import { embedMultiLocal } from '../knowledge/localBgeClient';
 import { cacheGetOrSet } from '../../utils/memoryCache';
 import { getLockedMemoryBoost, isMemoryArchived } from './memoryTagService';
 import {
@@ -245,7 +246,8 @@ export async function indexUserDialogMemory(input: {
   const content = `用户：${userText}\n助理：${botText}`;
   const chromaId = `${userId}_${dialogTime.replace(/[^\d]/g, '')}`;
 
-  const embedding = await embedText(content);
+  const localDense = await embedMultiLocal(content, 8);
+  const embedding = localDense?.dense?.length ? localDense.dense : await embedText(content);
   if (!embedding) return;
 
   const ok = await upsertUserQdrantDialog(userId, {

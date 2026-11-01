@@ -3,7 +3,6 @@ import * as path from 'path';
 import { getDb } from '../../db/database';
 import { resolveDataFile, vectorDbPath } from '../../config/paths';
 import { SparseIndex } from './sparseIndex';
-import { fuseHybridResults } from './hybridRetrieval';
 
 export type { SearchResult } from './searchTypes';
 import type { SearchResult } from './searchTypes';
@@ -147,12 +146,12 @@ export const vectorDb = new VectorDatabase();
 export async function searchVectorDb(query: string, topK = 5): Promise<SearchResult[]> {
   const pool = Math.max(topK * 4, 12);
   const { isQdrantEnabled, searchQdrant } = await import('./qdrantVectorService');
-  const densePromise = isQdrantEnabled() ? searchQdrant(query, pool) : Promise.resolve([]);
-  const sparseHits = vectorDb.searchSparse(query, pool);
-  const denseHits = await densePromise;
-  const fused = fuseHybridResults(denseHits, sparseHits, pool);
   const { rerankResults } = await import('./rerankService');
-  return rerankResults(query, fused, topK);
+  if (isQdrantEnabled()) {
+    const hybridHits = await searchQdrant(query, pool);
+    if (hybridHits.length) return rerankResults(query, hybridHits, topK);
+  }
+  return rerankResults(query, vectorDb.searchSparse(query, pool), topK);
 }
 
 export const addToVectorDb = (question: string, answer: string): void => {

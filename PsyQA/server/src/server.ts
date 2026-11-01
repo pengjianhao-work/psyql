@@ -9,6 +9,7 @@ import { checkOllamaHealth, getOllamaModel } from './services/ollamaClient';
 import { shouldUseLlm, resolveActiveLlmProvider } from './services/llmClient';
 import { isZhipuConfigured, getZhipuModel, checkZhipuHealth } from './services/llm/zhipuClient';
 import { assertAuthSecretConfigured } from './services/sessionService';
+import { localBgeReady } from './services/knowledge/localBgeClient';
 
 try {
   validateProductionEnv();
@@ -41,6 +42,10 @@ const server = app.listen(env.port, () => {
     console.log('Production: serving client static build');
   }
   startKnowledgeScheduler();
+  void localBgeReady().then((ok) => {
+    if (ok) console.log('知识检索：本机 bge-m3（整句向量 + 稀疏权重 + 64 个词向量）');
+    else console.warn('知识检索：本机 bge-m3 未启动。运行 npm run start:bge-m3');
+  });
 
   void (async () => {
     if (process.env.PSYQA_LOAD_TEST === '1') {

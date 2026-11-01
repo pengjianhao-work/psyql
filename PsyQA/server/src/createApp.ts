@@ -14,6 +14,7 @@ import {
 import { isZhipuConfigured } from './services/llm/zhipuClient';
 import { getChromaStatus } from './services/knowledge/chromaVectorService';
 import { getQdrantStatus } from './services/knowledge/qdrantVectorService';
+import { localBgeReady } from './services/knowledge/localBgeClient';
 import { getKnowledgeEmbedStatus } from './services/knowledge/knowledgeStatus';
 import { BUILD_INFO } from './config/buildInfo';
 import { getAskLoadMetrics } from './controllers/questionController';
@@ -128,6 +129,7 @@ export function createApp(): Express {
 
     const chroma = await getChromaStatus();
     const qdrant = await getQdrantStatus();
+    const localBge = await localBgeReady();
     const knowledge = await getKnowledgeEmbedStatus();
     const load = getAskLoadMetrics();
     const reportQueue = getReportQueueMetrics();
@@ -149,6 +151,7 @@ export function createApp(): Express {
         ...qdrant,
         capacityHint: qdrant.count != null ? `${qdrant.count} vectors` : undefined
       },
+      localBge,
       knowledge,
       load,
       reportQueue: {
