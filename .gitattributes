@@ -12,3 +12,4 @@ PsyQA/data/** filter=lfs diff=lfs merge=lfs -text
 **/*.pickle filter=lfs diff=lfs merge=lfs -text
 processed_data/** filter=lfs diff=lfs merge=lfs -text
 training_data/** filter=lfs diff=lfs merge=lfs -text
+PsyQA/qdrant_data/** -text
