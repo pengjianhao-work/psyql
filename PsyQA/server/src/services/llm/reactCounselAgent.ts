@@ -1,5 +1,6 @@
 import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
+import { formatPersonalMemories } from '../user/userMemoryService';
 import { getCategoryName, type EmotionAnalysis, type RiskAssessment, type ProblemAnalysis, type ProblemCategory } from '../psych/emotionService';
 import { callLlmGenerate, callLlmGenerateStream, emitChunkedTokens } from './llmClient';
 import { isStrictFullReAct } from './agentPolicy';
@@ -28,6 +29,12 @@ export interface ReActCounselContext {
     closingPhrase: string;
   };
   historySummary: string;
+  /** 上一轮及更早的用户原话和回应，供多轮接着说 */
+  recentDialogs?: string;
+  /** 当前议题、情绪走向、上一轮用过的方法 */
+  workingMemory?: string;
+  /** 沟通习惯、反复议题、以往用过的方法 */
+  durableMemory?: string;
   agentContext: string;
   tone: string;
   llmRationale?: string;
@@ -150,14 +157,8 @@ function formatPrefetchKnowledge(items: KnowledgeItem[]): string {
     .join('\n');
 }
 
-function formatPrefetchMemory(hits: SearchResult[]): string {
-  if (!hits.length) return '该用户暂无相关私有记忆。';
-  return hits
-    .map(
-      (h, i) =>
-        `${i + 1}. [相似度 ${(h.similarity * 100).toFixed(0)}%] ${truncate(h.answer || h.question, 120)}`
-    )
-    .join('\n');
+function formatPrefetchMemory(hits: SearchResult[], recentDialogs = ''): string {
+  return formatPersonalMemories(hits, recentDialogs) || '该用户暂无更早的个人记忆。';
 }
 
 async function executeTool(
@@ -182,14 +183,14 @@ async function executeTool(
     }
     case 'search_user_memory': {
       if (plan.prefetchOnly && ctx.prefetchedMemory?.length) {
-        return `[预检索缓存]\n${formatPrefetchMemory(ctx.prefetchedMemory)}`;
+        return `[预检索缓存]\n${formatPrefetchMemory(ctx.prefetchedMemory, ctx.recentDialogs)}`;
       }
       if (plan.skipSearchTools && ctx.prefetchedMemory?.length) {
-        return formatPrefetchMemory(ctx.prefetchedMemory);
+        return formatPrefetchMemory(ctx.prefetchedMemory, ctx.recentDialogs);
       }
-      const { searchBlendedUserMemory } = await import('../user/userMemoryService');
-      const hits = await searchBlendedUserMemory(ctx.userId, query, 3);
-      return formatPrefetchMemory(hits);
+      const { searchPersonalMemories } = await import('../user/userMemoryService');
+      const hits = await searchPersonalMemories(ctx.userId, query, 4);
+      return formatPrefetchMemory(hits, ctx.recentDialogs);
     }
     case 'reflect_psych':
       return executeReflectPsych(ctx);
@@ -238,14 +239,30 @@ Action Input: （JSON）
 收到 Observation 后继续推理，直到调用 finish。
 ${ctx.intentDirective || '最终 answer 须：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。'}${strictNote}${prefetchNote}
 语气：${ctx.tone}
+若给出了这个用户以前说过的事，回复要让对方感到被记住，不要当成第一次见面。
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
+}
+
+export function formatTurnMemory(ctx: ReActCounselContext): string[] {
+  return [
+    ctx.recentDialogs
+      ? `【短期会话记忆】接着这些原话往下说，不要当成新话题。\n${ctx.recentDialogs}`
+      : '',
+    ctx.workingMemory ? `【工作记忆】沿着当前任务往下做。\n${ctx.workingMemory}` : '',
+    ctx.durableMemory
+      ? `【长期记忆 · 习惯与做过的事】语气和议题要符合这个人。\n${ctx.durableMemory}`
+      : '',
+    !ctx.workingMemory && ctx.historySummary
+      ? `【历史摘要】${truncate(ctx.historySummary, 240)}`
+      : ''
+  ].filter(Boolean);
 }
 
 function buildReActUserPrompt(ctx: ReActCounselContext, trajectory: string): string {
   const parts = [
     `【用户提问】${ctx.question}`,
     ctx.description ? `【补充】${ctx.description}` : '',
-    ctx.historySummary ? `【历史摘要】${truncate(ctx.historySummary, 200)}` : '',
+    ...formatTurnMemory(ctx),
     `【开场参考】${ctx.intervention.openingPhrase}`,
     `【结尾参考】${ctx.intervention.closingPhrase}`
   ].filter(Boolean);
@@ -258,7 +275,7 @@ function buildReActUserPrompt(ctx: ReActCounselContext, trajectory: string): str
     parts.push('', '【已预检索知识】', formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2)));
   }
   if (ctx.prefetchedMemory?.length) {
-    parts.push('', '【已预检索记忆】', formatPrefetchMemory(ctx.prefetchedMemory.slice(0, 2)));
+    parts.push('', '【长期向量记忆】', formatPrefetchMemory(ctx.prefetchedMemory, ctx.recentDialogs));
   }
 
   if (trajectory) {
@@ -312,7 +329,7 @@ function buildPrefetchTrajectory(ctx: ReActCounselContext): string {
     parts.push(`Observation [prefetch]: ${formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2))}`);
   }
   if (ctx.prefetchedMemory?.length) {
-    parts.push(`Observation [prefetch]: ${formatPrefetchMemory(ctx.prefetchedMemory.slice(0, 2))}`);
+    parts.push(`Observation [prefetch]: ${formatPrefetchMemory(ctx.prefetchedMemory, ctx.recentDialogs)}`);
   }
   parts.push(`Observation: ${executeReflectPsych(ctx)}`);
   return parts.join('\n');

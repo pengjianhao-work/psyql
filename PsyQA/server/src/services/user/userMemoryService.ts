@@ -7,6 +7,8 @@ import {
   updateUserAgentProfile
 } from '../../db/userAgentStore';
 import { getCategoryName, ProblemCategory } from '../psych/emotionService';
+import { labelFramework } from '../psych/interventionService';
+import { getUserPsychSnapshots } from '../common/historyManager';
 import type { PsychSnapshot } from '../../types/psychHistory';
 import type { RagBlendWeights, AgentPhase } from '../../types/userAgent';
 import type { SearchResult } from '../knowledge/vectorDBService';
@@ -168,6 +170,137 @@ async function searchBlendedUserMemoryUncached(
   return out;
 }
 
+/** 只检索该用户自己的对话，不混入公共知识库。 */
+export async function searchPersonalMemories(
+  userId: string,
+  query: string,
+  limit = 4
+): Promise<SearchResult[]> {
+  if (!isQdrantEnabled() || !userId || userId === 'default_user' || limit <= 0 || !query.trim()) {
+    return [];
+  }
+  const cacheKey = `pmem:${userId}:${limit}:${query.slice(0, 200)}`;
+  return cacheGetOrSet(cacheKey, 30_000, async () => {
+    const raw = await searchUserQdrant(userId, query, Math.max(limit, 6));
+    return raw
+      .filter((hit) => !hit.dialogTime || !isMemoryArchived(userId, hit.dialogTime))
+      .map((hit) => {
+        const boosted = hit.dialogTime
+          ? hit.similarity * getLockedMemoryBoost(userId, hit.dialogTime)
+          : hit.similarity;
+        return applyMemoryTimeDecay({ ...hit, source: 'user' as const, similarity: boosted });
+      })
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+  });
+}
+
+function memoryUserLine(hit: SearchResult): string {
+  const fromQuestion = hit.question.replace(/\s+/g, ' ').trim();
+  if (fromQuestion) return fromQuestion.slice(0, 180);
+  const matched = hit.answer.match(/用户：([\s\S]*?)(?:\n助理：|$)/);
+  return (matched?.[1] || hit.answer).replace(/\s+/g, ' ').trim().slice(0, 180);
+}
+
+function memoryReplyLine(hit: SearchResult): string {
+  const matched = hit.answer.match(/助理：([\s\S]*)/);
+  return (matched?.[1] || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+}
+
+/** 给回答模型的个人记忆。与最近两轮原话重复的条目会去掉。 */
+export function formatPersonalMemories(hits: SearchResult[], recentDialogs = ''): string {
+  const recentSnips = [...recentDialogs.matchAll(/用户：([^\n]{8,40})/g)].map((match) => match[1].trim());
+  const picked = hits
+    .filter((hit) => hit.source !== 'public')
+    .filter((hit) => {
+      const line = memoryUserLine(hit);
+      if (line.length < 8) return false;
+      return !recentSnips.some((snip) => line.includes(snip) || snip.includes(line.slice(0, 24)));
+    })
+    .slice(0, 4);
+  if (!picked.length) return '';
+
+  const lines = picked.map((hit, index) => {
+    const tags = [hit.dialogTime, hit.emotion, hit.trigger].filter(Boolean).join(' · ');
+    const reply = memoryReplyLine(hit);
+    return [
+      `${index + 1}. ${tags || '更早的对话'}`,
+      `用户当时说：${memoryUserLine(hit)}`,
+      reply ? `当时的回应：${reply}` : ''
+    ]
+      .filter(Boolean)
+      .join('\n');
+  });
+
+  return [
+    '这些是这个用户自己以前说过的事，不是公共帖子。回答时自然用上里面的人、反复出现的压力、上次有用的做法，让对方感到被记住。不要逐条复述，也不要编造这里没有的事实。',
+    ...lines
+  ].join('\n');
+}
+
+/** 每轮回答后写入，永久保留用过的方法。 */
+export function rememberTurnExperience(input: {
+  userId: string;
+  dialogTime: string;
+  problem: string;
+  emotion: string;
+  framework: string;
+}): void {
+  const { userId, dialogTime, problem, emotion, framework } = input;
+  if (!userId || userId === 'default_user' || !dialogTime || !framework) return;
+  const profile = ensureUserAgentProfile(userId);
+  const current = profile.interventionJson ?? {
+    effectiveApproaches: [],
+    avoidPhrases: [],
+    sensitiveTopics: []
+  };
+  const history = [...(current.executionHistory ?? [])];
+  if (history.some((item) => item.time === dialogTime)) return;
+  history.push({ time: dialogTime, problem, emotion, framework });
+  updateUserAgentProfile(userId, {
+    interventionJson: { ...current, executionHistory: history.slice(-24) }
+  });
+}
+
+/** 长期结构化记忆：沟通习惯、反复议题、以往用过的方法。 */
+export function formatDurableMemory(userId: string): string {
+  if (!userId || userId === 'default_user') return '';
+  const profile = getUserAgentProfile(userId);
+  const iv = profile?.interventionJson;
+  const lines: string[] = [];
+  if (iv?.preferredTone) lines.push(`沟通习惯：${iv.preferredTone}`);
+  if (iv?.sensitiveTopics?.length) lines.push(`需要避开：${iv.sensitiveTopics.join('、')}`);
+  if (iv?.effectiveApproaches?.length) {
+    lines.push(`以前觉得有用的方式：${iv.effectiveApproaches.join('、')}`);
+  }
+
+  const counts = new Map<string, number>();
+  const methods: string[] = [];
+  const pushMethod = (name: string) => {
+    if (name && !methods.includes(name)) methods.push(name);
+  };
+  for (const snap of getUserPsychSnapshots(userId)) {
+    const problem = getCategoryName(snap.problem);
+    counts.set(problem, (counts.get(problem) ?? 0) + 1);
+    pushMethod(labelFramework(snap.frameworkId));
+  }
+  for (const item of iv?.executionHistory ?? []) {
+    if (!counts.has(item.problem)) counts.set(item.problem, 1);
+    pushMethod(item.framework);
+  }
+
+  const habits = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([name, count]) => `${name} ${count} 次`);
+  if (habits.length) lines.push(`反复出现的议题：${habits.join('、')}`);
+  if (methods.length) lines.push(`以往用过的方法：${methods.slice(-6).join('、')}`);
+
+  const monthly = profile?.monthlySummariesJson.slice(-1)[0]?.summary;
+  if (monthly) lines.push(`长期特征：${monthly.replace(/\s+/g, ' ').trim().slice(0, 120)}`);
+  return lines.join('\n');
+}
+
 export function buildAgentPromptContext(userId: string): string {
   if (!userId || userId === 'default_user') return '';
 
@@ -223,9 +356,9 @@ export async function indexUserDialogMemory(input: {
   userText: string;
   botText: string;
   psych?: PsychSnapshot;
-}): Promise<void> {
+}): Promise<boolean> {
   const { userId, dialogTime, userText, botText, psych } = input;
-  if (!userId || userId === 'default_user') return;
+  if (!userId || userId === 'default_user') return false;
 
   const first = getFirstDialogTime(userId);
   if (!first) {
@@ -235,7 +368,7 @@ export async function indexUserDialogMemory(input: {
   const phase = resolveAgentPhase(userId);
   updateUserAgentProfile(userId, { agentPhase: phase });
 
-  if (!isQdrantEnabled()) return;
+  if (!isQdrantEnabled()) return false;
 
   const month = parseDialogMonth(dialogTime);
   const emotion = psych?.emotion ?? 'neutral';
@@ -248,7 +381,7 @@ export async function indexUserDialogMemory(input: {
 
   const localDense = await embedMultiLocal(content, 8);
   const embedding = localDense?.dense?.length ? localDense.dense : await embedText(content);
-  if (!embedding) return;
+  if (!embedding) return false;
 
   const ok = await upsertUserQdrantDialog(userId, {
     id: chromaId,
@@ -280,6 +413,66 @@ export async function indexUserDialogMemory(input: {
       content: userText,
       problem: psych?.problem
     });
+  }
+  return ok;
+}
+
+const DIALOG_INDEX_DELAY_MS = 8_000;
+let answerInProgress = 0;
+let indexTimer: ReturnType<typeof setTimeout> | null = null;
+let indexing = false;
+const pendingDialogs: Array<Parameters<typeof indexUserDialogMemory>[0]> = [];
+const pendingDialogKeys = new Set<string>();
+
+/** 回答生成期间暂停写入，避免和检索抢本机 bge-m3。 */
+export function setDialogIndexPaused(paused: boolean): void {
+  answerInProgress += paused ? 1 : -1;
+  if (answerInProgress < 0) answerInProgress = 0;
+  if (answerInProgress > 0) {
+    if (indexTimer) {
+      clearTimeout(indexTimer);
+      indexTimer = null;
+    }
+    return;
+  }
+  armDialogIndex();
+}
+
+/** 先记下对话，等回答结束并空闲几秒后再写入 Qdrant。 */
+export function scheduleUserDialogIndex(input: Parameters<typeof indexUserDialogMemory>[0]): void {
+  if (!input.userId || input.userId === 'default_user') return;
+  const key = `${input.userId}:${input.dialogTime}`;
+  if (pendingDialogKeys.has(key)) return;
+  pendingDialogKeys.add(key);
+  pendingDialogs.push(input);
+  armDialogIndex();
+}
+
+function armDialogIndex(): void {
+  if (indexTimer || indexing || answerInProgress > 0 || pendingDialogs.length === 0) return;
+  indexTimer = setTimeout(() => {
+    indexTimer = null;
+    void drainDialogIndex();
+  }, DIALOG_INDEX_DELAY_MS);
+  indexTimer.unref?.();
+}
+
+async function drainDialogIndex(): Promise<void> {
+  if (indexing || answerInProgress > 0) return;
+  indexing = true;
+  try {
+    while (pendingDialogs.length > 0 && answerInProgress === 0) {
+      const job = pendingDialogs.shift()!;
+      pendingDialogKeys.delete(`${job.userId}:${job.dialogTime}`);
+      try {
+        await indexUserDialogMemory(job);
+      } catch (err) {
+        console.warn('[memory] delayed dialog index failed:', err instanceof Error ? err.message : err);
+      }
+    }
+  } finally {
+    indexing = false;
+    if (pendingDialogs.length > 0) armDialogIndex();
   }
 }
 

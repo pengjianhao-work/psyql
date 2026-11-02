@@ -16,11 +16,20 @@ export interface EmotionTimelineEntry {
   notes?: string;
 }
 
+export interface ExecutionExperience {
+  time: string;
+  problem: string;
+  emotion: string;
+  framework: string;
+}
+
 export interface InterventionProfile {
   effectiveApproaches: string[];
   avoidPhrases: string[];
   sensitiveTopics: string[];
   preferredTone?: 'gentle' | 'rational' | 'brief' | string;
+  /** 永久保留的历史执行经验，只留最近若干条 */
+  executionHistory?: ExecutionExperience[];
 }
 
 export interface UserAgentProfileRow {

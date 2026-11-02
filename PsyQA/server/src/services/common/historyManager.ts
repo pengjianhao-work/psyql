@@ -20,6 +20,7 @@ import {
   ProblemAnalysis
 } from '../psych/emotionService';
 import { blendMetricsWithSelfRating } from '../psych/psychStatsService';
+import { labelFramework } from '../psych/interventionService';
 
 export type { ConversationPortrait, PsychSnapshot } from '../../types/psychHistory';
 import type { ConversationPortrait, PsychSnapshot } from '../../types/psychHistory';
@@ -204,6 +205,42 @@ export function saveDialog(
   data.users[user_id].total_times += 1;
   saveHistoryJson(data);
   return now;
+}
+
+/** 最近几轮的原话。当前问题尚未入库，这里就是上一轮及更早的内容。 */
+export function getRecentDialogTranscript(userId: string, limit = 2): string {
+  const dialogs = getUserData(userId)?.dialogs;
+  if (!dialogs?.length) return '';
+  const recent = dialogs.slice(-limit);
+  const startIndex = dialogs.length - recent.length;
+  return recent
+    .map((dialog, index) => {
+      const user = dialog.user.replace(/\s+/g, ' ').trim().slice(0, 180);
+      const bot = dialog.bot.replace(/\s+/g, ' ').trim().slice(0, 160);
+      return `第${startIndex + index + 1}轮\n用户：${user}\n回应：${bot}`;
+    })
+    .join('\n');
+}
+
+/** 工作记忆：当前议题、近几轮走向、上一轮用过的方法。不是原文。 */
+export function buildWorkingMemory(userId: string): string {
+  const dialogs = getUserData(userId)?.dialogs;
+  if (!dialogs?.length) return '';
+  const recent = dialogs.slice(-4);
+  const last = recent[recent.length - 1];
+  const trend = recent
+    .filter((dialog) => dialog.psych)
+    .map((dialog) => EMOTION_LABELS[dialog.psych!.emotion] || dialog.psych!.emotion)
+    .join(' → ');
+  const problem = last.psych ? getCategoryName(last.psych.problem) : '';
+  const method = labelFramework(last.psych?.frameworkId);
+  return [
+    problem ? `正在处理：${problem}` : '',
+    trend ? `近几轮情绪：${trend}` : '',
+    method ? `上一轮用过：${method}` : ''
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function getUserSummaries(user_id: string): string {

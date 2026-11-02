@@ -1,5 +1,6 @@
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
-import type { ReActCounselContext, ReActCounselResult, ReActStep } from './reactCounselAgent';
+import { formatTurnMemory, type ReActCounselContext, type ReActCounselResult, type ReActStep } from './reactCounselAgent';
+import { formatPersonalMemories } from '../user/userMemoryService';
 import type { ReactMode } from './agentPolicy';
 import { getCategoryName, type ProblemCategory } from '../psych/emotionService';
 
@@ -148,16 +149,8 @@ function formatObservation(ctx: ReActCounselContext, plan: LoopPlan): string {
     );
   }
   if (plan.useMemory && ctx.prefetchedMemory?.length) {
-    parts.push(
-      '记忆观察：\n' +
-        ctx.prefetchedMemory
-          .slice(0, 2)
-          .map(
-            (h, i) =>
-              `${i + 1}. [${(h.similarity * 100).toFixed(0)}%] ${truncate(h.answer || h.question, 90)}`
-          )
-          .join('\n')
-    );
+    const memory = formatPersonalMemories(ctx.prefetchedMemory, ctx.recentDialogs);
+    if (memory) parts.push(`长期向量记忆：\n${memory}`);
   }
   if (!parts.length) {
     parts.push('环境观察：无额外检索命中，依赖本轮问题与干预框架。');
@@ -198,12 +191,13 @@ async function generateDraft(
 本轮目标：${plan.goal}
 要求：${ctx.intentDirective || '温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。'}
 语气：${ctx.tone}
+若给出了这个用户以前说过的事，回复要让对方感到被记住，不要当成第一次见面。
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 
   const userPrompt = [
     `【用户提问】${ctx.question}`,
     ctx.description ? `【补充】${ctx.description}` : '',
-    ctx.historySummary ? `【历史摘要】${truncate(ctx.historySummary, 200)}` : '',
+    ...formatTurnMemory(ctx),
     `【观察结果】\n${observation}`,
     reflectionFeedback ? `【上一轮反思反馈】${reflectionFeedback}` : '',
     `【开场参考】${ctx.intervention.openingPhrase}`,

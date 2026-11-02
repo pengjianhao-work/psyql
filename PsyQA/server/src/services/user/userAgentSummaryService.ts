@@ -145,7 +145,8 @@ ${digest}`;
         (x) => x !== '无' && !(profile.interventionJson?.sensitiveTopics ?? []).includes(x)
       )
     ].slice(-20),
-    preferredTone: parsed.tone || profile.interventionJson?.preferredTone
+    preferredTone: parsed.tone || profile.interventionJson?.preferredTone,
+    executionHistory: profile.interventionJson?.executionHistory ?? []
   };
 
   updateUserAgentProfile(userId, {

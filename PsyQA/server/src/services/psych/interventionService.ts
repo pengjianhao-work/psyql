@@ -52,6 +52,24 @@ function pickPhrase(emotion: EmotionType): { open: string; close: string } {
   return EMOTION_PHRASES[emotion] ?? DEFAULT_PHRASE;
 }
 
+const FRAMEWORK_LABELS: Record<string, string> = {
+  safety_plan: '安全计划（危机优先）',
+  cbt_academic: 'CBT 轻度 · 学业焦虑',
+  interpersonal_activation: '人际支持 + 行为激活',
+  emotion_boundary: '情绪调节 + 边界',
+  mi_future: '动机访谈 · 未来迷茫',
+  mindfulness_light: '正念轻量 · 情绪调节',
+  cbt_general: 'CBT 通用 · 压力管理',
+  interpersonal_general: '人际沟通通用',
+  mindfulness_general: '正念与情绪调节',
+  supportive_counseling: '支持性心理咨询'
+};
+
+export function labelFramework(frameworkId?: string): string {
+  if (!frameworkId) return '';
+  return FRAMEWORK_LABELS[frameworkId] || frameworkId;
+}
+
 export function getInterventionPlan(
   emotion: EmotionType,
   problem: ProblemCategory,

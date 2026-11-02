@@ -5,4 +5,6 @@ export interface SearchResult {
   similarity: number;
   dialogTime?: string;
   source?: 'public' | 'user';
+  emotion?: string;
+  trigger?: string;
 }

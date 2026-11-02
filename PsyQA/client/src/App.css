@@ -5351,19 +5351,30 @@
 
 .stream-control-row {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   margin-top: 0.5rem;
   flex-wrap: wrap;
 }
 
+.stream-pause-btn,
+.stream-stop-btn {
+  box-sizing: border-box;
+  height: 32px;
+  min-width: 88px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 .stream-pause-btn {
-  padding: 0.35rem 0.75rem;
   border: 1px solid #90a4ae;
   background: #eceff1;
   color: #37474f;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.85rem;
 }
 
 .react-step-jump {
@@ -5435,14 +5446,9 @@
 }
 
 .stream-stop-btn {
-  margin-top: 0.5rem;
-  padding: 0.35rem 0.75rem;
   border: 1px solid #e57373;
   background: #fff5f5;
   color: #c62828;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.85rem;
 }
 
 .stream-stop-bar {

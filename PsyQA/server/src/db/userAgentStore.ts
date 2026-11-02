@@ -180,6 +180,33 @@ export function countUserDialogVectors(userId: string): number {
   return row?.c ?? 0;
 }
 
+export function getDialogsPendingVectorization(limit = 200): Array<{
+  userId: string;
+  dialogTime: string;
+  userText: string;
+  botText: string;
+  psychJson: string | null;
+}> {
+  return getDb()
+    .prepare(
+      `SELECT d.user_id as userId, d.dialog_time as dialogTime,
+              d.user_text as userText, d.bot_text as botText, d.psych_json as psychJson
+       FROM dialogs d
+       LEFT JOIN user_dialog_vectors v
+         ON v.user_id = d.user_id AND v.dialog_time = d.dialog_time
+       WHERE d.user_id IS NOT NULL AND d.user_id != 'default_user' AND v.user_id IS NULL
+       ORDER BY d.id ASC
+       LIMIT ?`
+    )
+    .all(limit) as Array<{
+    userId: string;
+    dialogTime: string;
+    userText: string;
+    botText: string;
+    psychJson: string | null;
+  }>;
+}
+
 export function listUserIdsWithDialogs(): string[] {
   const rows = getDb()
     .prepare('SELECT DISTINCT user_id FROM dialogs WHERE user_id IS NOT NULL AND user_id != ?')

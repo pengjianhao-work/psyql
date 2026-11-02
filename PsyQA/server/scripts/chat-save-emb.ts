@@ -33,15 +33,19 @@ async function main(): Promise<void> {
       }
     }
     try {
-      await indexUserDialogMemory({
+      const saved = await indexUserDialogMemory({
         userId: row.userId,
         dialogTime: row.dialogTime,
         userText: row.userText,
         botText: row.botText,
         psych
       });
-      ok += 1;
-      process.stdout.write('.');
+      if (saved) {
+        ok += 1;
+        process.stdout.write('.');
+      } else {
+        fail += 1;
+      }
     } catch (err) {
       fail += 1;
       console.warn('\nfail', row.userId, row.dialogTime, err instanceof Error ? err.message : err);

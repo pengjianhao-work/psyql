@@ -366,6 +366,8 @@ export async function searchUserQdrant(userId: string, query: string, topK = 5):
         answer: point.payload?.content ?? '',
         similarity: point.score ?? 0,
         dialogTime: point.payload?.dialogTime,
+        emotion: point.payload?.emotion,
+        trigger: point.payload?.trigger,
         source: 'user' as const
       }))
       .filter((row) => row.question || row.answer);
