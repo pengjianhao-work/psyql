@@ -1,0 +1,79 @@
+# GitHub Actions only loads workflows from the repository-root `.github/workflows`.
+# A nested copy such as PsyQA/.github/workflows is ignored and does not run.
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: PsyQA
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Datasets, Chroma, and SQLite are Git LFS. Tests do not need those
+          # blobs. Leaving them as pointers keeps the job off the LFS quota.
+          lfs: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            PsyQA/package-lock.json
+            PsyQA/client/package-lock.json
+
+      # Fresh install from the lockfiles. Do not use the committed node_modules
+      # tree (it is a Windows install, including better-sqlite3 binaries).
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix client
+
+      - name: Typecheck server
+        run: npx tsc -p server/tsconfig.json --noEmit
+
+      # Checkout without LFS leaves pointer files. better-sqlite3 and
+      # JSON.parse both reject those pointers, so Jest cannot run until they
+      # are replaced with empty stand-ins. Real datasets are not required.
+      - name: Prepare test fixtures
+        run: |
+          is_lfs_pointer() {
+            head -n 1 "$1" 2>/dev/null | grep -q 'git-lfs.github.com/spec/v1'
+          }
+          if [ -f PsyQA_full.json ] && is_lfs_pointer PsyQA_full.json; then
+            printf '[]\n' > PsyQA_full.json
+          fi
+          for f in \
+            server/data/psyqa.db server/data/psyqa.db-shm server/data/psyqa.db-wal \
+            data/psyqa.db data/psyqa.db-shm data/psyqa.db-wal
+          do
+            if [ -f "$f" ] && is_lfs_pointer "$f"; then
+              rm -f "$f"
+            fi
+          done
+
+      - name: Server unit tests
+        run: npx jest --config server/jest.config.js --passWithNoTests --forceExit
+        env:
+          NODE_ENV: test
+          AUTH_SECRET: ci-test-secret-key-32chars
+
+      - name: Build client
+        run: npm run build:client
+        env:
+          CI: true
+          # CRA treats react-hooks/exhaustive-deps warnings as errors when CI=true.
+          # Those warnings already exist in the client. Typecheck still runs.
+          DISABLE_ESLINT_PLUGIN: true
+          GENERATE_SOURCEMAP: false
