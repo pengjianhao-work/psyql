@@ -10,6 +10,7 @@ import { shouldUseLlm, resolveActiveLlmProvider } from './services/llmClient';
 import { isZhipuConfigured, getZhipuModel, checkZhipuHealth } from './services/llm/zhipuClient';
 import { assertAuthSecretConfigured } from './services/sessionService';
 import { localBgeReady } from './services/knowledge/localBgeClient';
+import { localRerankUrl } from './services/knowledge/rerankService';
 
 try {
   validateProductionEnv();
@@ -45,6 +46,15 @@ const server = app.listen(env.port, () => {
   void localBgeReady().then((ok) => {
     if (ok) console.log('知识检索：本机 bge-m3（整句向量 + 稀疏权重 + 64 个词向量）');
     else console.warn('知识检索：本机 bge-m3 未启动。运行 npm run start:bge-m3');
+  });
+  void import('axios').then(async ({ default: axios }) => {
+    try {
+      const { data } = await axios.get(`${localRerankUrl()}/health`, { timeout: 800 });
+      if (data?.ok) console.log('知识重排序：本机 bge-reranker-v2-m3');
+      else console.warn('知识重排序：本机 bge-reranker 未启动。运行 npm run start:bge-rerank');
+    } catch {
+      console.warn('知识重排序：本机 bge-reranker 未启动。运行 npm run start:bge-rerank');
+    }
   });
 
   void (async () => {

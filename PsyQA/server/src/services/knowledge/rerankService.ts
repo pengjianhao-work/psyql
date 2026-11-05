@@ -2,10 +2,12 @@ import axios from 'axios';
 import { getZhipuApiKey, getZhipuBaseUrl } from '../llm/zhipuClient';
 import type { SearchResult } from './searchTypes';
 
-const DEFAULT_RERANK_MODEL = 'Qwen/Qwen3-Reranker-8B';
+const DEFAULT_RERANK_MODEL = 'BAAI/bge-reranker-v2-m3';
+const LOCAL_RERANK_URL = 'http://127.0.0.1:8092';
 const DEFAULT_RERANK_INSTRUCTION =
   'Retrieve the counseling post whose question best matches the student query.';
 let announcedModel: string | null = null;
+let localHealth: { ok: boolean; at: number } | null = null;
 const CRISIS_TERMS = /想死|自杀|轻生|不想活|结束生命|割腕|去死/;
 
 export interface RerankScore {
@@ -15,8 +17,11 @@ export interface RerankScore {
 
 export function isRerankEnabled(): boolean {
   const flag = (process.env.PSYQA_RERANK_ENABLED || '1').trim().toLowerCase();
-  if (flag === '0' || flag === 'false' || flag === 'off') return false;
-  return Boolean(getZhipuApiKey());
+  return flag !== '0' && flag !== 'false' && flag !== 'off';
+}
+
+export function localRerankUrl(): string {
+  return (process.env.BGE_RERANK_URL || LOCAL_RERANK_URL).replace(/\/$/, '');
 }
 
 export function rerankModelName(): string {
@@ -70,23 +75,50 @@ function passage(item: SearchResult): string {
   return `${item.question}\n${answer}`.trim();
 }
 
-export async function rerankResults(
-  query: string,
-  items: SearchResult[],
-  topK: number
-): Promise<SearchResult[]> {
-  if (topK <= 0) return [];
-  if (items.length <= 1 || !isRerankEnabled()) return demoteUnrequestedCrisis(query, items).slice(0, topK);
+function announce(model: string): void {
+  if (announcedModel === model) return;
+  announcedModel = model;
+  console.log(`[rerank] 使用 ${model}`);
+}
 
-  const documents = items.map(passage);
-  const key = getZhipuApiKey();
-  if (!key) return items.slice(0, topK);
-
-  const model = rerankModelName();
-  if (announcedModel !== model) {
-    announcedModel = model;
-    console.log(`[rerank] 使用 ${model}`);
+async function localRerankReady(): Promise<boolean> {
+  const now = Date.now();
+  if (localHealth && now - localHealth.at < (localHealth.ok ? 15_000 : 3_000)) return localHealth.ok;
+  try {
+    const { data } = await axios.get(`${localRerankUrl()}/health`, { timeout: 800 });
+    localHealth = { ok: data?.ok === true, at: now };
+  } catch {
+    localHealth = { ok: false, at: now };
   }
+  return localHealth.ok;
+}
+
+/** 本机 bge-reranker-v2-m3。分数已经过 sigmoid，和文档顺序对齐。 */
+async function rerankLocal(query: string, documents: string[]): Promise<RerankScore[] | null> {
+  if (!(await localRerankReady())) return null;
+  try {
+    const { data } = await axios.post(
+      `${localRerankUrl()}/rerank`,
+      { query: query.slice(0, 500), documents, max_length: 512 },
+      { timeout: 20_000 }
+    );
+    const scores = data?.scores as unknown;
+    if (data?.ok !== true || !Array.isArray(scores) || scores.length !== documents.length) return null;
+    const ranked = scores.map((score, index) => ({ index, score: Number(score) }));
+    if (ranked.some((row) => !Number.isFinite(row.score))) return null;
+    announce('本机 bge-reranker-v2-m3');
+    return ranked;
+  } catch (err) {
+    localHealth = { ok: false, at: Date.now() };
+    console.warn('[rerank] 本机 bge-reranker 失败:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+async function rerankRemote(query: string, documents: string[]): Promise<RerankScore[] | null> {
+  const key = getZhipuApiKey();
+  if (!key) return null;
+  const model = rerankModelName();
   const body: Record<string, unknown> = {
     model,
     query: query.slice(0, 500),
@@ -97,28 +129,35 @@ export async function rerankResults(
   if (model.toLowerCase().includes('qwen3-reranker')) {
     body.instruction = (process.env.SILICONFLOW_RERANK_INSTRUCTION || DEFAULT_RERANK_INSTRUCTION).trim();
   }
+  const { data } = await axios.post(`${getZhipuBaseUrl()}/rerank`, body, {
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    timeout: 20_000
+  });
+  const results = (data?.results ?? data?.data ?? []) as Array<{
+    index?: number;
+    relevance_score?: number;
+    score?: number;
+  }>;
+  const ranked = results
+    .map((row) => ({ index: Number(row.index), score: Number(row.relevance_score ?? row.score) }))
+    .filter((row) => Number.isFinite(row.score));
+  if (!ranked.length) return null;
+  announce(model);
+  return ranked;
+}
 
+export async function rerankResults(
+  query: string,
+  items: SearchResult[],
+  topK: number
+): Promise<SearchResult[]> {
+  if (topK <= 0) return [];
+  if (items.length <= 1 || !isRerankEnabled()) return demoteUnrequestedCrisis(query, items).slice(0, topK);
+
+  const documents = items.map(passage);
   try {
-    const { data } = await axios.post(
-      `${getZhipuBaseUrl()}/rerank`,
-      body,
-      {
-        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        timeout: 20_000
-      }
-    );
-    const results = (data?.results ?? data?.data ?? []) as Array<{
-      index?: number;
-      relevance_score?: number;
-      score?: number;
-    }>;
-    const ranked = results
-      .map((row) => ({
-        index: Number(row.index),
-        score: Number(row.relevance_score ?? row.score)
-      }))
-      .filter((row) => Number.isFinite(row.score));
-    if (!ranked.length) return demoteUnrequestedCrisis(query, items).slice(0, topK);
+    const ranked = (await rerankLocal(query, documents)) ?? (await rerankRemote(query, documents));
+    if (!ranked?.length) return demoteUnrequestedCrisis(query, items).slice(0, topK);
     return demoteUnrequestedCrisis(query, orderByRerankScores(items, ranked, items.length)).slice(0, topK);
   } catch (err) {
     console.warn('[rerank] 重排序失败，沿用融合顺序:', err instanceof Error ? err.message : err);
