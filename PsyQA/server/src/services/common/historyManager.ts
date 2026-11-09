@@ -7,6 +7,7 @@ import {
   clearUserHistoryInDb,
   updateDialogPsychInDb,
   updateDialogPortraitInDb,
+  getDialogsByConversation,
   type UserData
 } from '../../db/historyStore';
 import {
@@ -114,8 +115,10 @@ export function generateSummary(query: string, reply: string, psych?: PsychSnaps
   return `当前存在：${emotions.join('、')} 相关困扰，正在寻求疏导。`;
 }
 
-export function getLastPsychSnapshot(user_id: string): PsychSnapshot | null {
-  const dialogs = getUserData(user_id)?.dialogs;
+export function getLastPsychSnapshot(user_id: string, conversationId?: string): PsychSnapshot | null {
+  const dialogs = conversationId
+    ? getDialogsByConversation(user_id, conversationId)
+    : getUserData(user_id)?.dialogs;
   if (!dialogs?.length) return null;
   for (let i = dialogs.length - 1; i >= 0; i--) {
     if (dialogs[i].psych) return dialogs[i].psych!;
@@ -173,10 +176,11 @@ export function saveDialog(
   assistant_reply: string,
   summary: string,
   psych?: PsychSnapshot,
-  report?: string
+  report?: string,
+  conversationId?: string
 ): string {
   if (USE_SQLITE) {
-    return saveDialogToDb(user_id, user_query, assistant_reply, summary, psych, report);
+    return saveDialogToDb(user_id, user_query, assistant_reply, summary, psych, report, undefined, conversationId);
   }
 
   const data = loadHistoryJson();
@@ -208,8 +212,10 @@ export function saveDialog(
 }
 
 /** 最近几轮的原话。当前问题尚未入库，这里就是上一轮及更早的内容。 */
-export function getRecentDialogTranscript(userId: string, limit = 2): string {
-  const dialogs = getUserData(userId)?.dialogs;
+export function getRecentDialogTranscript(userId: string, limit = 2, conversationId?: string): string {
+  const dialogs = conversationId
+    ? getDialogsByConversation(userId, conversationId)
+    : getUserData(userId)?.dialogs;
   if (!dialogs?.length) return '';
   const recent = dialogs.slice(-limit);
   const startIndex = dialogs.length - recent.length;
@@ -223,8 +229,10 @@ export function getRecentDialogTranscript(userId: string, limit = 2): string {
 }
 
 /** 工作记忆：当前议题、近几轮走向、上一轮用过的方法。不是原文。 */
-export function buildWorkingMemory(userId: string): string {
-  const dialogs = getUserData(userId)?.dialogs;
+export function buildWorkingMemory(userId: string, conversationId?: string): string {
+  const dialogs = conversationId
+    ? getDialogsByConversation(userId, conversationId)
+    : getUserData(userId)?.dialogs;
   if (!dialogs?.length) return '';
   const recent = dialogs.slice(-4);
   const last = recent[recent.length - 1];
@@ -235,7 +243,7 @@ export function buildWorkingMemory(userId: string): string {
   const problem = last.psych ? getCategoryName(last.psych.problem) : '';
   const method = labelFramework(last.psych?.frameworkId);
   return [
-    problem ? `正在处理：${problem}` : '',
+    problem ? `上一轮议题：${problem}` : '',
     trend ? `近几轮情绪：${trend}` : '',
     method ? `上一轮用过：${method}` : ''
   ]

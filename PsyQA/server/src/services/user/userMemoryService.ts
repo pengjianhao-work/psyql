@@ -20,6 +20,17 @@ import {
   deleteUserQdrantVectors,
   getUserQdrantCollectionName
 } from '../knowledge/qdrantVectorService';
+import {
+  planEpisode,
+  topicFromVector,
+  topicOfText,
+  episodeIsActive,
+  warmEpisodeTopics,
+  nextPreferenceCount,
+  EPISODE_LINK_AT,
+  EPISODE_PARAPHRASE_AT
+} from './episodeLink';
+import { createHash } from 'crypto';
 import { embedText } from '../knowledge/embeddingService';
 import { embedMultiLocal } from '../knowledge/localBgeClient';
 import { cacheGetOrSet } from '../../utils/memoryCache';
@@ -207,46 +218,154 @@ function memoryReplyLine(hit: SearchResult): string {
   return (matched?.[1] || '').replace(/\s+/g, ' ').trim().slice(0, 100);
 }
 
-/** 给回答模型的个人记忆。与最近两轮原话重复的条目会去掉。 */
-export function formatPersonalMemories(hits: SearchResult[], recentDialogs = ''): string {
+/** 这轮回答怎么用记忆：人要认得出来，旧事不能变成新问题。 */
+export const MEMORY_BOUNDARY =
+  '这轮只回答用户现在的问题。对方已经把几件事收成一种感受时，先接住感受，不要拆开纠正，也不要自己编因果。旧事要主题相同，近一周内或对方这轮明显又提起，才可以写进回答。';
+
+/** 跨天连线看粗主题和相似度。主题不同时，向量再高也不连。超过一周要更高的相似度。 */
+export function personalMemoryMatchesQuestion(
+  similarity: number,
+  questionTopic?: string,
+  memoryTopic?: string,
+  active = true
+): boolean {
+  if (!questionTopic || !memoryTopic || questionTopic !== memoryTopic) return false;
+  return similarity >= (active ? EPISODE_LINK_AT : EPISODE_PARAPHRASE_AT);
+}
+
+/** 给回答模型的个人记忆。与最近两轮原话重复的条目会去掉。新话题再丢掉和这轮无关的旧事。 */
+export function formatPersonalMemories(
+  hits: SearchResult[],
+  recentDialogs = '',
+  options?: { question?: string; continuePrevious?: boolean }
+): string {
   const recentSnips = [...recentDialogs.matchAll(/用户：([^\n]{8,40})/g)].map((match) => match[1].trim());
+  const question = options?.question?.trim() || '';
+  const continuePrevious = options?.continuePrevious === true;
+  const questionTopic = topicOfText(question);
   const picked = hits
     .filter((hit) => hit.source !== 'public')
     .filter((hit) => {
       const line = memoryUserLine(hit);
       if (line.length < 8) return false;
-      return !recentSnips.some((snip) => line.includes(snip) || snip.includes(line.slice(0, 24)));
+      if (recentSnips.some((snip) => line.includes(snip) || snip.includes(line.slice(0, 24)))) return false;
+      if (!question || continuePrevious) return true;
+      return personalMemoryMatchesQuestion(
+        hit.similarity,
+        hit.queryTopic || questionTopic,
+        hit.episodeTopic || topicOfText(line),
+        episodeIsActive(hit.dialogTime)
+      );
     })
-    .slice(0, 4);
+    .slice(0, continuePrevious ? 4 : 3);
   if (!picked.length) return '';
 
-  const lines = picked.map((hit, index) => {
-    const tags = [hit.dialogTime, hit.emotion, hit.trigger].filter(Boolean).join(' · ');
-    const reply = memoryReplyLine(hit);
-    return [
-      `${index + 1}. ${tags || '更早的对话'}`,
-      `用户当时说：${memoryUserLine(hit)}`,
-      reply ? `当时的回应：${reply}` : ''
-    ]
-      .filter(Boolean)
+  const groups = new Map<string, SearchResult[]>();
+  const order: string[] = [];
+  for (const hit of picked) {
+    const topic = hit.episodeTopic || topicOfText(memoryUserLine(hit)) || '';
+    const key = topic || `one:${memoryUserLine(hit)}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key)!.push(hit);
+  }
+  const blocks = order.map((key) => {
+    const list = groups.get(key)!;
+    if (!key.startsWith('one:') && list.length > 1) {
+      const lines = list.slice(0, 3).map((hit) => `- ${hit.dialogTime || '更早'} ${memoryUserLine(hit)}`);
+      return `${key}这条线最近有 ${list.length} 次，合并成一件事，不要拆开讲：\n${lines.join('\n')}`;
+    }
+    return list
+      .map((hit, index) => {
+        const tags = [hit.dialogTime, hit.emotion, hit.trigger].filter(Boolean).join(' · ');
+        const reply = memoryReplyLine(hit);
+        return [
+          `${index + 1}. ${tags || '更早的对话'}`,
+          `用户当时说：${memoryUserLine(hit)}`,
+          reply ? `当时的回应：${reply}` : ''
+        ]
+          .filter(Boolean)
+          .join('\n');
+      })
       .join('\n');
   });
 
   return [
-    '这些是这个用户自己以前说过的事，不是公共帖子。回答时自然用上里面的人、反复出现的压力、上次有用的做法，让对方感到被记住。不要逐条复述，也不要编造这里没有的事实。',
-    ...lines
+    '这些是这个用户自己以前说过、并且和这轮有关的原话，不是公共帖子。只有能贴住这轮问题时才轻轻用上。不要复述，不要把旧事写成这轮的起因，也不要编造这里没有的事实。',
+    ...blocks
   ].join('\n');
 }
 
-/** 每轮回答后写入，永久保留用过的方法。 */
+const TONE_CUES: Array<{ pattern: RegExp; tone: string }> = [
+  { pattern: /说短一点|简短一点|别那么长|不要长篇|简单说/, tone: '说话短一些' },
+  { pattern: /温柔一点|别说教|不要说教|语气柔和/, tone: '语气柔和，少说教' },
+  { pattern: /直接一点|理性一点|少安慰|别只是安慰/, tone: '直接一些，少空泛安慰' }
+];
+
+/** 同一种语气反馈累计满 3 次才改档案。一次情绪不好不改。 */
+export function notePreferenceSignal(userId: string, tone: string): void {
+  if (!userId || userId === 'default_user' || !tone) return;
+  const profile = ensureUserAgentProfile(userId);
+  const current = profile.interventionJson ?? {
+    effectiveApproaches: [],
+    avoidPhrases: [],
+    sensitiveTopics: []
+  };
+  const next = nextPreferenceCount(current.preferenceSignals, tone);
+  updateUserAgentProfile(userId, {
+    interventionJson: {
+      ...current,
+      preferenceSignals: next.counts,
+      preferredTone: next.ready ? tone : current.preferredTone
+    }
+  });
+}
+
+export function noteWrittenFeedback(userId: string, comment?: string): void {
+  const text = comment?.trim() || '';
+  if (!text) return;
+  if (/太长|太啰嗦|说短|简短一点/.test(text)) notePreferenceSignal(userId, '说话短一些');
+  else if (/说教|太官方|别安慰/.test(text)) notePreferenceSignal(userId, '语气柔和，少说教');
+  else if (/直接一点|太绕/.test(text)) notePreferenceSignal(userId, '直接一些，少空泛安慰');
+}
+
+export function rememberSpokenPreference(userId: string, text: string): void {
+  if (!userId || userId === 'default_user' || !text.trim()) return;
+  for (const cue of TONE_CUES) {
+    if (cue.pattern.test(text)) {
+      notePreferenceSignal(userId, cue.tone);
+      break;
+    }
+  }
+  const profile = ensureUserAgentProfile(userId);
+  const current = profile.interventionJson ?? {
+    effectiveApproaches: [],
+    avoidPhrases: [],
+    sensitiveTopics: []
+  };
+  const sensitive = [...(current.sensitiveTopics ?? [])];
+  const avoid = text.match(/别提([^，。！？]{2,12})|不要提([^，。！？]{2,12})|不想听([^，。！？]{2,12})/);
+  const phrase = (avoid?.[1] || avoid?.[2] || avoid?.[3] || '').trim();
+  if (!phrase || sensitive.includes(phrase)) return;
+  sensitive.push(phrase);
+  updateUserAgentProfile(userId, {
+    interventionJson: { ...current, sensitiveTopics: sensitive.slice(-8) }
+  });
+}
+
+/** 每轮回答后写入，永久保留用过的方法。用户明说的语气也在这里收下。 */
 export function rememberTurnExperience(input: {
   userId: string;
   dialogTime: string;
   problem: string;
   emotion: string;
   framework: string;
+  userText?: string;
 }): void {
-  const { userId, dialogTime, problem, emotion, framework } = input;
+  const { userId, dialogTime, problem, emotion, framework, userText } = input;
+  if (userText) rememberSpokenPreference(userId, userText);
   if (!userId || userId === 'default_user' || !dialogTime || !framework) return;
   const profile = ensureUserAgentProfile(userId);
   const current = profile.interventionJson ?? {
@@ -376,28 +495,42 @@ export async function indexUserDialogMemory(input: {
     ? getCategoryName(psych.problem as ProblemCategory)
     : 'general';
   const tag = `${emotion}_${trigger}`;
-  const content = `用户：${userText}\n助理：${botText}`;
   const chromaId = `${userId}_${dialogTime.replace(/[^\d]/g, '')}`;
+  await warmEpisodeTopics();
+  const episodePlan = planEpisode(userText);
+  const pieces =
+    episodePlan.mode === 'split' || episodePlan.mode === 'woven' ? episodePlan.clauses : [userText];
 
-  const localDense = await embedMultiLocal(content, 8);
-  const embedding = localDense?.dense?.length ? localDense.dense : await embedText(content);
-  if (!embedding) return false;
+  let stored = false;
+  for (let index = 0; index < pieces.length; index += 1) {
+    const piece = pieces[index];
+    const content = pieces.length > 1 ? `用户：${piece}` : `用户：${userText}\n助理：${botText}`;
+    const localDense = await embedMultiLocal(content, 8);
+    const embedding = localDense?.dense?.length ? localDense.dense : await embedText(content);
+    if (!embedding) continue;
+    const episodeTitle = piece.replace(/\s+/g, ' ').trim().slice(0, 24);
+    const episodeId = createHash('sha1').update(episodeTitle).digest('hex').slice(0, 16);
+    const episodeTopic = topicFromVector(embedding) || topicOfText(piece) || '';
+    const ok = await upsertUserQdrantDialog(userId, {
+      id: pieces.length > 1 ? `${chromaId}_${index}` : chromaId,
+      content,
+      embedding,
+      metadata: {
+        month,
+        emotion,
+        trigger,
+        tag,
+        dialogTime,
+        userPreview: piece.slice(0, 120),
+        episodeId,
+        episodeTitle,
+        episodeTopic
+      }
+    });
+    stored = stored || ok;
+  }
 
-  const ok = await upsertUserQdrantDialog(userId, {
-    id: chromaId,
-    content,
-    embedding,
-    metadata: {
-      month,
-      emotion,
-      trigger,
-      tag,
-      dialogTime,
-      userPreview: userText.slice(0, 120)
-    }
-  });
-
-  if (ok) {
+  if (stored) {
     recordDialogVectorMeta({
       userId,
       dialogTime,
@@ -414,7 +547,7 @@ export async function indexUserDialogMemory(input: {
       problem: psych?.problem
     });
   }
-  return ok;
+  return stored;
 }
 
 const DIALOG_INDEX_DELAY_MS = 8_000;

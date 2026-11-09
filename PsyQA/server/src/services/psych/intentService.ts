@@ -132,6 +132,17 @@ export function mergeIntent(
   return { intent: rule, source: 'hybrid' };
 }
 
+/** 规则已经清楚、且没有高风险时，不再额外请模型做情绪 JSON。 */
+export function needsPsychModel(
+  intent: IntentAnalysis,
+  riskLevel: 'low' | 'medium' | 'high' | 'critical'
+): boolean {
+  if (intent.kind === 'crisis') return true;
+  if (riskLevel === 'high' || riskLevel === 'critical') return true;
+  if (intent.confidence < 0.6) return true;
+  return false;
+}
+
 export function intentKnowledgeLimit(kind: IntentKind): number {
   if (kind === 'greeting' || kind === 'offtopic') return 0;
   if (kind === 'followup' || kind === 'crisis') return 1;

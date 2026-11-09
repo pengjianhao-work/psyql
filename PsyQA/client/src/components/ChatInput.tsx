@@ -31,6 +31,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [listening, setListening] = useState(false);
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
   const [crisisDismissed, setCrisisDismissed] = useState(false);
+  const [breathing, setBreathing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
@@ -162,6 +163,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             {speechSupported ? ' · 可语音输入' : ''}
           </span>
           <div className="input-box-actions">
+            <button
+              type="button"
+              className="breath-btn"
+              onClick={() => {
+                setBreathing(true);
+                window.setTimeout(() => setBreathing(false), 3000);
+              }}
+              disabled={breathing}
+              aria-label="先深呼吸"
+              title="先深呼吸"
+            >
+              呼吸
+            </button>
             {speechSupported && (
               <button
                 type="button"
@@ -171,7 +185,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 aria-label={listening ? '停止语音输入' : '语音输入'}
                 title={listening ? '停止语音输入' : '语音输入'}
               >
-                {listening ? '⏹' : '🎤'}
+                {listening ? '停止' : '语音'}
               </button>
             )}
             <button
@@ -185,6 +199,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </div>
         </div>
       </form>
+      {breathing && (
+        <p className="breath-guide" role="status">
+          吸气 4 · 停 7 · 呼气 8
+        </p>
+      )}
+      <p className="input-privacy">对话记在你的账号里。只有高风险时，学校端才会收到提醒。</p>
     </div>
   );
 };

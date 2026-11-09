@@ -73,9 +73,11 @@ export interface Message {
   seasonalRagLabel?: string;
   /** 情绪明显时附带的心理视频推荐 */
   videos?: VideoItem[];
-  /** SSE 流式输出中，跳过打字机动画 */
+  /** SSE 流式输出中，按已闭合段落渲染，不再二次打字 */
   streaming?: boolean;
   aborted?: boolean;
+  /** 发送失败时，点这条系统消息可重试 */
+  retryQuestion?: string;
 }
 
 export interface ReActStep {
@@ -309,6 +311,7 @@ export interface QuestionResponse {
   statModel?: PsychStatModel;
   responseTimeMs?: number;
   dialogId?: string;
+  conversationId?: string;
   portrait?: ConversationPortrait;
   /** 画像异步生成中时为 true */
   portraitPending?: boolean;

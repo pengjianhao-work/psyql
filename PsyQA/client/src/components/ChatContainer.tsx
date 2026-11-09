@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Message } from '../types';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -13,6 +13,7 @@ interface ChatContainerProps {
   onResumeGenerate?: () => void;
   streamPaused?: boolean;
   onSimilarQuestionClick: (question: string) => void;
+  onRetry?: (question: string) => void;
   onClearHistory: () => void;
   onExportHistory?: () => void;
   quickPrompts?: string[];
@@ -22,6 +23,11 @@ interface ChatContainerProps {
   estimatedWaitSec?: number;
   fastAnswerMode?: boolean;
   onValidateBeforeSend?: (question: string) => boolean;
+  sessions?: Array<{ id: string; title: string; status: 'active' | 'archived' }>;
+  activeSessionId?: string;
+  onNewSession?: () => void;
+  onEndSession?: () => void;
+  onSelectSession?: (id: string) => void;
 }
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({
@@ -34,6 +40,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   onResumeGenerate,
   streamPaused = false,
   onSimilarQuestionClick,
+  onRetry,
   onClearHistory,
   onExportHistory,
   quickPrompts = [],
@@ -42,19 +49,42 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   exportMenu,
   estimatedWaitSec,
   fastAnswerMode = false,
-  onValidateBeforeSend
+  onValidateBeforeSend,
+  sessions = [],
+  activeSessionId,
+  onNewSession,
+  onEndSession,
+  onSelectSession
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-
+  const stickToBottomRef = useRef(true);
+  const [showNew, setShowNew] = useState(false);
+  const lateHour = new Date().getHours() >= 23 || new Date().getHours() < 6;
   const showWelcome = messages.length <= 1 && !isLoading && !isGenerating;
-  const showQuickPrompts = showWelcome && quickPrompts.length > 0;
+  const visibleMessages = showWelcome ? messages.filter((message) => message.id !== '1') : messages;
+  const userTurns = messages.filter((message) => message.type === 'user').length;
+  const promptCards = quickPrompts.slice(0, 3);
+  const showQuickPrompts = showWelcome && promptCards.length > 0;
   const inputDisabled = isLoading || initializing || inputLocked;
   const showStop = isGenerating && onStopGenerate;
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (stickToBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setShowNew(false);
+    } else {
+      setShowNew(true);
+    }
   }, [messages, isLoading]);
+
+  const onMessagesScroll = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distance < 80;
+    if (stickToBottomRef.current) setShowNew(false);
+  };
 
   const handleClear = () => {
     if (window.confirm('确定要清空所有对话记录吗？')) {
@@ -63,11 +93,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   };
 
   return (
-    <div className="chat-container">
+    <div className={`chat-container${lateHour ? ' chat-late' : ''}`}>
       <div className="chat-header">
         <div className="header-content">
-          <h2>💬 心理港湾</h2>
-          <p>安全 · 私密 · 不评判的倾听空间</p>
+          <span className="chat-brand-mark" aria-hidden="true">
+            港
+          </span>
+          <div className="chat-brand-text">
+            <h2>心理港湾</h2>
+            <p>慢慢说就好</p>
+          </div>
         </div>
         <div className="header-actions">
           {exportMenu}
@@ -76,35 +111,65 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               📥 导出
             </button>
           )}
-          <button type="button" className="action-btn" onClick={handleClear}>
-            🗑️ 清空
+          <button type="button" className="action-btn action-btn-quiet" onClick={handleClear}>
+            清空
           </button>
+          {onNewSession && (
+            <button
+              type="button"
+              className="action-btn action-btn-primary"
+              onClick={onNewSession}
+              disabled={isLoading || isGenerating}
+            >
+              新对话
+            </button>
+          )}
+          {onEndSession && (
+            <button
+              type="button"
+              className="action-btn action-btn-outline"
+              onClick={onEndSession}
+              disabled={isLoading || isGenerating || messages.length <= 1}
+            >
+              结束这段
+            </button>
+          )}
         </div>
       </div>
+      {sessions.length > 0 && (
+        <label className="conversation-bar">
+          <span>会话</span>
+          <select
+            value={activeSessionId || ''}
+            onChange={(event) => onSelectSession?.(event.target.value)}
+            disabled={isLoading || isGenerating}
+          >
+            {sessions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.status === 'archived' ? `${session.title}（已结束）` : session.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
-      <div className="chat-messages" ref={messagesContainerRef}>
+      <div className="chat-stream">
+      <div
+        className={`chat-messages${showWelcome ? ' chat-messages-welcome' : ''}`}
+        ref={messagesContainerRef}
+        onScroll={onMessagesScroll}
+      >
         {showWelcome && (
           <div className="chat-welcome-hero">
-            <div className="chat-welcome-icon" aria-hidden="true">
-              🌿
-            </div>
-            <h3 className="chat-welcome-heading">今天想聊点什么？</h3>
-            <p className="chat-welcome-desc">
-              可以描述最近的心情、人际或学业压力。我会认真倾听，并给出参考建议。
-            </p>
-            <ul className="chat-welcome-features">
-              <li>🔒 对话仅你可见</li>
-              <li>📚 专业心理知识参考</li>
-              <li>📊 可查看情绪趋势</li>
-            </ul>
+            <h3 className="chat-welcome-heading">最近怎么样？</h3>
+            <p className="chat-welcome-desc">学业、关系和心情，都可以。不是只有撑不住才来。</p>
           </div>
         )}
 
         {showQuickPrompts && (
           <div className="chat-welcome">
-            <p className="chat-welcome-title">也可以从这些话题开始：</p>
             <div className="quick-prompts">
-              {quickPrompts.map((q) => (
+              {promptCards.map((q) => (
                 <button
                   key={q}
                   type="button"
@@ -118,12 +183,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           </div>
         )}
 
-        {messages.map((message) => (
+        {visibleMessages.map((message) => (
           <ChatMessage
             key={message.id}
             message={message}
             knowledgeSources={message.knowledgeSources}
             onSimilarQuestionClick={onSimilarQuestionClick}
+            onRetry={onRetry}
           />
         ))}
 
@@ -143,9 +209,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                     <span />
                   </div>
                   <div className="chat-loading-text">
-                    <p className="chat-loading-title">
-                      {fastAnswerMode ? '规则模式 · 正在匹配知识库…' : '正在认真倾听并思考…'}
-                    </p>
+                    <p className="chat-loading-title">我在听你说…</p>
                     {estimatedWaitSec != null && estimatedWaitSec > 0 && !fastAnswerMode && (
                       <span className="chat-loading-hint">预计约 {estimatedWaitSec} 秒，请稍候</span>
                     )}
@@ -197,6 +261,22 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
         <div ref={messagesEndRef} />
       </div>
+      {showNew && !showWelcome && (
+        <button
+          type="button"
+          className="new-message-jump"
+          onClick={() => {
+            stickToBottomRef.current = true;
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            setShowNew(false);
+          }}
+        >
+          ↓ 新消息
+        </button>
+      )}
+      </div>
+
+      {userTurns >= 10 && <p className="session-close-hint">今天先聊到这？我随时在。</p>}
 
       <ChatInput
         onSend={onSend}

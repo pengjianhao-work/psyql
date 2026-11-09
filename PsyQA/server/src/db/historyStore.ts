@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { ensureConversationSchema } from './conversationStore';
 import type { ConversationPortrait, PsychSnapshot } from '../services/historyManager';
 
 export interface DialogRow {
@@ -79,8 +80,10 @@ export function saveDialogToDb(
   summary: string,
   psych?: PsychSnapshot,
   report?: string,
-  dialogTime?: string
+  dialogTime?: string,
+  conversationId?: string
 ): string {
+  ensureConversationSchema();
   const now =
     dialogTime ??
     new Date().toLocaleString('zh-CN', {
@@ -94,8 +97,8 @@ export function saveDialogToDb(
 
   const db = getDb();
   db.prepare(
-    `INSERT INTO dialogs(user_id, dialog_time, user_text, bot_text, summary, report, psych_json, portrait_json)
-     VALUES(?, ?, ?, ?, ?, ?, ?, NULL)`
+    `INSERT INTO dialogs(user_id, dialog_time, user_text, bot_text, summary, report, psych_json, portrait_json, conversation_id)
+     VALUES(?, ?, ?, ?, ?, ?, ?, NULL, ?)`
   ).run(
     user_id,
     now,
@@ -103,7 +106,8 @@ export function saveDialogToDb(
     assistant_reply,
     summary,
     report ?? null,
-    psych ? JSON.stringify(psych) : null
+    psych ? JSON.stringify(psych) : null,
+    conversationId ?? null
   );
   db.prepare('INSERT INTO dialog_summaries(user_id, summary_time, summary) VALUES(?, ?, ?)').run(user_id, now, summary);
   return now;
@@ -111,8 +115,29 @@ export function saveDialogToDb(
 
 export function clearUserHistoryInDb(user_id: string): void {
   const db = getDb();
+  ensureConversationSchema();
   db.prepare('DELETE FROM dialogs WHERE user_id = ?').run(user_id);
   db.prepare('DELETE FROM dialog_summaries WHERE user_id = ?').run(user_id);
+  db.prepare('DELETE FROM conversations WHERE user_id = ?').run(user_id);
+}
+
+export function getDialogsByConversation(userId: string, conversationId: string): DialogRow[] {
+  ensureConversationSchema();
+  const rows = getDb()
+    .prepare(
+      `SELECT dialog_time, user_text, bot_text, summary, report, psych_json, portrait_json
+       FROM dialogs WHERE user_id = ? AND conversation_id = ? ORDER BY id ASC`
+    )
+    .all(userId, conversationId) as Array<{
+    dialog_time: string;
+    user_text: string;
+    bot_text: string;
+    summary: string;
+    report: string | null;
+    psych_json: string | null;
+    portrait_json: string | null;
+  }>;
+  return rows.map(parseDialog);
 }
 
 export function updateDialogPsychInDb(

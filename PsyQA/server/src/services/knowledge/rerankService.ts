@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getZhipuApiKey, getZhipuBaseUrl } from '../llm/zhipuClient';
+import { polishKnowledgeAnswer, preferUsefulAnswers } from './answerQuality';
 import type { SearchResult } from './searchTypes';
 
 const DEFAULT_RERANK_MODEL = 'BAAI/bge-reranker-v2-m3';
@@ -152,15 +153,21 @@ export async function rerankResults(
   topK: number
 ): Promise<SearchResult[]> {
   if (topK <= 0) return [];
-  if (items.length <= 1 || !isRerankEnabled()) return demoteUnrequestedCrisis(query, items).slice(0, topK);
+  const usable = items.map((item) => ({ ...item, answer: polishKnowledgeAnswer(item.answer) }));
+  if (usable.length <= 1 || !isRerankEnabled()) {
+    return demoteUnrequestedCrisis(query, preferUsefulAnswers(usable)).slice(0, topK);
+  }
 
-  const documents = items.map(passage);
+  const documents = usable.map(passage);
   try {
     const ranked = (await rerankLocal(query, documents)) ?? (await rerankRemote(query, documents));
-    if (!ranked?.length) return demoteUnrequestedCrisis(query, items).slice(0, topK);
-    return demoteUnrequestedCrisis(query, orderByRerankScores(items, ranked, items.length)).slice(0, topK);
+    if (!ranked?.length) return demoteUnrequestedCrisis(query, preferUsefulAnswers(usable)).slice(0, topK);
+    return demoteUnrequestedCrisis(
+      query,
+      preferUsefulAnswers(orderByRerankScores(usable, ranked, usable.length))
+    ).slice(0, topK);
   } catch (err) {
     console.warn('[rerank] 重排序失败，沿用融合顺序:', err instanceof Error ? err.message : err);
-    return demoteUnrequestedCrisis(query, items).slice(0, topK);
+    return demoteUnrequestedCrisis(query, preferUsefulAnswers(usable)).slice(0, topK);
   }
 }

@@ -8,6 +8,7 @@ interface ChatMessageProps {
   message: Message;
   knowledgeSources?: KnowledgeItem[];
   onSimilarQuestionClick?: (question: string) => void;
+  onRetry?: (question: string) => void;
 }
 
 const emotionIcons: Record<EmotionType, string> = {
@@ -39,13 +40,6 @@ const emotionLabels: Record<EmotionType, string> = {
   shameful: '羞愧',
   proud: '自豪'
 };
-
-function typingInterval(contentLength: number): { step: number; ms: number } {
-  if (contentLength > 800) return { step: 8, ms: 12 };
-  if (contentLength > 400) return { step: 4, ms: 16 };
-  if (contentLength > 150) return { step: 2, ms: 22 };
-  return { step: 1, ms: 28 };
-}
 
 function RelatedTopicItem({
   item,
@@ -84,10 +78,11 @@ const GENERATION_HINT_LABEL: Record<string, string> = {
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   knowledgeSources,
-  onSimilarQuestionClick
+  onSimilarQuestionClick,
+  onRetry
 }) => {
-  const [displayedContent, setDisplayedContent] = useState('');
-  const [isTyping, setIsTyping] = useState(message.type === 'bot');
+  const [thinkOpen, setThinkOpen] = useState(Boolean(message.reactTrace?.length) && !message.content);
+  const [copied, setCopied] = useState(false);
 
   const knowledgeList = useMemo(
     () => knowledgeSources ?? message.knowledgeSources ?? [],
@@ -100,47 +95,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const hasRelated = relatedTopics.length > 0;
   const isBot = message.type === 'bot';
-
-  const { body: answerBody, ethicsNote } = useMemo(
-    () => (isBot && !isTyping ? splitBotContent(displayedContent) : { body: displayedContent, ethicsNote: null }),
-    [isBot, isTyping, displayedContent]
-  );
+  const streaming = Boolean(message.streaming);
 
   useEffect(() => {
-    if (!isBot) {
-      setDisplayedContent(message.content);
-      setIsTyping(false);
-      return;
-    }
+    if (message.content) setThinkOpen(false);
+  }, [message.content]);
 
-    if (message.streaming) {
-      setDisplayedContent(message.content);
-      setIsTyping(false);
-      return;
-    }
-
-    setDisplayedContent('');
-    setIsTyping(true);
-
-    const content = message.content;
-    const { step, ms } = typingInterval(content.length);
-    let index = 0;
-
-    const interval = window.setInterval(() => {
-      index = Math.min(index + step, content.length);
-      setDisplayedContent(content.slice(0, index));
-      if (index >= content.length) {
-        window.clearInterval(interval);
-        setIsTyping(false);
-      }
-    }, ms);
-
-    return () => window.clearInterval(interval);
-  }, [message.content, message.streaming, isBot]);
+  const { body: answerBody, ethicsNote } = useMemo(
+    () => (isBot ? splitBotContent(message.content) : { body: message.content, ethicsNote: null }),
+    [isBot, message.content]
+  );
 
   const formattedBody = useMemo(
-    () => (isBot && !isTyping ? formatBotMessage(answerBody) : null),
-    [isBot, isTyping, answerBody]
+    () => (isBot ? formatBotMessage(answerBody, knowledgeList) : null),
+    [isBot, answerBody, knowledgeList]
   );
 
   const formattedEthics = useMemo(
@@ -148,12 +116,32 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     [ethicsNote]
   );
 
-  const skipTyping = () => {
-    if (isTyping && isBot) {
-      setDisplayedContent(message.content);
-      setIsTyping(false);
-    }
+  const timeLabel = useMemo(() => {
+    const raw = message.timestamp || '';
+    const match = raw.match(/(\d{1,2}):(\d{2})/);
+    return match ? `${match[1].padStart(2, '0')}:${match[2]}` : raw;
+  }, [message.timestamp]);
+
+  if (message.retryQuestion) {
+    return (
+      <div className="message-wrapper system">
+        <button type="button" className="stream-retry" onClick={() => onRetry?.(message.retryQuestion || '')}>
+          刚才那条没发出去，点这里重试
+        </button>
+      </div>
+    );
+  }
+
+  const copyAnswer = () => {
+    const text = message.content.trim();
+    if (!text || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    });
   };
+
+  const traceCount = message.reactTrace?.length ?? 0;
 
   return (
     <div className={`message-wrapper ${message.type}`}>
@@ -174,7 +162,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       </div>
 
       <div className="message-content-wrapper">
-        {isBot && message.emotion && (
+        {isBot && traceCount > 0 && (
+          <details className="thinking-strip" open={thinkOpen} onToggle={(event) => setThinkOpen(event.currentTarget.open)}>
+            <summary>{message.content ? '检索过程' : `正在检索 ${traceCount} 步…`}</summary>
+          </details>
+        )}
+
+        {isBot && message.emotion && !streaming && (
           <div className="emotion-tag" style={{ color: message.emotionStyle?.color }}>
             {emotionIcons[message.emotion.emotion]} {emotionLabels[message.emotion.emotion]}
             {message.reactUsed && (
@@ -187,45 +181,41 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
         <div className={`message-bubble ${message.type}`} id={isBot ? `bot-answer-${message.id}` : undefined}>
           <div className="message-text">
-            {formattedBody ?? (
-              <>
-                {isBot && !isTyping ? answerBody : displayedContent}
-                {isTyping && <span className="typing-cursor" aria-hidden="true">|</span>}
-              </>
-            )}
+            {isBot ? formattedBody : message.content}
+            {streaming && <span className="typing-cursor" aria-hidden="true">|</span>}
           </div>
 
-          {isTyping && isBot && (
-            <button type="button" className="skip-typing-btn" onClick={skipTyping}>
-              跳过动画
-            </button>
-          )}
-
-          {message.timestamp && !isTyping && (
-            <div className="message-timestamp">{message.timestamp}</div>
+          {isBot && !streaming && message.content.trim() && (
+            <div className="msg-actions">
+              <button type="button" className="msg-action" onClick={copyAnswer}>
+                {copied ? '已复制' : '复制'}
+              </button>
+            </div>
           )}
         </div>
 
-        {!isTyping && isBot && ethicsNote && (
+        {!streaming && isBot && ethicsNote && (
           <div className="message-ethics-note">
             <div className="message-ethics-note-text">{formattedEthics ?? ethicsNote}</div>
           </div>
         )}
 
-        {!isTyping && isBot && message.risk && (message.risk.level === 'high' || message.risk.level === 'critical') && (
+        {!streaming && isBot && message.risk && (message.risk.level === 'high' || message.risk.level === 'critical') && (
           <div className={`risk-warning ${message.risk.level}`}>
             <div className="warning-icon" aria-hidden="true">
               ⚠️
             </div>
             <div className="warning-content">
-              <div className="warning-title">危机预警</div>
+              <div className="warning-title">
+                {message.risk.level === 'critical' ? '请先确认你是否安全' : '听起来最近挺难的'}
+              </div>
               <div className="warning-message">{message.risk.warningMessage}</div>
               <div className="warning-hotline">{message.risk.hotline}</div>
             </div>
           </div>
         )}
 
-        {!isTyping && isBot && message.videos && message.videos.length > 0 && (
+        {!streaming && isBot && message.videos && message.videos.length > 0 && (
           <section className="video-recommend message-extras" aria-label="心理视频推荐">
             <div className="video-recommend-header">
               <span className="video-recommend-icon" aria-hidden="true">
@@ -244,7 +234,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </section>
         )}
 
-        {!isTyping && isBot && hasRelated && (
+        {!streaming && isBot && hasRelated && (
           <section className="related-topics message-extras" aria-label="相关话题">
             <div className="related-topics-header">
               <span className="related-topics-icon" aria-hidden="true">
@@ -272,6 +262,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </p>
         )}
 
+        {message.timestamp && !streaming && (
+          <div className="message-meta">
+            {isBot ? `心理港湾 · ${timeLabel}` : timeLabel}
+          </div>
+        )}
       </div>
     </div>
   );

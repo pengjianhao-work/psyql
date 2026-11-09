@@ -12,6 +12,12 @@ import {
   getGroupedHistory,
   getInsightsStatus
 } from '../controllers/questionController';
+import {
+  archiveConversationHandler,
+  createConversationHandler,
+  getConversationMessagesHandler,
+  listConversationsHandler
+} from '../controllers/conversationController';
 import { postAnalyzePsych } from '../controllers/analyzeController';
 import { postSelfRating } from '../controllers/ratingController';
 import {
@@ -74,6 +80,10 @@ questionRouter.get('/progress', ...studentApi, getUserProgress);
 questionRouter.get('/progress/text', ...studentApi, getUserProgressText);
 questionRouter.get('/history/grouped', ...studentApi, getGroupedHistory);
 questionRouter.post('/history/clear', ...studentApi, clearUserHistoryData);
+questionRouter.get('/conversations', ...studentApi, listConversationsHandler);
+questionRouter.post('/conversations', ...studentApi, createConversationHandler);
+questionRouter.post('/conversations/:id/archive', ...studentApi, archiveConversationHandler);
+questionRouter.get('/conversations/:id/messages', ...studentApi, getConversationMessagesHandler);
 questionRouter.post('/session-feedback', ...studentApi, postSessionFeedback);
 questionRouter.get('/session-feedback', ...studentApi, getSessionFeedbackForDialog);
 questionRouter.get('/profile', ...studentApi, getUserProfileHandler);

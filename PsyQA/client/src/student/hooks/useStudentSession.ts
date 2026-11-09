@@ -1,10 +1,15 @@
 import { useCallback, useState } from 'react';
 import { GroupedHistoryItem, Message, UserProgress } from '../../types';
 import {
+  archiveConversation,
+  createConversation,
+  getConversationMessages,
   getGroupedHistory,
   getInsightsStatus,
   getUserProgress,
-  pollInsightsUntilReady
+  listConversations,
+  pollInsightsUntilReady,
+  type ConversationItem
 } from '../../api';
 import { progressHistoryToMessages, restoreSessionSummary } from '../../utils/chatHistory';
 import { createWelcomeMessage, progressToTrendData } from '../studentHelpers';
@@ -34,6 +39,16 @@ export function useStudentSession(pushToast: (text: string, tone?: 'info' | 'suc
   const [historyLoading, setHistoryLoading] = useState(false);
   const [portraitPending, setPortraitPending] = useState(false);
   const [reportPending, setReportPending] = useState(false);
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [conversationId, setConversationId] = useState<string | undefined>();
+
+  const applyConversation = useCallback(async (userId: string, item: ConversationItem) => {
+    localStorage.setItem(`psyqa.conversation.${userId}`, item.id);
+    setConversationId(item.id);
+    const history = await getConversationMessages(userId, item.id);
+    const restoredMessages = progressHistoryToMessages(history);
+    setMessages(restoredMessages.length ? restoredMessages : [createWelcomeMessage()]);
+  }, []);
 
   const loadSessionFromServer = useCallback(
     async (userId: string) => {
@@ -48,8 +63,18 @@ export function useStudentSession(pushToast: (text: string, tone?: 'info' | 'suc
         setTrendData(progressToTrendData(progress));
         setGroupedHistory(groups);
 
-        const restoredMessages = progressHistoryToMessages(progress.history);
-        setMessages(restoredMessages.length ? restoredMessages : [createWelcomeMessage()]);
+        const listed = await listConversations(userId);
+        const stored = localStorage.getItem(`psyqa.conversation.${userId}`);
+        let current =
+          listed.find((item) => item.id === stored && item.status === 'active') ||
+          listed.find((item) => item.status === 'active');
+        if (!current) {
+          current = await createConversation(userId);
+          setConversations([current, ...listed]);
+        } else {
+          setConversations(listed);
+        }
+        await applyConversation(userId, current);
 
         const restored = restoreSessionSummary(progress, groups);
         setLatestReport(restored.latestReport);
@@ -82,7 +107,7 @@ export function useStudentSession(pushToast: (text: string, tone?: 'info' | 'suc
         setHistoryLoading(false);
       }
     },
-    [pushToast]
+    [applyConversation, pushToast]
   );
 
   const refreshProgressAndHistory = useCallback(async (userId: string): Promise<UserProgress | null> => {
@@ -97,6 +122,27 @@ export function useStudentSession(pushToast: (text: string, tone?: 'info' | 'suc
     } catch {
       return null;
     }
+  }, []);
+
+  const startConversation = useCallback(async (userId: string) => {
+    const created = await createConversation(userId);
+    setConversations(await listConversations(userId));
+    await applyConversation(userId, created);
+  }, [applyConversation]);
+
+  const endConversation = useCallback(async (userId: string, id: string) => {
+    await archiveConversation(userId, id);
+    await startConversation(userId);
+  }, [startConversation]);
+
+  const openConversation = useCallback(async (userId: string, id: string) => {
+    const item = conversations.find((row) => row.id === id);
+    if (!item) return;
+    await applyConversation(userId, item);
+  }, [applyConversation, conversations]);
+
+  const refreshConversations = useCallback(async (userId: string) => {
+    setConversations(await listConversations(userId));
   }, []);
 
   return {
@@ -116,6 +162,13 @@ export function useStudentSession(pushToast: (text: string, tone?: 'info' | 'suc
     reportPending,
     setReportPending,
     loadSessionFromServer,
-    refreshProgressAndHistory
+    refreshProgressAndHistory,
+    conversations,
+    conversationId,
+    setConversationId,
+    startConversation,
+    endConversation,
+    openConversation,
+    refreshConversations
   };
 }

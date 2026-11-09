@@ -1,4 +1,4 @@
-# 心理港湾 · 启动前环境自检
+﻿# 心理港湾 · 启动前环境自检
 param([switch]$Quiet)
 
 $ErrorActionPreference = "Continue"
@@ -51,13 +51,22 @@ try {
     }
 }
 
-# Qdrant
-if ($envText -match 'PSYQA_QDRANT_ENABLED=1') {
-    $qdrantUrl = if ($env:QDRANT_URL) { $env:QDRANT_URL } else { "http://localhost:6333" }
+# 回答用到的三个本机服务。缺了会变慢或退回旧检索。
+foreach ($name in @('Qdrant', 'bge-m3', 'bge-reranker')) {
+    if ($name -eq 'Qdrant') {
+        $url = 'http://127.0.0.1:6333/healthz'
+        $start = 'npm run start:qdrant'
+    } elseif ($name -eq 'bge-m3') {
+        $url = 'http://127.0.0.1:8091/health'
+        $start = 'npm run start:bge-m3'
+    } else {
+        $url = 'http://127.0.0.1:8092/health'
+        $start = 'npm run start:bge-rerank'
+    }
     try {
-        $null = Invoke-RestMethod -Uri "$qdrantUrl/healthz" -TimeoutSec 3
+        $null = Invoke-RestMethod -Uri $url -TimeoutSec 2
     } catch {
-        Add-Warn "Qdrant 未连接 ($qdrantUrl)，请运行 npm run start:qdrant"
+        Add-Warn "$name 未响应。启动：$start"
     }
 }
 

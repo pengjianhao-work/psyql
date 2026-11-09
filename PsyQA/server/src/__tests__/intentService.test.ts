@@ -1,4 +1,4 @@
-import { classifyIntent, mergeIntent } from '../services/psych/intentService';
+import { classifyIntent, mergeIntent, needsPsychModel } from '../services/psych/intentService';
 
 describe('classifyIntent', () => {
   test('treats a bare hello as greeting', () => {
@@ -30,6 +30,21 @@ describe('classifyIntent', () => {
   test('routes unrelated tasks away and keeps stressed study talk in counseling', () => {
     expect(classifyIntent('帮我写一段 python 代码').kind).toBe('offtopic');
     expect(classifyIntent('论文写不出来，压力好大').kind).toBe('venting');
+  });
+});
+
+describe('needsPsychModel', () => {
+  test('skips the model when a clear low-risk question is already classified', () => {
+    const intent = classifyIntent('最近复习总完不成，怎么办');
+    expect(intent.kind).toBe('advice');
+    expect(needsPsychModel(intent, 'low')).toBe(false);
+    expect(needsPsychModel(intent, 'medium')).toBe(false);
+  });
+
+  test('still asks the model for crisis, high risk, and unclear text', () => {
+    expect(needsPsychModel(classifyIntent('我想死'), 'critical')).toBe(true);
+    expect(needsPsychModel(classifyIntent('最近复习总完不成，怎么办'), 'high')).toBe(true);
+    expect(needsPsychModel(classifyIntent('啊'), 'low')).toBe(true);
   });
 });
 

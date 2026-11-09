@@ -8,6 +8,7 @@ import {
 import { EmotionType, ProblemCategory, PROBLEM_KEYWORDS } from '../psych/emotionService';
 import { scoreKeywordMatches } from '../../utils/psychTextAnalysis';
 import { resolveDataFile } from '../../config/paths';
+import { polishKnowledgeAnswer } from './answerQuality';
 import { SearchResult } from './searchTypes';
 import { cacheGet, cacheSet } from '../../utils/memoryCache';
 import { applySeasonalScoreMultiplier } from './seasonalRagPolicy';
@@ -182,15 +183,16 @@ export function mergeRankedReferences(
   const merged = new Map<string, KnowledgeItem & { score: number }>();
 
   for (const item of retrievedKnowledge) {
-    const score = item.relevance ?? scoreKnowledgeItem(query, item, { problemCategory, emotion });
-    const existing = merged.get(item.question);
+    const polished = { ...item, answer: polishKnowledgeAnswer(item.answer) };
+    const score = polished.relevance ?? scoreKnowledgeItem(query, polished, { problemCategory, emotion });
+    const existing = merged.get(polished.question);
     if (!existing || score > existing.score) {
-      merged.set(item.question, { ...item, score });
+      merged.set(polished.question, { ...polished, score });
     }
   }
 
   for (const result of vectorResults) {
-    const item: KnowledgeItem = { question: result.question, answer: result.answer };
+    const item: KnowledgeItem = { question: result.question, answer: polishKnowledgeAnswer(result.answer) };
     const score = scoreKnowledgeItem(query, item, {
       problemCategory,
       emotion,
@@ -223,7 +225,8 @@ export function mergeRankedReferencesRRF(
 ): KnowledgeItem[] {
   const scores = new Map<string, { item: KnowledgeItem; score: number }>();
 
-  retrievedKnowledge.forEach((item, rank) => {
+  retrievedKnowledge.forEach((raw, rank) => {
+    const item = { ...raw, answer: polishKnowledgeAnswer(raw.answer) };
     const key = item.question.slice(0, 80);
     const rrf = 1 / (RRF_K + rank + 1);
     const textScore = (item.relevance ?? scoreKnowledgeItem(query, item, { problemCategory, emotion })) / 100;
@@ -233,7 +236,10 @@ export function mergeRankedReferencesRRF(
   });
 
   vectorResults.forEach((result, rank) => {
-    const item: KnowledgeItem = { question: result.question, answer: result.answer };
+    const item: KnowledgeItem = {
+      question: result.question,
+      answer: polishKnowledgeAnswer(result.answer)
+    };
     const key = item.question.slice(0, 80);
     const rrf = 1 / (RRF_K + rank + 1);
     const vecBoost = result.similarity * 0.25;

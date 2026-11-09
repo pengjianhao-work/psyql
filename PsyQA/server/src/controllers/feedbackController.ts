@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/authMiddleware';
 import { resolveStudentUserId } from '../utils/resolveUserId';
 import { dialogExists, saveSessionFeedback, getSessionFeedback } from '../db/feedbackStore';
 import { getOrRefreshUserProfile, refreshUserProfile } from '../services/user/userProfileService';
+import { noteWrittenFeedback } from '../services/user/userMemoryService';
 
 export function postSessionFeedback(req: AuthRequest, res: Response): void {
   const userId = resolveStudentUserId(req, res, req.body?.userId);
@@ -40,6 +41,11 @@ export function postSessionFeedback(req: AuthRequest, res: Response): void {
   }
 
   const feedback = saveSessionFeedback(userId, time, { rating, helpful, comment });
+  try {
+    noteWrittenFeedback(userId, comment);
+  } catch (err) {
+    console.warn('[memory] preference signal skipped:', err instanceof Error ? err.message : err);
+  }
   const profile = refreshUserProfile(userId);
 
   res.json({

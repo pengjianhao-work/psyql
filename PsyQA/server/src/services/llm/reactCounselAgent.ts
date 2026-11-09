@@ -1,8 +1,8 @@
 import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
-import { formatPersonalMemories } from '../user/userMemoryService';
+import { formatPersonalMemories, MEMORY_BOUNDARY } from '../user/userMemoryService';
 import { getCategoryName, type EmotionAnalysis, type RiskAssessment, type ProblemAnalysis, type ProblemCategory } from '../psych/emotionService';
-import { callLlmGenerate, callLlmGenerateStream, emitChunkedTokens } from './llmClient';
+import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { isStrictFullReAct } from './agentPolicy';
 import type { ReactMode } from './agentPolicy';
 import { isValidCounselAnswer, sanitizeCounselAnswer } from './counselAnswerSanitizer';
@@ -35,6 +35,8 @@ export interface ReActCounselContext {
   workingMemory?: string;
   /** 沟通习惯、反复议题、以往用过的方法 */
   durableMemory?: string;
+  /** 这轮是在接着上一轮说。新话题时为 false，旧事不能进入回答和检索 */
+  continuePrevious?: boolean;
   agentContext: string;
   tone: string;
   llmRationale?: string;
@@ -153,12 +155,22 @@ export function parseReActOutput(text: string): {
 function formatPrefetchKnowledge(items: KnowledgeItem[]): string {
   if (!items.length) return '未检索到相关公共知识条目。';
   return items
-    .map((k, i) => `${i + 1}. ${truncate(k.question, 50)} → ${truncate(k.answer, 160)}`)
+    .map((k, i) => `${i + 1}. ${truncate(k.question, 50)} → ${truncate(k.answer, 180)}`)
     .join('\n');
 }
 
-function formatPrefetchMemory(hits: SearchResult[], recentDialogs = ''): string {
-  return formatPersonalMemories(hits, recentDialogs) || '该用户暂无更早的个人记忆。';
+function formatPrefetchMemory(ctx: ReActCounselContext, hits: SearchResult[]): string {
+  return (
+    formatPersonalMemories(hits, ctx.recentDialogs, {
+      question: ctx.question,
+      continuePrevious: ctx.continuePrevious
+    }) || '没有和这轮问题相关的更早原话。'
+  );
+}
+
+function groundedQuery(ctx: ReActCounselContext, toolQuery: string): string {
+  if (ctx.continuePrevious) return toolQuery.trim() || ctx.question;
+  return ctx.question;
 }
 
 async function executeTool(
@@ -167,7 +179,7 @@ async function executeTool(
   ctx: ReActCounselContext,
   plan: ReActPlan
 ): Promise<string> {
-  const query = String(input.query || input.q || ctx.question).trim() || ctx.question;
+  const query = groundedQuery(ctx, String(input.query || input.q || ctx.question));
 
   switch (action) {
     case 'search_knowledge': {
@@ -177,20 +189,22 @@ async function executeTool(
       if (plan.skipSearchTools && ctx.prefetchedKnowledge?.length) {
         return formatPrefetchKnowledge(ctx.prefetchedKnowledge);
       }
-      const { retrieveKnowledge } = await import('../knowledge/ragService');
-      const items = await retrieveKnowledge(query, 2, ctx.problem.category, ctx.emotion.emotion);
-      return formatPrefetchKnowledge(items);
+      const { searchVectorDb } = await import('../knowledge/vectorDBService');
+      const hits = await searchVectorDb(query, 3);
+      return formatPrefetchKnowledge(
+        hits.map((hit) => ({ question: hit.question, answer: hit.answer }))
+      );
     }
     case 'search_user_memory': {
       if (plan.prefetchOnly && ctx.prefetchedMemory?.length) {
-        return `[预检索缓存]\n${formatPrefetchMemory(ctx.prefetchedMemory, ctx.recentDialogs)}`;
+        return `[预检索缓存]\n${formatPrefetchMemory(ctx, ctx.prefetchedMemory)}`;
       }
       if (plan.skipSearchTools && ctx.prefetchedMemory?.length) {
-        return formatPrefetchMemory(ctx.prefetchedMemory, ctx.recentDialogs);
+        return formatPrefetchMemory(ctx, ctx.prefetchedMemory);
       }
       const { searchPersonalMemories } = await import('../user/userMemoryService');
       const hits = await searchPersonalMemories(ctx.userId, query, 4);
-      return formatPrefetchMemory(hits, ctx.recentDialogs);
+      return formatPrefetchMemory(ctx, hits);
     }
     case 'reflect_psych':
       return executeReflectPsych(ctx);
@@ -239,21 +253,28 @@ Action Input: （JSON）
 收到 Observation 后继续推理，直到调用 finish。
 ${ctx.intentDirective || '最终 answer 须：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。'}${strictNote}${prefetchNote}
 语气：${ctx.tone}
-若给出了这个用户以前说过的事，回复要让对方感到被记住，不要当成第一次见面。
+${MEMORY_BOUNDARY}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 }
 
 export function formatTurnMemory(ctx: ReActCounselContext): string[] {
+  const continuing = ctx.continuePrevious === true;
   return [
     ctx.recentDialogs
-      ? `【短期会话记忆】接着这些原话往下说，不要当成新话题。\n${ctx.recentDialogs}`
+      ? continuing
+        ? `【短期会话记忆】用户在接着上一轮说。接这些原话往下说。\n${ctx.recentDialogs}`
+        : `【短期会话记忆】这是上一轮，只供认识对方。这轮如果换了话题，不要把这些内容写进回答。\n${ctx.recentDialogs}`
       : '',
-    ctx.workingMemory ? `【工作记忆】沿着当前任务往下做。\n${ctx.workingMemory}` : '',
+    ctx.workingMemory
+      ? continuing
+        ? `【工作记忆】沿着上一轮议题往下做。\n${ctx.workingMemory}`
+        : `【工作记忆】下面是上一轮的议题和情绪，不是这轮要回答的问题。\n${ctx.workingMemory}`
+      : '',
     ctx.durableMemory
-      ? `【长期记忆 · 习惯与做过的事】语气和议题要符合这个人。\n${ctx.durableMemory}`
+      ? `【长期记忆 · 习惯与做过的事】只用来调整语气、避开敏感点、沿用对方觉得有用的做法。不要把旧议题当成这轮的问题。\n${ctx.durableMemory}`
       : '',
     !ctx.workingMemory && ctx.historySummary
-      ? `【历史摘要】${truncate(ctx.historySummary, 240)}`
+      ? `【历史摘要】只说明这个人，不要把摘要里的旧事写进这轮回答。\n${truncate(ctx.historySummary, 240)}`
       : ''
   ].filter(Boolean);
 }
@@ -275,7 +296,7 @@ function buildReActUserPrompt(ctx: ReActCounselContext, trajectory: string): str
     parts.push('', '【已预检索知识】', formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2)));
   }
   if (ctx.prefetchedMemory?.length) {
-    parts.push('', '【长期向量记忆】', formatPrefetchMemory(ctx.prefetchedMemory, ctx.recentDialogs));
+    parts.push('', '【长期向量记忆】', formatPrefetchMemory(ctx, ctx.prefetchedMemory));
   }
 
   if (trajectory) {
@@ -305,13 +326,10 @@ async function generateFinishAnswer(
         systemPrompt,
         temperature: options?.temperature ?? 0.45,
         maxTokens: 1024,
-        timeoutMs: options?.timeoutMs ?? 90_000
+        timeoutMs: options?.timeoutMs ?? 90_000,
+        onToken: options.onToken
       })) || '';
-    const cleaned = sanitizeCounselAnswer(full);
-    if (cleaned.length >= MIN_ANSWER_CHARS) {
-      emitChunkedTokens(cleaned, options.onToken);
-    }
-    return cleaned;
+    return sanitizeCounselAnswer(full);
   }
   const raw =
     (await callLlmGenerate(userPrompt, {
@@ -329,7 +347,7 @@ function buildPrefetchTrajectory(ctx: ReActCounselContext): string {
     parts.push(`Observation [prefetch]: ${formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2))}`);
   }
   if (ctx.prefetchedMemory?.length) {
-    parts.push(`Observation [prefetch]: ${formatPrefetchMemory(ctx.prefetchedMemory, ctx.recentDialogs)}`);
+    parts.push(`Observation [prefetch]: ${formatPrefetchMemory(ctx, ctx.prefetchedMemory)}`);
   }
   parts.push(`Observation: ${executeReflectPsych(ctx)}`);
   return parts.join('\n');
@@ -368,6 +386,7 @@ export async function runReActCounselAgent(
     timeoutMs?: number;
     onToken?: (chunk: string) => void;
     onStep?: (step: ReActStep) => void;
+    onStreamReset?: () => void;
   }
 ): Promise<ReActCounselResult> {
   const plan = resolveReActPlan(ctx);
@@ -376,24 +395,66 @@ export async function runReActCounselAgent(
   let trajectory = '';
   let finalAnswer = '';
 
-  if (plan.prefetchOnly) {
+  const skillsReady =
+    (ctx.prefetchedKnowledge?.length ?? 0) > 0 || (ctx.prefetchedMemory?.length ?? 0) > 0;
+
+  if (plan.prefetchOnly || skillsReady) {
+    if (ctx.prefetchedKnowledge?.length) {
+      pushStep(
+        steps,
+        {
+          step: 1,
+          thought: '按这轮问题检索知识',
+          action: 'search_knowledge',
+          actionInput: { query: ctx.question },
+          observation: formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2))
+        },
+        options?.onStep
+      );
+    }
+    if (ctx.prefetchedMemory?.length) {
+      pushStep(
+        steps,
+        {
+          step: 2,
+          thought: '只保留和这轮有关的个人记忆',
+          action: 'search_user_memory',
+          actionInput: { query: ctx.question },
+          observation: formatPrefetchMemory(ctx, ctx.prefetchedMemory)
+        },
+        options?.onStep
+      );
+    }
+    pushStep(
+      steps,
+      {
+        step: 3,
+        thought: '核对这轮的情绪和问题',
+        action: 'reflect_psych',
+        actionInput: {},
+        observation: executeReflectPsych(ctx)
+      },
+      options?.onStep
+    );
     trajectory = buildPrefetchTrajectory(ctx);
     finalAnswer = await generateFinishAnswer(ctx, trajectory, options);
     if (finalAnswer.length >= MIN_ANSWER_CHARS) {
       pushStep(
         steps,
         {
-          step: 1,
-          thought: '编排层已注入预检索结果，单次生成最终回复',
+          step: 4,
+          thought: '三个技能已经完成，直接写这轮回答',
           action: 'finish',
           actionInput: {},
           observation: `已生成（${finalAnswer.length} 字）`
         },
         options?.onStep
       );
-      return buildResult(finalAnswer, steps, 'prefetch');
+      return buildResult(finalAnswer, steps, plan.prefetchOnly ? 'prefetch' : 'full');
     }
+    options?.onStreamReset?.();
     finalAnswer = '';
+    steps.length = 0;
   }
 
   const systemPrompt = buildReActSystemPrompt(ctx, plan);

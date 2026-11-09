@@ -191,7 +191,7 @@ def parse_mentalchat(path: Path) -> Iterable[Dict[str, Any]]:
             yield rec
 
 
-def parse_psydial(path: Path) -> Iterable[Dict[str, Any]]:
+def parse_psydial(path: Path, source: str = "psydial") -> Iterable[Dict[str, Any]]:
     data = load_json(path)
     dialogues = data if isinstance(data, list) else data.get("data", data.get("dialogues", []))
     for dlg in dialogues:
@@ -214,11 +214,37 @@ def parse_psydial(path: Path) -> Iterable[Dict[str, Any]]:
         q = user_msgs[0]
         a = bot_msgs[-1] if bot_msgs else ""
         rec = build_record(
-            "psydial",
+            source,
             q,
             a,
             turns=turns,
             algorithm_targets=["timeseries", "neural"],
+        )
+        if rec:
+            yield rec
+
+
+def parse_cpsycoun(path: Path) -> Iterable[Dict[str, Any]]:
+    """CPsyCounD：history 是此前轮次，instruction/output 是当前一轮。每段只留最长的一轮。"""
+    data = load_json(path)
+    rows = data if isinstance(data, list) else []
+    for row in rows:
+        pairs: List[tuple[str, str]] = []
+        for turn in row.get("history") or []:
+            if isinstance(turn, list) and len(turn) >= 2:
+                pairs.append((str(turn[0] or ""), str(turn[1] or "")))
+        pairs.append((str(row.get("instruction") or ""), str(row.get("output") or "")))
+        usable = [(q, a) for q, a in pairs if len(q.strip()) >= 12 and len(a.strip()) >= 20]
+        if not usable:
+            continue
+        q, a = max(usable, key=lambda item: len(item[0]))
+        turns = [{"role": "user", "text": clean_text(q, 500)}, {"role": "counselor", "text": clean_text(a, 500)}]
+        rec = build_record(
+            "cpsycoun",
+            q,
+            a,
+            turns=turns,
+            algorithm_targets=["neural", "ml"],
         )
         if rec:
             yield rec
@@ -442,6 +468,18 @@ def collect_all_sources() -> tuple[List[Dict[str, Any]], Dict[str, int]]:
     if pd_path.exists():
         batch = list(parse_psydial(pd_path))
         sources_stats["psydial"] = len(batch)
+        all_records.extend(batch)
+
+    pd4_path = DATA_ROOT / "psydial" / "PsyDial-D4.json"
+    if pd4_path.exists():
+        batch = list(parse_psydial(pd4_path, source="psydial_d4"))
+        sources_stats["psydial_d4"] = len(batch)
+        all_records.extend(batch)
+
+    cp_path = DATA_ROOT / "cpsycoun" / "CPsyCounD.json"
+    if cp_path.exists():
+        batch = list(parse_cpsycoun(cp_path))
+        sources_stats["cpsycoun"] = len(batch)
         all_records.extend(batch)
 
     pc_path = DATA_ROOT / "psycrisis" / "PsyCrisis-Bench.xlsx"

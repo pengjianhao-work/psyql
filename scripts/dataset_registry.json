@@ -1,5 +1,5 @@
 {
-  "version": "2.0",
+  "version": "2.1",
   "description": "公开心理健康数据集注册表，配套三层算法架构（统计/ML/深度学习）",
   "recommendedCombos": {
     "basic": ["psyqa", "soulchat", "mental_9k", "mental_r1_10k"],
@@ -109,15 +109,19 @@
     {
       "id": "psydial",
       "name": "PsyDial 长时序心理咨询",
-      "scale": "2382 段，平均 37.8 轮",
+      "scale": "D4：2382 段长对话（ACL 2025）",
       "language": "zh",
       "accessRegion": "foreign",
       "license": "ACL 2025 / HF 公开",
-      "url": "https://huggingface.co/datasets/allenai/psy_dial",
+      "url": "https://huggingface.co/datasets/qiuhuachuan/PsyDial-D4",
       "fetchMethod": "multi",
-      "hfId": "allenai/psy_dial",
+      "hfId": "qiuhuachuan/PsyDial-D4",
       "hfFallbackId": "qiuhuachuan/PsyDial-D3",
       "files": [
+        {
+          "url": "https://huggingface.co/datasets/qiuhuachuan/PsyDial-D4/resolve/main/PsyDial-D4.json",
+          "path": "psydial/PsyDial-D4.json"
+        },
         {
           "url": "https://huggingface.co/datasets/qiuhuachuan/PsyDial-D3/resolve/main/PsyDial-D3.json",
           "path": "psydial/PsyDial-D3.json"
@@ -127,6 +131,27 @@
       "tier": "academic",
       "algorithmTargets": ["timeseries", "neural"],
       "tags": ["长时序", "情绪渐变", "趋势建模"]
+    },
+    {
+      "id": "cpsycoun",
+      "name": "CPsyCounD 中文心理咨询",
+      "scale": "3134 段多轮咨询",
+      "language": "zh",
+      "accessRegion": "foreign",
+      "license": "Hugging Face 公开 / ACL 2024 Findings",
+      "url": "https://huggingface.co/datasets/CAS-SIAT-XinHai/CPsyCoun",
+      "fetchMethod": "multi",
+      "hfId": "CAS-SIAT-XinHai/CPsyCoun",
+      "files": [
+        {
+          "url": "https://huggingface.co/datasets/CAS-SIAT-XinHai/CPsyCoun/resolve/main/CPsyCounD.json",
+          "path": "cpsycoun/CPsyCounD.json"
+        }
+      ],
+      "priority": 2,
+      "tier": "academic",
+      "algorithmTargets": ["neural", "ml"],
+      "tags": ["学业", "家庭", "情绪", "婚恋", "多轮咨询"]
     },
     {
       "id": "sos_hl_1k",

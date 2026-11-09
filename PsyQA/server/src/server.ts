@@ -10,6 +10,7 @@ import { shouldUseLlm, resolveActiveLlmProvider } from './services/llmClient';
 import { isZhipuConfigured, getZhipuModel, checkZhipuHealth } from './services/llm/zhipuClient';
 import { assertAuthSecretConfigured } from './services/sessionService';
 import { localBgeReady } from './services/knowledge/localBgeClient';
+import { warmEpisodeTopics } from './services/user/episodeLink';
 import { localRerankUrl } from './services/knowledge/rerankService';
 
 try {
@@ -44,8 +45,10 @@ const server = app.listen(env.port, () => {
   }
   startKnowledgeScheduler();
   void localBgeReady().then((ok) => {
-    if (ok) console.log('知识检索：本机 bge-m3（整句向量 + 稀疏权重 + 64 个词向量）');
-    else console.warn('知识检索：本机 bge-m3 未启动。运行 npm run start:bge-m3');
+    if (ok) {
+      console.log('知识检索：本机 bge-m3（整句向量 + 稀疏权重 + 64 个词向量）');
+      void warmEpisodeTopics();
+    } else console.warn('知识检索：本机 bge-m3 未启动。运行 npm run start:bge-m3');
   });
   void import('axios').then(async ({ default: axios }) => {
     try {

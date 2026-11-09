@@ -2,7 +2,7 @@ import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { formatTurnMemory, type ReActCounselContext, type ReActCounselResult, type ReActStep } from './reactCounselAgent';
-import { formatPersonalMemories } from '../user/userMemoryService';
+import { formatPersonalMemories, MEMORY_BOUNDARY } from '../user/userMemoryService';
 import type { ReactMode } from './agentPolicy';
 
 export interface PlannerPlan {
@@ -65,12 +65,15 @@ function formatPrefetchContext(ctx: ReActCounselContext, plan: PlannerPlan): str
     parts.push(
       '【参考知识】\n' +
         ctx.prefetchedKnowledge
-          .map((k, i) => `${i + 1}. ${truncate(k.question, 40)} → ${truncate(k.answer, 140)}`)
+          .map((k, i) => `${i + 1}. ${truncate(k.question, 40)} → ${truncate(k.answer, 180)}`)
           .join('\n')
     );
   }
   if (plan.useMemory && ctx.prefetchedMemory?.length) {
-    const memory = formatPersonalMemories(ctx.prefetchedMemory, ctx.recentDialogs);
+    const memory = formatPersonalMemories(ctx.prefetchedMemory, ctx.recentDialogs, {
+      question: ctx.question,
+      continuePrevious: ctx.continuePrevious
+    });
     if (memory) parts.push(`【长期向量记忆】\n${memory}`);
   }
   return parts.join('\n\n');
@@ -79,7 +82,7 @@ function formatPrefetchContext(ctx: ReActCounselContext, plan: PlannerPlan): str
 function buildResponderSystem(ctx: ReActCounselContext): string {
   return `你是大学生心理健康陪伴 AI。${ctx.intentDirective || '温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。'}
 语气：${ctx.tone}
-若给出了这个用户以前说过的事，回复要让对方感到被记住，不要当成第一次见面。
+${MEMORY_BOUNDARY}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 }
 

@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import axios from 'axios';
 import { embedText, loadStoredEmbedding } from './embeddingService';
 import { embedMultiLocal } from './localBgeClient';
+import { topicFromVector, topicOfText } from '../user/episodeLink';
 import {
   COLBERT_KEEP,
   COLBERT_NAME,
@@ -344,6 +345,7 @@ export async function searchUserQdrant(userId: string, query: string, topK = 5):
   const local = await embedMultiLocal(query, 8);
   const queryEmbedding = local?.dense?.length === VECTOR_SIZE ? local.dense : await embedText(query);
   if (!queryEmbedding) return [];
+  const queryTopic = topicFromVector(queryEmbedding) || topicOfText(query) || undefined;
   try {
     const { data } = await axios.post(
       `${collectionUrl(USER_COLLECTION)}/points/query`,
@@ -368,6 +370,10 @@ export async function searchUserQdrant(userId: string, query: string, topK = 5):
         dialogTime: point.payload?.dialogTime,
         emotion: point.payload?.emotion,
         trigger: point.payload?.trigger,
+        episodeId: point.payload?.episodeId,
+        episodeTitle: point.payload?.episodeTitle,
+        episodeTopic: point.payload?.episodeTopic || topicOfText(point.payload?.userPreview || '') || undefined,
+        queryTopic,
         source: 'user' as const
       }))
       .filter((row) => row.question || row.answer);

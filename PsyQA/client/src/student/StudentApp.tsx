@@ -9,7 +9,6 @@ import {
   CategoryInfo,
   getErrorMessage,
   isAskInFlightError,
-  isBackendNetworkError,
   getGroupedHistory,
   getInsightsStatus,
   pollInsightsUntilReady,
@@ -18,8 +17,6 @@ import {
   AuthUserPublic,
   fetchStudentTranscriptRequests,
   batchResolveTranscript,
-  fetchCbtModule,
-  CbtMicroModule,
   TranscriptViewRequest
 } from '../api';
 import { Sidebar } from '../components/Sidebar';
@@ -30,9 +27,6 @@ import { shouldShowTrendCareAlert } from '../utils/trendCareAlert';
 import { TrendCareAlertModal } from '../components/TrendCareAlertModal';
 import { InsightsPanelShell } from '../components/InsightsPanelShell';
 import { EmotionRhythmCalendar } from '../components/EmotionRhythmCalendar';
-import { CbtMicroModuleModal } from '../components/CbtMicroModuleModal';
-import { TrendChart } from '../components/TrendChart';
-import { ReportPanel } from '../components/ReportPanel';
 import { PortraitHistoryList, ConversationPortraitPanel } from '../components/ConversationPortraitPanel';
 import { UserProfile, UserSelector } from '../components/UserSelector';
 import { SelfRatingPanel } from '../components/SelfRatingPanel';
@@ -70,6 +64,7 @@ import { useToast } from './hooks/useToast';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { useStudentSession } from './hooks/useStudentSession';
 import '../App.css';
+import './chat-experience.css';
 
 export interface StudentAppProps {
   sessionUser: AuthUserPublic | null;
@@ -104,15 +99,24 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     reportPending,
     setReportPending,
     loadSessionFromServer,
-    refreshProgressAndHistory
+    refreshProgressAndHistory,
+    conversations,
+    conversationId,
+    setConversationId,
+    startConversation,
+    endConversation,
+    openConversation,
+    refreshConversations
   } = useStudentSession(pushToast);
+  const conversationIdRef = useRef<string | undefined>(undefined);
+  conversationIdRef.current = conversationId;
+  const activeConversation = conversations.find((item) => item.id === conversationId);
 
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [userProfiles, setUserProfiles] = useState<Record<string, UserProfile>>({});
   const [currentUserId, setCurrentUserId] = useState('');
-  const [cbtModule, setCbtModule] = useState<CbtMicroModule | null>(null);
   const [showSelfRating, setShowSelfRating] = useState(false);
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfilePayload | null>(null);
@@ -327,7 +331,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               ...m,
               streaming: false,
               aborted: true,
-              content: m.content.trim() || '（已停止生成，可修改问题后重新发送）'
+              content: m.content.trim() || '你说'
             }
           : m
       )
@@ -399,9 +403,58 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       let response: QuestionResponse | null = null;
 
       const { aborted } = await askQuestionStream(question, description, currentUserId, {
-        onToken: () => {
-          // 完成后统一写入左侧白色 bot 气泡，流式阶段仅显示「正在思考」
+        onToken: (text) => {
           setIsLoading(false);
+          if (streamPausedRef.current) {
+            streamTokenBufferRef.current += text;
+            return;
+          }
+          setMessages((prev) => {
+            const existing = prev.find((m) => m.id === botMsgId);
+            if (!existing) {
+              return [
+                ...prev,
+                {
+                  id: botMsgId,
+                  type: 'bot',
+                  content: text,
+                  timestamp: botTime,
+                  streaming: true
+                }
+              ];
+            }
+            return prev.map((m) =>
+              m.id === botMsgId ? { ...m, content: `${m.content}${text}`, streaming: true } : m
+            );
+          });
+        },
+        onAnswer: (text) => {
+          setIsLoading(false);
+          streamTokenBufferRef.current = '';
+          setMessages((prev) => {
+            const existing = prev.find((m) => m.id === botMsgId);
+            if (!existing) {
+              return [
+                ...prev,
+                {
+                  id: botMsgId,
+                  type: 'bot',
+                  content: text,
+                  timestamp: botTime,
+                  streaming: false
+                }
+              ];
+            }
+            return prev.map((m) =>
+              m.id === botMsgId ? { ...m, content: text, streaming: false } : m
+            );
+          });
+        },
+        onReset: () => {
+          streamTokenBufferRef.current = '';
+          setMessages((prev) =>
+            prev.map((m) => (m.id === botMsgId ? { ...m, content: '', streaming: true } : m))
+          );
         },
         onReactStep: (step) => {
           setIsLoading(false);
@@ -441,7 +494,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           const label = code ? labels[code] || code : '';
           pushToast(label ? `${label}：${msg}` : msg, 'warning');
         }
-      }, { signal: streamAbortRef.current.signal });
+      }, { signal: streamAbortRef.current.signal, conversationId: conversationIdRef.current });
 
       if (aborted) {
         return;
@@ -520,6 +573,11 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
         implicitNeeds: finalResponse.implicitNeeds
       });
       setLastDialogTime(finalResponse.dialogId || botTime);
+      if (finalResponse.conversationId) {
+        setConversationId(finalResponse.conversationId);
+        localStorage.setItem(`psyqa.conversation.${currentUserId}`, finalResponse.conversationId);
+        void refreshConversations(currentUserId);
+      }
       setShowSelfRating(true);
       setShowSessionFeedback(true);
       setInsightsOpen(false);
@@ -591,26 +649,14 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           return prev;
         });
         pushToast('上一条消息还在处理中，请稍候再试', 'info');
-      } else if (isBackendNetworkError(error)) {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.type === 'user' && last.content === question) {
-            return prev.slice(0, -1);
-          }
-          return prev;
-        });
-        pushToast(
-          '无法连接后端。请确认已运行「一键启动.bat」，或重启 npm run dev 后重试',
-          'warning',
-          { label: '重试', onClick: () => void handleSend(question, description) }
-        );
       } else {
         setMessages((prev) => [
           ...prev,
           {
-            id: (Date.now() + 1).toString(),
+            id: `retry-${Date.now()}`,
             type: 'bot',
-            content: `抱歉，我暂时无法回答您的问题：${getErrorMessage(error)}`,
+            content: '刚才那条没发出去，点这里重试',
+            retryQuestion: question,
             timestamp: new Date().toLocaleString('zh-CN')
           }
         ]);
@@ -630,7 +676,9 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     reportEthicsOk,
     loadUserProfileFromServer,
     runtimeHealth,
-    refreshProgressAndHistory
+    refreshProgressAndHistory,
+    refreshConversations,
+    setConversationId
   ]);
 
   const handleSimilarQuestionClick = (question: string) => {
@@ -667,6 +715,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       setUserProfile(null);
       setShowSelfRating(false);
       setShowSessionFeedback(false);
+      localStorage.removeItem(`psyqa.conversation.${currentUserId}`);
+      await startConversation(currentUserId);
     } catch (error) {
       console.error('Failed to clear history:', error);
       setMessages((prev) => [
@@ -769,9 +819,11 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
 
   const consultCount = trendData.length;
   const crisisLevel =
-    latestReport?.risk?.level === 'critical' || latestReport?.risk?.level === 'high'
-      ? latestReport.risk.level
-      : null;
+    activeConversation?.turns === 0
+      ? null
+      : latestReport?.risk?.level === 'critical' || latestReport?.risk?.level === 'high'
+        ? latestReport.risk.level
+        : null;
 
   const currentUser =
     userProfiles[currentUserId] ??
@@ -798,7 +850,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     : currentUserId || '请选择用户';
 
   return (
-    <div className="app-container">
+    <div className="app-container student-room">
       <PrivacyEthicsModal
         open={ethicsLoginOpen}
         onAccept={() => {
@@ -1046,8 +1098,20 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               streamPaused={streamPaused}
               onValidateBeforeSend={handleValidateBeforeSend}
               onSimilarQuestionClick={handleSimilarQuestionClick}
+              onRetry={(question) => void handleSend(question, '')}
               onClearHistory={handleClearHistory}
-              inputLocked={isLoading || historyLoading || backendOnline === false}
+              inputLocked={isLoading || historyLoading || backendOnline === false || activeConversation?.status === 'archived'}
+              sessions={conversations}
+              activeSessionId={conversationId}
+              onNewSession={currentUserId ? () => void startConversation(currentUserId) : undefined}
+              onEndSession={
+                currentUserId && activeConversation?.status === 'active'
+                  ? () => void endConversation(currentUserId, activeConversation.id)
+                  : undefined
+              }
+              onSelectSession={
+                currentUserId ? (id) => void openConversation(currentUserId, id) : undefined
+              }
               exportMenu={
                 <ExportMenu
                   onExport={handleExportHistory}
@@ -1069,7 +1133,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 setInsightsOpen((v) => !v);
               }}
             >
-              {insightsOpen ? '收起趋势与报告 ▲' : '展开趋势与报告 ▼'}
+              {insightsOpen ? '收起节律与画像 ▲' : '情绪节律与画像 ▼'}
               {(portraitPending || reportPending) && ' · 生成中'}
             </button>
           </div>
@@ -1080,11 +1144,6 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 <EmotionRhythmCalendar userId={currentUserId} />
               </InsightsPanelShell>
             </div>
-            <div className="insights-col insights-col-chart">
-              <InsightsPanelShell title="心理变化趋势" className="insights-col-chart">
-                <TrendChart data={trendData} />
-              </InsightsPanelShell>
-            </div>
             {latestReport?.portrait && (
               <div className="insights-col insights-col-portrait">
                 <InsightsPanelShell title="本次咨询画像" className="insights-col-portrait">
@@ -1092,43 +1151,6 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                     portrait={latestReport.portrait}
                     sessionCount={(latestReport.statModel?.totalSessions ?? consultCount) || 1}
                     pending={portraitPending}
-                  />
-                </InsightsPanelShell>
-              </div>
-            )}
-            {latestReport && (
-              <div className="insights-col insights-col-report">
-                <InsightsPanelShell title="心理咨询报告" className="insights-col-report">
-                  <ReportPanel
-                    emotion={latestReport.emotion}
-                    risk={latestReport.risk}
-                    problem={latestReport.problem}
-                    intervention={latestReport.intervention}
-                    carePlan={latestReport.carePlan}
-                    analysisSources={latestReport.analysisSources}
-                    intentLabel={latestReport.intent?.label}
-                    llmUsed={latestReport.llmUsed}
-                    reportPending={reportPending}
-                    implicitNeeds={latestReport.implicitNeeds}
-                    onOpenCbt={() => {
-                      void fetchCbtModule(latestReport.problem?.category, latestReport.emotion?.emotion).then(
-                        (d) => setCbtModule(d.module)
-                      );
-                    }}
-                    emotionStyle={latestReport.emotionStyle}
-                    report={latestReport.report}
-                    statModel={latestReport.statModel}
-                    shareContext={
-                      sessionUser
-                        ? {
-                            studentLabel: sessionUser.realName || sessionUser.displayName,
-                            orgName: sessionUser.orgName,
-                            className: sessionUser.className,
-                            studentNo: sessionUser.studentNo,
-                            allowSchoolTranscriptView: sessionUser.allowSchoolTranscriptView !== false
-                          }
-                        : undefined
-                    }
                   />
                 </InsightsPanelShell>
               </div>
@@ -1158,14 +1180,6 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           pushToast('可在「个人资料」中查看辅导员联系方式，或前往学校心理中心预约', 'info');
         }}
       />
-      {cbtModule && (
-        <CbtMicroModuleModal
-          module={cbtModule}
-          problem={latestReport?.problem?.category}
-          emotion={latestReport?.emotion?.emotion}
-          onClose={() => setCbtModule(null)}
-        />
-      )}
       <ToastStack messages={toasts} onDismiss={dismissToast} />
     </div>
   );

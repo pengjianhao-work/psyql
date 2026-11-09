@@ -1,6 +1,7 @@
 import { SimilarQuestion } from '../../types';
 import { retrieveKnowledge, KnowledgeItem, mergeRankedReferencesRRF } from '../knowledge/ragService';
-import { SearchResult } from '../knowledge/vectorDBService';
+import { SearchResult, searchVectorDb } from '../knowledge/vectorDBService';
+import { formatEpisodeInstruction, planEpisode } from '../user/episodeLink';
 import {
   saveDialog,
   getUserSummaries,
@@ -12,6 +13,7 @@ import {
   PsychSnapshot
 } from '../common/historyManager';
 import { refreshUserProfile } from '../user/userProfileService';
+import { noteConversationTurn, resolveConversation } from '../../db/conversationStore';
 import {
   buildAgentPromptContext,
   formatPersonalMemories,
@@ -48,13 +50,9 @@ import {
   formatIntentDirective,
   intentKnowledgeLimit,
   intentMemoryLimit,
+  needsPsychModel,
   IntentAnalysis
 } from '../psych/intentService';
-import {
-  generateFollowUpQuestions,
-  mapFollowUpsToSimilarQuestions,
-  getProblemLabel
-} from './llmEnhanceService';
 import { getCarePlanSuggestion } from '../psych/carePlanHints';
 import { getOllamaModel, resolveOllamaGenerateUrl } from '../llm/ollamaClient';
 import { markOllamaUnavailable } from '../llm/ollamaAvailability';
@@ -92,6 +90,7 @@ export interface CombinedAnswer {
   modelUsed?: string;
   responseTime?: number;
   dialogId?: string;
+  conversationId?: string;
   portrait?: ConversationPortrait;
   /** 完整评估报告异步生成中 */
   reportPending?: boolean;
@@ -230,16 +229,6 @@ function shouldUseAnswerCache(riskLevel: string, askRepeat: number): boolean {
   return true;
 }
 
-async function waitForLlmWithBackoff(): Promise<boolean> {
-  if (await isLlmAvailable()) return true;
-  const delays = [300, 600, 1200];
-  for (const ms of delays) {
-    await new Promise((r) => setTimeout(r, ms));
-    if (await isLlmAvailable(true)) return true;
-  }
-  return false;
-}
-
 /** 统一回复结构：共情详、建议简；去掉「今日3步」与正文内专业参考长段*/
 function normalizeAnswerStructure(answer: string): string {
   let text = answer.trim();
@@ -282,7 +271,7 @@ function truncateSnippet(text: string, maxLen: number): string {
 
 function formatKnowledgeForPrompt(knowledge: KnowledgeItem[]): string {
   return knowledge
-    .map((k, i) => `${i + 1}. 问：${truncateSnippet(k.question, 40)}\n   要点：${truncateSnippet(k.answer, 120)}`)
+    .map((k, i) => `${i + 1}. 问：${truncateSnippet(k.question, 40)}\n   要点：${truncateSnippet(k.answer, 180)}`)
     .join('\n\n');
 }
 
@@ -450,6 +439,7 @@ function finishLightweightTurn(input: {
   intent: IntentAnalysis;
   similarQuestions: SimilarQuestion[];
   startTime: number;
+  conversationId?: string;
 }): CombinedAnswer {
   const sources = {
     emotion: 'rule' as const,
@@ -472,7 +462,16 @@ function finishLightweightTurn(input: {
       ? '本次是寒暄，还没有进入具体困扰。'
       : '本次问题和情绪陪伴无关，已把对话轻轻拉回来。';
   const summary = generateSummary(input.question, input.answer, psychSnapshot);
-  const dialogId = saveDialog(input.userId, input.question, input.answer, summary, psychSnapshot, report);
+  const dialogId = saveDialog(
+    input.userId,
+    input.question,
+    input.answer,
+    summary,
+    psychSnapshot,
+    report,
+    input.conversationId
+  );
+  if (input.conversationId) noteConversationTurn(input.userId, input.conversationId, input.question);
   scheduleUserDialogIndex({
     userId: input.userId,
     dialogTime: dialogId,
@@ -516,6 +515,7 @@ function finishLightweightTurn(input: {
     modelUsed: 'Intent-Shortcut',
     responseTime: Date.now() - input.startTime,
     dialogId,
+    conversationId: input.conversationId,
     portrait: buildPlaceholderPortrait()
   };
 }
@@ -523,6 +523,8 @@ function finishLightweightTurn(input: {
 export type AnswerStreamCallbacks = {
   onToken?: (chunk: string) => void;
   onReactStep?: (step: ReActStep) => void;
+  onAnswerReady?: (answer: string) => void;
+  onStreamReset?: () => void;
 };
 
 const generateAIAnswerBody = async (
@@ -530,13 +532,16 @@ const generateAIAnswerBody = async (
   description: string | undefined,
   similarQuestions: SimilarQuestion[],
   userId: string = 'default_user',
-  stream?: AnswerStreamCallbacks
+  stream?: AnswerStreamCallbacks,
+  conversationId?: string
 ): Promise<CombinedAnswer> => {
   const startTime = Date.now();
   const loadTestFast = process.env.PSYQA_LOAD_TEST === '1';
   const fullText = question + (description || '');
+  const session =
+    userId && userId !== 'default_user' ? resolveConversation(userId, conversationId) : null;
 
-  const lastPsych = getLastPsychSnapshot(userId);
+  const lastPsych = getLastPsychSnapshot(userId, session?.id);
   const priorEmotion = lastPsych
     ? { emotion: lastPsych.emotion, confidence: lastPsych.confidence }
     : undefined;
@@ -569,7 +574,16 @@ const generateAIAnswerBody = async (
 你不是一个人。请先确保人身安全，再考虑沟通与和解读${ETHICS_FOOTER}
     `.trim();
     const summary = generateSummary(question, priorityAnswer, psychSnapshot);
-    const dialogId = saveDialog(userId, question, priorityAnswer, summary, psychSnapshot, placeholderReport);
+    const dialogId = saveDialog(
+      userId,
+      question,
+      priorityAnswer,
+      summary,
+      psychSnapshot,
+      placeholderReport,
+      session?.id
+    );
+    if (session) noteConversationTurn(userId, session.id, question);
     try {
       refreshUserProfile(userId);
       rememberTurnExperience({
@@ -577,7 +591,8 @@ const generateAIAnswerBody = async (
         dialogTime: dialogId,
         problem: getCategoryName(ruleProblem.category),
         emotion: ruleEmotion.emotion,
-        framework: intervention.frameworkName
+        framework: intervention.frameworkName,
+        userText: question
       });
       scheduleUserDialogIndex({
         userId,
@@ -622,11 +637,12 @@ const generateAIAnswerBody = async (
       modelUsed: 'Safety-Priority-Fast',
       responseTime: Date.now() - startTime,
       dialogId,
+      conversationId: session?.id,
       portrait: buildPlaceholderPortrait()
     };
   }
 
-  const hasHistory = Boolean(lastPsych);
+  const hasHistory = session ? session.turns > 0 : Boolean(lastPsych);
   const ruleIntent = classifyIntent(fullText, { hasHistory });
   console.log(`[intent] ${ruleIntent.label} ${(ruleIntent.confidence * 100).toFixed(0)}%`);
 
@@ -641,29 +657,32 @@ const generateAIAnswerBody = async (
       problem: ruleProblem,
       intent: ruleIntent,
       similarQuestions,
-      startTime
+      startTime,
+      conversationId: session?.id
     });
   }
 
   const useLlm = !loadTestFast && shouldUseLlm();
-  let llmOk = useLlm && (await isLlmAvailable());
-  if (useLlm && !llmOk) {
-    llmOk = await waitForLlmWithBackoff();
-  }
+  const llmPromise = useLlm ? isLlmAvailable() : Promise.resolve(false);
 
   const ruleBundle = ruleOnlyPsychBundle(ruleEmotion, ruleRisk, ruleProblem, ruleIntent);
-  const recentDialogs = getRecentDialogTranscript(userId, 2);
+  const recentDialogs = getRecentDialogTranscript(userId, 2, session?.id);
   const previousUser = recentDialogs.match(/用户：([^\n]+)/)?.[1]?.slice(0, 80) ?? '';
-  const retrievalText = previousUser ? `${previousUser} ${fullText}` : fullText;
+  const continueForRetrieval = ruleIntent.kind === 'followup' && Boolean(previousUser);
+  const retrievalText = continueForRetrieval ? `${previousUser} ${fullText}` : fullText;
   const ruleRetrievalQuery = enhanceQueryWithKeywords(retrievalText, [
     ...ruleProblem.keywords,
     ...ruleProblem.subcategories,
     ...(ruleIntent.kind === 'followup' && lastPsych?.problem ? [getCategoryName(lastPsych.problem)] : [])
   ]);
 
-  const psychPromise: Promise<PsychAnalysisBundle> = llmOk
-    ? analyzePsychState(fullText, priorEmotion, { tryLlm: true, hasHistory })
-    : Promise.resolve(ruleBundle);
+  const psychPromise: Promise<PsychAnalysisBundle> = llmPromise.then((ok) => {
+    if (ok && needsPsychModel(ruleIntent, ruleRisk.level)) {
+      return analyzePsychState(fullText, priorEmotion, { tryLlm: true, hasHistory });
+    }
+    if (ok) console.log('[intent] 规则已足够，跳过情绪 JSON');
+    return ruleBundle;
+  });
 
   const retrievalPromise = Promise.resolve(
     retrieveKnowledge(
@@ -673,17 +692,30 @@ const generateAIAnswerBody = async (
       ruleEmotion.emotion
     )
   );
-  const memoryLimit = intentMemoryLimit(ruleIntent.kind);
-  const memoryPromise =
-    memoryLimit > 0
-      ? searchPersonalMemories(userId, retrievalText, Math.max(memoryLimit, 4))
-      : Promise.resolve([]);
+  const knowledgeLimit = intentKnowledgeLimit(ruleIntent.kind);
+  const vectorPromise =
+    knowledgeLimit > 0
+      ? searchVectorDb(retrievalText, Math.max(knowledgeLimit, 3)).catch(() => [] as SearchResult[])
+      : Promise.resolve([] as SearchResult[]);
 
-  const [psychBundle, retrievedKnowledge, vectorDbResults] = await Promise.all([
+  const [llmOk, psychBundle, retrievedKnowledge, vectorHits] = await Promise.all([
+    llmPromise,
     psychPromise,
     retrievalPromise,
-    memoryPromise
+    vectorPromise
   ]);
+  const memoryLimit = intentMemoryLimit(ruleIntent.kind);
+  const memoryBox: { hits: SearchResult[] | null } = { hits: null };
+  if (memoryLimit > 0) {
+    void searchPersonalMemories(userId, retrievalText, Math.max(memoryLimit, 4))
+      .then((hits) => {
+        memoryBox.hits = hits;
+      })
+      .catch(() => {
+        memoryBox.hits = [];
+      });
+  }
+  const vectorDbResults: SearchResult[] = [];
   const {
     emotion: rawEmotion,
     risk: rawRisk,
@@ -707,7 +739,7 @@ const generateAIAnswerBody = async (
   const psychSnapshot = buildPsychSnapshot(emotion, risk, problem, intervention.frameworkId, sources);
   const placeholderReport = buildPlaceholderReport(psychSnapshot);
 
-  const workingMemory = buildWorkingMemory(userId);
+  const workingMemory = buildWorkingMemory(userId, session?.id);
   const durableMemory = formatDurableMemory(userId);
   const historySummaryRaw = getUserSummaries(userId);
   const historySummary =
@@ -722,7 +754,7 @@ const generateAIAnswerBody = async (
     mergeRankedReferencesRRF(
       retrievalQuery,
       retrievedKnowledge,
-      [],
+      vectorHits,
       problem.category,
       emotion.emotion,
       3
@@ -731,7 +763,11 @@ const generateAIAnswerBody = async (
   );
 
   const knowledgeContext = formatKnowledgeForPrompt(rerankedKnowledge);
-  const personalMemoryText = formatPersonalMemories(vectorDbResults, recentDialogs);
+  const personalMemoryText = formatPersonalMemories(vectorDbResults, recentDialogs, {
+    question: fullText,
+    continuePrevious: intent.kind === 'followup'
+  });
+  const episodeNote = formatEpisodeInstruction(planEpisode(fullText));
   
   const tone = emotionStyle.tone;
   const intensityLabel =
@@ -768,7 +804,8 @@ const generateAIAnswerBody = async (
 - 回答要温暖、真诚，避免生硬的专业术语
 - 尊重用户隐私，不评判用户的感受
 - 如果不确定如何回答，坦诚说明并建议咨询专业人士
-- 短期会话接着说；工作记忆沿着当前议题；长期习惯和用过的方法要符合这个人。不编造记忆里没有的事实
+- 短期会话、工作记忆和长期习惯只用来认识这个人。这轮没接着上一轮说时，不要把旧事写进回答
+- 不编造记忆里没有的事实
   `.trim();
 
   const recentRiskNote =
@@ -810,15 +847,26 @@ ${agentContext ? `\n${agentContext}\n` : ''}
 【话术参考 · 开场】${intervention.openingPhrase}
 
 【短期会话记忆】
-${recentDialogs ? `接着这些原话往下说，不要当成新话题。\n${recentDialogs}` : '这是第一轮。'}
+${recentDialogs
+    ? intent.kind === 'followup'
+      ? `用户在接着上一轮说。接这些原话往下说。\n${recentDialogs}`
+      : `这是上一轮，只供认识对方。这轮如果换了话题，不要把这些内容写进回答。\n${recentDialogs}`
+    : '这是第一轮。'}
 
 【工作记忆】
-${workingMemory || '还没有进行中的议题。'}
+${workingMemory
+    ? intent.kind === 'followup'
+      ? `沿着上一轮议题往下做。\n${workingMemory}`
+      : `下面是上一轮的议题和情绪，不是这轮要回答的问题。\n${workingMemory}`
+    : '还没有进行中的议题。'}
 
 【长期记忆 · 习惯与做过的事】
-${durableMemory || '还没有沉淀下来的习惯。'}
+${durableMemory
+    ? `只用来调整语气、避开敏感点、沿用对方觉得有用的做法。不要把旧议题当成这轮的问题。\n${durableMemory}`
+    : '还没有沉淀下来的习惯。'}
 
 【用户历史心理状态 · 摘要】${historySummary || '暂无历史记录'}
+摘要只说明这个人，不要把里面的旧事写进这轮回答。
 
 【问题领域】主要类型「${getCategoryName(problem.category)}」
 可能涉及：${problem.subcategories.length > 0 ? problem.subcategories.join('、') : '暂无'}
@@ -847,6 +895,7 @@ ${answerShape || `【回答篇幅与结构 · 必须遵守】
 【长期向量记忆】
 ${personalMemoryText || '没有检索到更早的相关原话。不要编造过去。'}
 
+${episodeNote ? `【这轮有几件事】\n${episodeNote}\n` : ''}
 【参考知识 · 仅提炼要点，勿复制原文】${knowledgeContext || '暂无'}
 
 【用户提问】
@@ -858,7 +907,7 @@ ${description ? `补充描述：${description}` : ''}
 - 先共情，再给建议；不做医疗诊断
 - **禁止**以重复或复述用户原话作为开头（不要写「${question.slice(0, 30)}…」这类开场）
 - 若有参考知识，最多用一两句话概括，不要展开成多篇
-- 若有长期习惯或向量记忆，回答里要能感到你记得对方，不要当成第一次见面
+- 语气、敏感点和以前有用的做法要符合这个人。这轮没提到的旧事不要写进回答
 
 请直接开始回答（不要元话语、不用 Markdown 小标题堆砌）：`.trim();
 
@@ -908,6 +957,7 @@ ${description ? `补充描述：${description}` : ''}
             recentDialogs,
             workingMemory,
             durableMemory,
+            continuePrevious: intent.kind === 'followup',
             agentContext,
             tone,
             llmRationale,
@@ -920,7 +970,8 @@ ${description ? `补充描述：${description}` : ''}
             temperature: genTemperature,
             timeoutMs: 90_000,
             onToken: stream?.onToken,
-            onStep: stream?.onReactStep
+            onStep: stream?.onReactStep,
+            onStreamReset: stream?.onStreamReset
           }
         );
         reactTrace = agentResult.steps;
@@ -995,21 +1046,6 @@ ${description ? `补充描述：${description}` : ''}
 
   answer = answer!;
 
-  if (llmOk && answer.length >= MIN_ANSWER_CHARS) {
-    try {
-      const llmFollowUps = await Promise.race([
-        generateFollowUpQuestions(question, answer, getProblemLabel(problem.category)),
-        new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 4_000))
-      ]);
-      const mapped = mapFollowUpsToSimilarQuestions(llmFollowUps);
-      if (mapped.length > 0) {
-        displaySimilarQuestions = mapped;
-      }
-    } catch (err) {
-      console.warn('[follow-up-questions]', err instanceof Error ? err.message : err);
-    }
-  }
-
   if (risk.level === 'high' || risk.level === 'critical' || intent.kind === 'crisis') {
     const safetyLine = risk.warningMessage || '你的安全最重要，请先联系身边可信的人或专业支持。';
     answer = `
@@ -1027,9 +1063,28 @@ ${answer}
 
   answer = clampAnswerLength(stripUserQuestionEcho(normalizeAnswerStructure(answer), question));
 
+  if (
+    memoryBox.hits &&
+    memoryBox.hits.length > 0 &&
+    risk.level !== 'high' &&
+    risk.level !== 'critical' &&
+    intent.kind !== 'crisis'
+  ) {
+    const lateMemory = formatPersonalMemories(memoryBox.hits, recentDialogs, {
+      question: fullText,
+      continuePrevious: intent.kind === 'followup'
+    });
+    const remembered = lateMemory.match(/用户当时说：([^\n]+)/)?.[1]?.trim();
+    if (remembered) {
+      answer = `${answer}\n\n这和你之前提到的「${remembered.slice(0, 24)}」是同一条线上的事。`;
+    }
+  }
+
   if (!answer.includes('不能替代医疗诊断')) {
     answer = `${answer}\n\n---\n\n${ETHICS_FOOTER}`;
   }
+
+  stream?.onAnswerReady?.(answer);
 
   const agentTag =
     reactMode === 'tot' ? '+ToT' : reactMode === 'planner' ? '+Planner' : reactUsed ? '+ReAct' : '';
@@ -1041,7 +1096,16 @@ ${answer}
         : 'Rule+Knowledge';
 
   const summary = generateSummary(question, answer, psychSnapshot);
-  const dialogId = saveDialog(userId, question, answer, summary, psychSnapshot, placeholderReport);
+  const dialogId = saveDialog(
+    userId,
+    question,
+    answer,
+    summary,
+    psychSnapshot,
+    placeholderReport,
+    session?.id
+  );
+  if (session) noteConversationTurn(userId, session.id, question);
   try {
     refreshUserProfile(userId);
     rememberTurnExperience({
@@ -1049,7 +1113,8 @@ ${answer}
       dialogTime: dialogId,
       problem: getCategoryName(problem.category),
       emotion: emotion.emotion,
-      framework: intervention.frameworkName
+      framework: intervention.frameworkName,
+      userText: question
     });
     scheduleUserDialogIndex({
       userId,
@@ -1106,7 +1171,7 @@ ${answer}
     answer,
     knowledgeSources: rerankedKnowledge,
     similarQuestions: displaySimilarQuestions,
-    vectorDbResults,
+    vectorDbResults: memoryBox.hits ?? vectorDbResults,
     summary,
     emotion,
     risk,
@@ -1138,6 +1203,7 @@ ${answer}
     modelUsed: activeModelLabel,
     responseTime,
     dialogId,
+    conversationId: session?.id,
     portrait: buildPlaceholderPortrait()
   };
 };

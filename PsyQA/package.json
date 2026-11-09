@@ -14,6 +14,7 @@
     "dev:client": "cd client && npm start",
     "test": "npm run test:server",
     "test:server": "jest --config server/jest.config.js",
+    "check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/preflight-check.ps1",
     "build:embeddings": "ts-node server/scripts/build-embeddings.ts",
     "build:embeddings:all": "ts-node server/scripts/build-embeddings.ts --all",
     "embed:incremental": "ts-node server/scripts/build-embeddings.ts",

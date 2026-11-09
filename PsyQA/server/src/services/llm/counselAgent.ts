@@ -32,6 +32,7 @@ export async function runCounselAgent(
     timeoutMs?: number;
     onToken?: (chunk: string) => void;
     onStep?: (step: ReActStep) => void;
+    onStreamReset?: () => void;
   }
 ): Promise<ReActCounselResult> {
   const mode = resolveCounselAgentMode();

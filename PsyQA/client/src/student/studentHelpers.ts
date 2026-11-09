@@ -48,8 +48,7 @@ export function upsertBotMessage(prev: Message[], botMsg: Message): Message[] {
 export const createWelcomeMessage = (): Message => ({
   id: '1',
   type: 'bot',
-  content:
-    '你好，欢迎来到心理港湾 🌿\n\n这里是安全、私密的倾诉空间。你可以描述最近的心情、人际或学业压力，我会认真倾听并给出参考建议。',
+  content: '最近怎么样？想说什么都可以，我在听。',
   timestamp: new Date().toLocaleString('zh-CN')
 });
 

@@ -35,7 +35,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({ onExport, disabled }) =>
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        📥 导出
+        导出
       </button>
       {open && (
         <div className="export-menu-dropdown" role="menu">

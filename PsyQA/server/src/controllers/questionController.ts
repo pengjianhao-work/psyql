@@ -86,7 +86,7 @@ const updateUserMetrics = (
 function validateAskRequest(
   req: AuthRequest,
   res: Response
-): { userQuestion: string; description?: string; activeUserId: string } | null {
+): { userQuestion: string; description?: string; activeUserId: string; conversationId?: string } | null {
   const { question: userQuestion, description } = req.body;
   const normalizedUserId = resolveStudentUserId(req, res, req.body?.userId);
   if (!normalizedUserId) return null;
@@ -111,7 +111,12 @@ function validateAskRequest(
     return null;
   }
 
-  return { userQuestion: String(userQuestion), description, activeUserId: normalizedUserId };
+  return {
+    userQuestion: String(userQuestion),
+    description,
+    activeUserId: normalizedUserId,
+    conversationId: req.body?.conversationId ? String(req.body.conversationId) : undefined
+  };
 }
 
 async function recordAskSideEffects(
@@ -200,6 +205,7 @@ function buildAskResponsePayload(
     statModel: result.statModel,
     responseTimeMs: elapsedMs,
     dialogId: result.dialogId,
+    conversationId: result.conversationId,
     portrait: result.portrait,
     portraitPending: result.portrait?.summary?.includes('生成中') ?? false,
     reportPending: result.report?.includes('详细心理评估报告生成中') ?? false,
@@ -279,20 +285,29 @@ export const getQuestionById = async (req: Request, res: Response) => {
 export const askQuestion = async (req: AuthRequest, res: Response) => {
   const parsed = validateAskRequest(req, res);
   if (!parsed) return;
-  const { userQuestion, description, activeUserId } = parsed;
+  const { userQuestion, description, activeUserId, conversationId } = parsed;
   const requestStart = Date.now();
 
   try {
     inFlightUsers.add(activeUserId);
     activeRequests += 1;
     await ensureQuestionsLoaded();
-    const similarQuestions = findSimilarQuestions(userQuestion, questions, 3, description);
+    let similarReady: ReturnType<typeof findSimilarQuestions> | null = null;
+    const similarPromise = Promise.resolve().then(() => {
+      similarReady = findSimilarQuestions(userQuestion, questions, 3, description);
+    });
     const result = await generateAIAnswer(
       userQuestion,
       description,
-      similarQuestions,
-      activeUserId
+      [],
+      activeUserId,
+      undefined,
+      conversationId
     );
+    if (result.similarQuestions.length === 0 && similarReady) {
+      result.similarQuestions = similarReady;
+    }
+    void similarPromise.catch(() => undefined);
     const elapsedMs = await recordAskSideEffects(activeUserId, userQuestion, result, requestStart);
     res.json(buildAskResponsePayload(userQuestion, description, result, elapsedMs, activeUserId));
   } catch (error) {
@@ -309,7 +324,7 @@ export const askQuestion = async (req: AuthRequest, res: Response) => {
 export const askQuestionStream = async (req: AuthRequest, res: Response) => {
   const parsed = validateAskRequest(req, res);
   if (!parsed) return;
-  const { userQuestion, description, activeUserId } = parsed;
+  const { userQuestion, description, activeUserId, conversationId } = parsed;
   const requestStart = Date.now();
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -325,13 +340,29 @@ export const askQuestionStream = async (req: AuthRequest, res: Response) => {
     inFlightUsers.add(activeUserId);
     activeRequests += 1;
     await ensureQuestionsLoaded();
-    const similarQuestions = findSimilarQuestions(userQuestion, questions, 3, description);
-
-    const result = await generateAIAnswer(userQuestion, description, similarQuestions, activeUserId, {
-      onToken: (text) => sendEvent({ type: 'token', text }),
-      onReactStep: (step) => sendEvent({ type: 'react_step', step })
+    let similarReady: ReturnType<typeof findSimilarQuestions> | null = null;
+    const similarPromise = Promise.resolve().then(() => {
+      similarReady = findSimilarQuestions(userQuestion, questions, 3, description);
     });
 
+    const result = await generateAIAnswer(
+      userQuestion,
+      description,
+      [],
+      activeUserId,
+      {
+        onToken: (text) => sendEvent({ type: 'token', text }),
+        onReactStep: (step) => sendEvent({ type: 'react_step', step }),
+        onAnswerReady: (answer) => sendEvent({ type: 'answer', text: answer }),
+        onStreamReset: () => sendEvent({ type: 'reset' })
+      },
+      conversationId
+    );
+
+    if (result.similarQuestions.length === 0 && similarReady) {
+      result.similarQuestions = similarReady;
+    }
+    void similarPromise.catch(() => undefined);
     const elapsedMs = await recordAskSideEffects(activeUserId, userQuestion, result, requestStart);
     sendEvent({
       type: 'done',

@@ -7,4 +7,8 @@ export interface SearchResult {
   source?: 'public' | 'user';
   emotion?: string;
   trigger?: string;
+  episodeId?: string;
+  episodeTitle?: string;
+  episodeTopic?: string;
+  queryTopic?: string;
 }
