@@ -6,18 +6,13 @@ import path from 'path';
 import { questionRouter } from './routes/question';
 import { authRouter } from './routes/auth';
 import { schoolRouter } from './routes/school';
-import { videoRouter } from './routes/video';
+import { trainingRouter } from './routes/training';
 import { shouldUseOllamaLlm, isOllamaOnlyAvailable } from './services/ollamaAvailability';
 import {
   getLlmStatus
 } from './services/llm/llmClient';
 import { isZhipuConfigured } from './services/llm/zhipuClient';
 import { getChromaStatus } from './services/knowledge/chromaVectorService';
-import { getKnowledgeEmbedStatus } from './services/knowledge/knowledgeStatus';
-import { BUILD_INFO } from './config/buildInfo';
-import { getAskLoadMetrics } from './controllers/questionController';
-import { getReportQueueMetrics } from './services/common/reportQueue';
-import { getSeasonalRagBoost } from './services/knowledge/seasonalRagPolicy';
 import { env } from './config/env';
 import { logger } from './utils/logger';
 
@@ -25,7 +20,7 @@ function mountApiRoutes(app: Express, base: string): void {
   app.use(`${base}/auth`, authRouter);
   app.use(`${base}/questions`, questionRouter);
   app.use(`${base}/school`, schoolRouter);
-  app.use(`${base}/videos`, videoRouter);
+  app.use(`${base}/training`, trainingRouter);
 }
 
 export function createApp(): Express {
@@ -126,9 +121,6 @@ export function createApp(): Express {
     }
 
     const chroma = await getChromaStatus();
-    const knowledge = await getKnowledgeEmbedStatus();
-    const load = getAskLoadMetrics();
-    const reportQueue = getReportQueueMetrics();
     res.json({
       status: 'ok',
       llmMode,
@@ -139,21 +131,8 @@ export function createApp(): Express {
       model,
       loraFineTuned,
       loraModel: loraFineTuned ? model?.replace('+LoRA', '') : undefined,
-      chroma: {
-        ...chroma,
-        capacityHint: chroma.count != null ? `${chroma.count} vectors` : undefined
-      },
-      knowledge,
-      load,
-      reportQueue: {
-        pending: reportQueue.pending,
-        inFlight: reportQueue.inFlightKeys.length
-      },
-      seasonalRag: getSeasonalRagBoost(),
-      dualLlm: process.env.PSYQA_DUAL_LLM === '1',
-      build: BUILD_INFO,
+      chroma,
       fastAnswer: process.env.PSYQA_FAST_ANSWER === '1',
-      reactDemo: process.env.PSYQA_REACT_DEMO === '1',
       env: env.nodeEnv
     });
   });
