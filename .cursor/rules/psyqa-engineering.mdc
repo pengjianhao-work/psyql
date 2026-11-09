@@ -1,0 +1,29 @@
+---
+description: 心理港湾的真实技术栈、目录和接口约束。写后端、检索或前端页面时遵守。
+alwaysApply: true
+---
+
+# 工程约束
+
+本仓库是 Express + React + SQLite，外加 Chroma / Qdrant 与 bge-m3。不要按 Next.js、Prisma、PostgreSQL、pgvector、LangGraph、Langfuse 或 `lib/llm/client.ts` 来改代码。
+
+## 目录
+
+- 应用根目录：`PsyQA/`
+- 前端：`PsyQA/client/`（Create React App，主题在 `src/theme.css`）
+- 后端：`PsyQA/server/src/`
+- 问答编排：`server/src/services/question/answerOrchestrator.ts`
+- LLM：`server/src/services/llm/llmClient.ts`，咨询 Agent 在同目录的 `counselAgent.ts`、`reactCounselAgent.ts`、`totCounselAgent.ts`
+- 检索：`server/src/services/knowledge/ragService.ts`
+- 风险：`server/src/services/psych/emotionService.ts`
+- 评测：仓库根目录 `scripts/eval_ragas.py`、`scripts/eval_counsel.py`，在 `PsyQA/` 下用 `npm run eval:ragas` / `npm run eval:counsel` 调用
+
+## 实现要求
+
+- TypeScript 保持严格，不要为了省事滥用 `any`。
+- 调用大模型走现有 `llmClient`，回答要流式；首字发出前不要串行等待相似问题扫描和追问生成。
+- 检索命中的文档 id 必须传到回答所用的知识条目和界面，合并排序时不许丢 id。
+- 用户没有在追问时，不要把上一轮话题或旧记忆写进这轮检索词或回答。
+- 改动回答提示词、检索或重排参数后，必须跑 `npm run eval:ragas`，只引用这一次的分数。
+- 在 `PsyQA/` 下开发：`npm run dev`。自检用 `npm run check`，单测用 `npm run test`。本仓库没有单独的 `lint` 脚本，不要虚构一条来跑。
+- 不要提交运行时数据：数据库、Chroma、Qdrant、用户历史和账号文件。

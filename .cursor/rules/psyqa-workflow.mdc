@@ -1,0 +1,13 @@
+---
+description: 心理港湾新功能先出方案再写代码。用户要加功能、改 Agent、改检索或改页面时使用。
+alwaysApply: false
+---
+
+# 工作方式
+
+1. 先给方案：需求复述、要改的文件、数据流、失败路径、伦理风险、本次不做的事。等用户确认再写代码。这与 `.cursor/rules/psyqa.md` 第 1 条一致，对应 `/architect`。
+2. 单次改动不超过 300 行，超出就拆开。
+3. 写完在 `PsyQA/` 下跑 `npm run check`；动到逻辑时再跑 `npm run test`。没有 `lint` 脚本就不要假装跑 lint。
+4. 结束前按审查标准列出 3 个潜在问题，再走 `/review`。
+5. 改了回答提示词、检索或重排参数之后，再 `/eval-run`。
+6. 实现可交给子代理 `coder`，审查交给 `reviewer`，视觉交给 `designer`，评测交给 `evaluator`。

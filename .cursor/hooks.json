@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "D:\\Python\\python.exe -X utf8 .cursor/hooks/eslint-fix.py",
+        "timeout": 60
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "D:\\Python\\python.exe -X utf8 .cursor/hooks/pre-commit.py",
+        "timeout": 300,
+        "matcher": "git\\s+commit\\b"
+      }
+    ]
+  }
+}

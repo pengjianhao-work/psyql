@@ -1,0 +1,22 @@
+---
+description: 心理港湾伦理红线与风险分级。涉及咨询、自伤、用药或危机话术时必须遵守。
+alwaysApply: true
+---
+
+# 伦理红线
+
+违反任何一条就停下来改，不要继续往下写。纠正时同时引用 `.cursor/rules/psyqa.md` 第 5、6 条。
+
+1. 不做精神疾病诊断，不建议停药、换药或开药，也不把知识库原文写成医疗建议。
+2. 危机路径不能被普通问答捷径跳过。规则层命中危机，或 `risk.level` / `riskLevel` 为 `high`、`critical`，必须走安全路径。相关实现见 `PsyQA/server/src/services/psych/emotionService.ts`，以及 `counselAgent.ts`、`reactCounselAgent.ts`、`totCounselAgent.ts`、`coreTaskLoopAgent.ts`。
+3. 高风险回复要稳住安全，引导联系校内心理中心或身边可信任的人，并给出全国心理援助热线 `400-161-9995`。号码以 `emotionService.ts` 里的 `CRISIS_HOTLINE` 为准；没有新的官方来源不要改号码。不要编造学校心理中心的电话、地址或值班时间。
+4. 高风险时不要深入挖掘创伤细节，也不要让模型自由发挥替代安全路径。
+5. 产品是辅助支持，不能替代专业心理咨询。不要把系统说成治疗或诊断工具。
+
+## 风险分级
+
+代码里的等级是 `low | medium | high | critical`，不要引入 `risk_red` 或其他不存在的标识。
+
+- `low`：日常倾诉、学业压力。共情，可以走普通检索与回答。
+- `medium`：持续低落、失眠等。温和支持，可附自助资源，仍避免诊断口吻。
+- `high` / `critical`：自我伤害念头、明确的自杀或自伤计划，或规则层已判危机。必须走安全路径，强调求助通道，不按普通闲聊生成。
