@@ -131,7 +131,7 @@ export function listVideos(filter: VideoListFilter = {}): VideoItem[] {
   const emotion = filter.emotion?.trim();
   const topic = filter.topic?.trim();
   const keyword = filter.keyword?.trim().toLowerCase();
-  const limit = Math.min(Math.max(filter.limit ?? 20, 1), 50);
+  const limit = Math.min(Math.max(filter.limit ?? 20, 1), 500);
 
   return loadVideos()
     .filter((video) => (emotion ? video.emotions.includes(emotion) : true))

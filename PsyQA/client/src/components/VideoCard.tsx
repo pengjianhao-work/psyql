@@ -15,6 +15,7 @@ function formatDuration(seconds?: number): string | null {
 
 export const VideoCard: React.FC<VideoCardProps> = ({ video, compact = false }) => {
   const duration = formatDuration(video.durationSec);
+  const isBilibili = video.url.includes('bilibili.com');
 
   return (
     <article className={`video-card${compact ? ' video-card-compact' : ''}`}>
@@ -23,7 +24,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video, compact = false }) 
       </div>
       <div className="video-card-body">
         <div className="video-card-meta">
-          <span className="video-card-platform">抖音</span>
+          <span className="video-card-platform">{isBilibili ? 'B站' : '抖音'}</span>
           {video.isPlaceholder && <span className="video-card-badge">示例</span>}
           {duration && <span className="video-card-duration">{duration}</span>}
         </div>
@@ -46,7 +47,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video, compact = false }) 
             target="_blank"
             rel="noopener noreferrer"
           >
-            去抖音观看 →
+            {isBilibili ? '去 B 站观看 →' : '去抖音观看 →'}
           </a>
         </div>
       </div>

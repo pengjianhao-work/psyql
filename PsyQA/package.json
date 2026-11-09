@@ -12,6 +12,8 @@
     "free:ports": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/free-dev-ports.ps1",
     "dev:server": "nodemon --watch server/src --ignore server/user_history.json --exec ts-node server/src/server.ts",
     "dev:client": "cd client && npm start",
+    "videos:collect": "ts-node server/scripts/collect-bilibili-videos.ts",
+    "videos:merge": "ts-node server/scripts/merge-pending-videos.ts",
     "test": "npm run test:server",
     "test:server": "jest --config server/jest.config.js",
     "build:embeddings": "ts-node server/scripts/build-embeddings.ts",

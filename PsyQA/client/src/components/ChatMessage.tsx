@@ -363,7 +363,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               </span>
               <div>
                 <h4 className="video-recommend-title">也许一段视频能帮到你</h4>
-                <p className="video-recommend-hint">来自抖音的心理治愈内容</p>
+                <p className="video-recommend-hint">为你挑选的心理治愈内容</p>
               </div>
             </div>
             <div className="video-recommend-list">
