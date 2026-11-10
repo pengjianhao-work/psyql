@@ -1081,7 +1081,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             </div>
           )}
 
-          <MicroTrainingPanel userId={currentUserId} />
+          <MicroTrainingPanel userId={currentUserId} profile={userProfile} />
 
           <div className="chat-section">
             <ChatContainer

@@ -1,0 +1,1110 @@
+/* 心理港湾 · 对话页视觉层（信纸与海港）
+   方向：暖纸底 + 松墨绿 + 粘土色（只用于关怀与提示）；所有选择器收在
+   .student-room .chat-container 内，避免影响学校端、登录页和其他面板。
+   层级：品牌题头 > 正文书信 > 会话操作 > 时间等元信息 > 法律说明。 */
+
+.student-room .chat-container {
+  min-height: min(880px, calc(100vh - 150px));
+  --harbor-paper: #f6f1e7;
+  --harbor-paper-raised: #fdfaf3;
+  --harbor-paper-deep: #efe7d8;
+  --harbor-ink: #1f2f2a;
+  --harbor-ink-soft: #4d5c55;
+  --harbor-ink-faint: #7c877f;
+  --harbor-line: #e3d8c6;
+  --harbor-line-strong: #d5c7b0;
+  --harbor-pine: #2f5a4c;
+  --harbor-pine-deep: #24473c;
+  --harbor-pine-soft: #dfeae3;
+  --harbor-clay: #a2704f;
+  --harbor-clay-soft: #f2e7d9;
+  --harbor-display: '方正小标宋简体', 'FZXiaoBiaoSong-B05S', 'Source Han Serif SC',
+    'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --harbor-text: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, sans-serif;
+
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  background: var(--harbor-paper);
+  border: 1px solid var(--harbor-line);
+  border-radius: 20px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    0 30px 70px -46px rgba(31, 47, 42, 0.55);
+  color: var(--harbor-ink);
+  font-family: var(--harbor-text);
+  animation: harbor-card-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.student-room .chat-container.chat-late {
+  --harbor-paper: #efe8db;
+  --harbor-paper-raised: #f8f3e9;
+  --harbor-paper-deep: #e7ddcc;
+}
+
+.student-room .chat-container ::selection {
+  background: var(--harbor-pine-soft);
+  color: var(--harbor-pine-deep);
+}
+
+/* ── 题头 ───────────────────────────────────────────── */
+
+.student-room .chat-container .chat-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 28px 18px;
+  background: var(--harbor-paper);
+  border-bottom: 1px solid var(--harbor-line);
+  color: var(--harbor-ink);
+  overflow: visible;
+}
+
+.student-room .chat-container .chat-header::after {
+  display: none;
+}
+
+.student-room .chat-container .header-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.chat-brand-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--harbor-pine);
+  color: #f7f1e6;
+  font-family: var(--harbor-display);
+  font-size: 21px;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  user-select: none;
+}
+
+.chat-brand-text {
+  min-width: 0;
+}
+
+.student-room .chat-container .header-content h2 {
+  margin: 0;
+  font-family: var(--harbor-display);
+  font-size: 23px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  color: var(--harbor-ink);
+}
+
+.student-room .chat-container .header-content p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--harbor-ink-faint);
+}
+
+.student-room .chat-container .header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: 2px;
+}
+
+.student-room .chat-container .header-actions .action-btn {
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--harbor-ink-soft);
+  font-size: 12.5px;
+  letter-spacing: 0.03em;
+  box-shadow: none;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.student-room .chat-container .header-actions .action-btn:hover {
+  transform: none;
+  background: var(--harbor-paper-deep);
+  color: var(--harbor-ink);
+}
+
+.student-room .chat-container .header-actions .action-btn:focus-visible {
+  outline: 2px solid var(--harbor-pine);
+  outline-offset: 1px;
+}
+
+.student-room .chat-container .header-actions .action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.student-room .chat-container .action-btn-primary,
+.student-room .chat-container .header-actions .action-btn-primary {
+  background: var(--harbor-pine);
+  border-color: var(--harbor-pine);
+  color: #f7f1e6;
+}
+
+.student-room .chat-container .header-actions .action-btn-primary:hover {
+  background: var(--harbor-pine-deep);
+  border-color: var(--harbor-pine-deep);
+  color: #fdfaf3;
+}
+
+.student-room .chat-container .action-btn-outline,
+.student-room .chat-container .header-actions .action-btn-outline {
+  border-color: var(--harbor-line-strong);
+  color: var(--harbor-ink-soft);
+}
+
+.student-room .chat-container .header-actions .action-btn-outline:hover {
+  background: var(--harbor-paper-raised);
+  border-color: var(--harbor-line-strong);
+  color: var(--harbor-ink);
+}
+
+.student-room .chat-container .action-btn-quiet:hover {
+  color: var(--harbor-clay);
+}
+
+/* 导出菜单 */
+.student-room .chat-container .export-menu {
+  position: relative;
+}
+
+.student-room .chat-container .export-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  min-width: 186px;
+  margin: 0;
+  padding: 6px;
+  background: var(--harbor-paper-raised);
+  border: 1px solid var(--harbor-line-strong);
+  border-radius: 12px;
+  box-shadow: 0 24px 50px -30px rgba(31, 47, 42, 0.5);
+}
+
+.student-room .chat-container .export-menu-dropdown button {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--harbor-ink-soft);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.student-room .chat-container .export-menu-dropdown button:hover {
+  background: var(--harbor-paper-deep);
+  color: var(--harbor-ink);
+}
+
+/* ── 会话切换 ───────────────────────────────────────── */
+
+.student-room .chat-container .conversation-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 11px 28px;
+  border-bottom: 1px solid var(--harbor-line);
+  background: var(--harbor-paper);
+  color: var(--harbor-ink-faint);
+  font-size: 12px;
+}
+
+.student-room .chat-container .conversation-bar > span {
+  letter-spacing: 0.16em;
+}
+
+.student-room .chat-container .conversation-bar select {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 1 auto;
+  max-width: 420px;
+  padding: 5px 26px 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%237c877f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  color: var(--harbor-ink);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.student-room .chat-container .conversation-bar select:hover {
+  background-color: var(--harbor-paper-deep);
+}
+
+.student-room .chat-container .conversation-bar select:focus-visible {
+  outline: none;
+  border-color: var(--harbor-line-strong);
+  box-shadow: 0 0 0 3px rgba(47, 90, 76, 0.12);
+}
+
+/* ── 对话正文 ───────────────────────────────────────── */
+
+.student-room .chat-container .chat-stream {
+  background: var(--harbor-paper);
+}
+
+.student-room .chat-container .chat-messages.chat-messages-welcome {
+  justify-content: center;
+  padding-bottom: 52px;
+}
+
+.student-room .chat-container .chat-messages.chat-messages-welcome .chat-welcome-hero {
+  padding-top: 0;
+  animation: harbor-rise 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.student-room .chat-container .chat-messages.chat-messages-welcome .chat-welcome {
+  animation: harbor-rise 520ms cubic-bezier(0.22, 0.61, 0.36, 1) 40ms both;
+}
+
+.student-room .chat-container .chat-messages {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 30px 28px 36px;
+  gap: 30px;
+  background: transparent;
+  font-size: 15.5px;
+  line-height: 1.9;
+  scrollbar-width: thin;
+  scrollbar-color: #cabdaa transparent;
+}
+
+.student-room .chat-container .chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.student-room .chat-container .chat-messages::-webkit-scrollbar-thumb {
+  background: #cabdaa;
+  border-radius: 999px;
+}
+
+.student-room .chat-container .chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.student-room .chat-container .chat-messages::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.student-room .chat-container .chat-messages::-webkit-scrollbar-button:vertical:start:decrement,
+.student-room .chat-container .chat-messages::-webkit-scrollbar-button:vertical:end:increment,
+.student-room .chat-container .chat-messages::-webkit-scrollbar-button:horizontal:start:decrement,
+.student-room .chat-container .chat-messages::-webkit-scrollbar-button:horizontal:end:increment {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 欢迎区 */
+.student-room .chat-container .chat-welcome-hero {
+  max-width: none;
+  margin: 0;
+  padding: 10px 0 2px;
+  text-align: left;
+  animation: harbor-rise 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.student-room .chat-container .chat-welcome-heading {
+  margin: 0 0 10px;
+  font-family: var(--harbor-display);
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+  color: var(--harbor-ink);
+}
+
+.student-room .chat-container .chat-welcome-desc {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--harbor-ink-soft);
+}
+
+.student-room .chat-container .chat-welcome {
+  text-align: left;
+}
+
+.student-room .chat-container .quick-prompts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.student-room .chat-container .quick-prompt-chip {
+  min-height: 100px;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--harbor-line);
+  border-radius: 14px;
+  background: var(--harbor-paper-raised);
+  color: var(--harbor-ink);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  text-align: left;
+  transform: none;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.student-room .chat-container .quick-prompt-chip:hover {
+  transform: none;
+  border-color: var(--harbor-line-strong);
+  background: #fffdf8;
+  box-shadow: none;
+}
+
+.student-room .chat-container .quick-prompt-chip:focus-visible {
+  outline: 2px solid var(--harbor-pine);
+  outline-offset: 2px;
+}
+
+/* ── 消息 ───────────────────────────────────────────── */
+
+.student-room .chat-container .message-avatar {
+  display: none;
+}
+
+.student-room .chat-container .message-wrapper {
+  animation: harbor-rise 240ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.student-room .chat-container .message-wrapper.user {
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+.student-room .chat-container .message-wrapper.user .message-content-wrapper {
+  max-width: min(560px, 80%);
+  align-items: flex-end;
+}
+
+.student-room .chat-container .message-bubble.user {
+  padding: 12px 17px;
+  border: none;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--harbor-pine);
+  color: #f6f0e3;
+  box-shadow: 0 16px 30px -26px rgba(31, 47, 42, 0.8);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.student-room .chat-container .message-bubble.user .message-text {
+  color: #f6f0e3;
+}
+
+.student-room .chat-container .message-wrapper.bot .message-content-wrapper {
+  max-width: min(720px, 100%);
+  align-items: stretch;
+}
+
+.student-room .chat-container .message-bubble.bot {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--harbor-ink);
+}
+
+.student-room .chat-container .message-bubble.bot .message-text {
+  position: relative;
+  padding: 0 0 0 20px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--harbor-ink);
+  font-size: 15.5px;
+  line-height: 1.9;
+  letter-spacing: 0.005em;
+}
+
+.student-room .chat-container .message-bubble.bot .message-text::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  bottom: 3px;
+  width: 1px;
+  background: var(--harbor-line-strong);
+}
+
+.student-room .chat-container .message-paragraph {
+  margin: 0 0 14px;
+}
+
+.student-room .chat-container .message-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.student-room .chat-container .message-bubble.bot strong {
+  color: var(--harbor-pine-deep);
+  font-weight: 600;
+}
+
+.student-room .chat-container .message-bubble.bot .cite-sup {
+  color: var(--harbor-pine);
+}
+
+.student-room .chat-container .message-list {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.student-room .chat-container .message-list li {
+  position: relative;
+  margin: 0 0 7px;
+  padding: 0 0 0 18px;
+  background: transparent;
+  border-radius: 0;
+}
+
+.student-room .chat-container .message-list li::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0.95em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--harbor-pine);
+  opacity: 0.55;
+}
+
+.student-room .chat-container .message-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* 时间等元信息 */
+.student-room .chat-container .message-meta {
+  margin-top: 10px;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--harbor-ink-faint);
+}
+
+.student-room .chat-container .message-wrapper.user .message-meta {
+  margin-top: 8px;
+  text-align: right;
+}
+
+.student-room .chat-container .message-wrapper.bot .message-meta {
+  padding-left: 20px;
+}
+
+/* 检索过程 / 情绪标签 / 复制 */
+.student-room .chat-container .thinking-strip {
+  margin: 0 0 10px 20px;
+  color: var(--harbor-ink-faint);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+
+.student-room .chat-container .thinking-strip summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.student-room .chat-container .thinking-strip summary::-webkit-details-marker {
+  display: none;
+}
+
+.student-room .chat-container .thinking-strip summary::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--harbor-pine);
+  opacity: 0.45;
+}
+
+.student-room .chat-container .emotion-tag {
+  margin: 0 0 10px 20px;
+  padding: 0;
+  align-self: flex-start;
+  background: transparent;
+  border-radius: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--harbor-ink-faint) !important;
+}
+
+.student-room .chat-container .react-inline-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--harbor-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--harbor-ink-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.student-room .chat-container .msg-actions {
+  margin-top: 10px;
+  padding-left: 20px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.student-room .chat-container .message-wrapper:hover .msg-actions,
+.student-room .chat-container .message-wrapper:focus-within .msg-actions {
+  opacity: 1;
+}
+
+.student-room .chat-container .msg-action {
+  padding: 4px 11px;
+  border: 1px solid var(--harbor-line);
+  border-radius: 999px;
+  background: var(--harbor-paper-raised);
+  color: var(--harbor-ink-soft);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.student-room .chat-container .msg-action:hover {
+  border-color: var(--harbor-line-strong);
+  color: var(--harbor-pine);
+}
+
+/* 关怀说明与风险提示 */
+.student-room .chat-container .message-ethics-note {
+  margin: 16px 0 0 20px;
+  padding: 10px 0 0 12px;
+  border: none;
+  border-top: 1px solid var(--harbor-line);
+  border-left: 2px solid var(--harbor-clay);
+  border-radius: 0;
+  background: transparent;
+  color: #7d6551;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.student-room .chat-container .message-ethics-note-text .message-paragraph {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.student-room .chat-container .message-ethics-note-text .message-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.student-room .chat-container .risk-warning {
+  margin-left: 20px;
+  border-radius: 12px;
+  border-left-width: 3px;
+  background: #faf0e7;
+  color: #6b4b39;
+}
+
+.student-room .chat-container .risk-warning .warning-title {
+  color: #8a4a35;
+}
+
+/* 视频推荐与相关话题：压暗为纸面上的附录 */
+.student-room .chat-container .message-extras {
+  margin: 18px 0 0 20px;
+}
+
+.student-room .chat-container .related-topics,
+.student-room .chat-container .message-extras.related-topics {
+  padding: 14px 0 0;
+  border: none;
+  border-top: 1px solid var(--harbor-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.student-room .chat-container .related-topics-title,
+.student-room .chat-container .video-recommend-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--harbor-ink-soft);
+}
+
+.student-room .chat-container .related-topics-hint,
+.student-room .chat-container .video-recommend-hint {
+  font-size: 11.5px;
+  color: var(--harbor-ink-faint);
+}
+
+.student-room .chat-container .related-topic-item {
+  border: 1px solid var(--harbor-line);
+  border-radius: 10px;
+  background: var(--harbor-paper-raised);
+  color: var(--harbor-ink-soft);
+}
+
+.student-room .chat-container .related-topic-item:hover {
+  border-color: var(--harbor-line-strong);
+  color: var(--harbor-pine);
+}
+
+.student-room .chat-container .topic-tag {
+  background: var(--harbor-pine-soft);
+  color: var(--harbor-pine);
+  border: none;
+}
+
+.student-room .chat-container .generation-hint-tag {
+  margin: 14px 0 0 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--harbor-ink-faint);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+
+/* 输入中的等待态 */
+.student-room .chat-container .chat-loading-bubble {
+  background: transparent;
+}
+
+.student-room .chat-container .chat-loading-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-left: 20px;
+}
+
+.student-room .chat-container .typing-indicator span {
+  background: var(--harbor-pine);
+  opacity: 0.45;
+}
+
+.student-room .chat-container .chat-loading-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--harbor-ink-soft);
+}
+
+.student-room .chat-container .chat-loading-hint {
+  font-size: 12px;
+  color: var(--harbor-ink-faint);
+}
+
+.student-room .chat-container .stream-stop-bar {
+  margin: 0 auto;
+  color: var(--harbor-ink-faint);
+  font-size: 12px;
+}
+
+/* ── 输入区 ─────────────────────────────────────────── */
+
+.student-room .chat-container .chat-input {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 18px 28px 16px;
+  border-top: 1px solid var(--harbor-line);
+  background: var(--harbor-paper);
+}
+
+.student-room .chat-container .input-box {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  border: 1px solid var(--harbor-line-strong);
+  border-radius: 16px;
+  background: var(--harbor-paper-raised);
+  box-shadow: 0 18px 44px -38px rgba(31, 47, 42, 0.6);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.student-room .chat-container .input-box:focus-within {
+  border-color: var(--harbor-pine);
+  box-shadow: 0 0 0 3px rgba(47, 90, 76, 0.1),
+    0 18px 44px -38px rgba(31, 47, 42, 0.6);
+}
+
+.student-room .chat-container .input-box textarea {
+  min-height: 70px;
+  padding: 16px 18px 4px;
+  background: transparent;
+  border: none;
+  color: var(--harbor-ink);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.student-room .chat-container .input-box textarea::placeholder {
+  color: #9b9285;
+  letter-spacing: 0.02em;
+}
+
+.student-room .chat-container .input-box textarea:focus {
+  outline: none;
+}
+
+.student-room .chat-container .input-box-footer {
+  padding: 2px 14px 12px;
+}
+
+.student-room .chat-container .input-hint {
+  color: var(--harbor-ink-faint);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.student-room .chat-container .input-box-actions {
+  gap: 4px;
+}
+
+.student-room .chat-container .input-box-footer .breath-btn,
+.student-room .chat-container .input-box-footer .voice-btn {
+  padding: 7px 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: var(--harbor-ink-soft) !important;
+  box-shadow: none !important;
+  font-family: inherit;
+  font-size: 12.5px !important;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+.student-room .chat-container .voice-btn-active {
+  background: var(--harbor-clay-soft) !important;
+  color: #8a4a35 !important;
+}
+
+.student-room .chat-container .input-box-footer .breath-btn:hover:not(:disabled),
+.student-room .chat-container .input-box-footer .voice-btn:hover:not(:disabled) {
+  transform: none;
+  border-color: transparent;
+  background: var(--harbor-paper-deep);
+  color: var(--harbor-ink);
+}
+
+.student-room .chat-container .send-btn {
+  padding: 8px 20px;
+  border: 1px solid var(--harbor-pine);
+  border-radius: 999px;
+  background: var(--harbor-pine);
+  color: #f7f1e6;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.student-room .chat-container .send-btn:hover:not(:disabled) {
+  transform: none;
+  border-color: var(--harbor-pine-deep);
+  background: var(--harbor-pine-deep);
+}
+
+.student-room .chat-container .send-btn:disabled {
+  border-color: #e2d9c9;
+  background: #e2d9c9;
+  color: #a89d8c;
+  opacity: 1;
+}
+
+.student-room .chat-container .input-privacy {
+  max-width: 780px;
+  margin: 10px auto 0;
+  padding: 0;
+  color: var(--harbor-ink-faint);
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.student-room .chat-container .chat-input-status {
+  max-width: 780px;
+  margin: 0 auto 8px;
+  padding: 0;
+  color: var(--harbor-pine);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+
+.student-room .chat-container .breath-guide {
+  margin: 10px auto 0;
+  color: var(--harbor-pine);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.student-room .chat-container .session-close-hint {
+  max-width: 780px;
+  margin: 0 auto 4px;
+  color: var(--harbor-ink-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+.student-room .chat-container .new-message-jump {
+  border: 1px solid var(--harbor-line-strong);
+  border-radius: 999px;
+  background: var(--harbor-paper-raised);
+  color: var(--harbor-ink-soft);
+  font-size: 12px;
+  box-shadow: 0 14px 30px -24px rgba(31, 47, 42, 0.45);
+}
+
+/* ── 关怀横幅（高频低干扰，保持语义色） ─────────────── */
+
+.student-room .chat-container .crisis-support-banner.level-high {
+  border: 1px solid #e6d5c1;
+  border-radius: 12px;
+  background: var(--harbor-clay-soft);
+  color: #6b4c37;
+}
+
+.student-room .chat-container .crisis-support-banner.level-high a {
+  color: var(--harbor-clay);
+}
+
+/* 学生端页面统一滚动条颜色，去掉全局紫色渐变条 */
+body:has(.student-room) {
+  scrollbar-color: #c9bca6 transparent;
+}
+
+body:has(.student-room) *::-webkit-scrollbar-thumb {
+  background: #c9bca6;
+  border-radius: 999px;
+}
+
+body:has(.student-room) *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── 动效与响应式 ───────────────────────────────────── */
+
+@keyframes harbor-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes harbor-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .student-room .chat-container .chat-header {
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px 20px 16px;
+  }
+
+  .student-room .chat-container .header-actions {
+    justify-content: flex-start;
+  }
+
+  .student-room .chat-container .conversation-bar,
+  .student-room .chat-container .chat-messages,
+  .student-room .chat-container .chat-input {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .student-room .chat-container .quick-prompts {
+    grid-template-columns: 1fr;
+  }
+
+  .student-room .chat-container .quick-prompt-chip {
+    min-height: 0;
+  }
+
+  .student-room .chat-container .message-wrapper.user .message-content-wrapper {
+    max-width: 88%;
+  }
+}
+
+@media (max-width: 560px) {
+  .student-room .chat-container .chat-welcome-heading {
+    font-size: 25px;
+  }
+
+  .student-room .chat-container .input-box-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .student-room .chat-container .input-hint {
+    display: none;
+  }
+
+  .student-room .chat-container .input-box-actions {
+    justify-content: flex-end;
+  }
+}
+
+
+/* 视频推荐：纸面附录的卡片语言 */
+.student-room .chat-container .video-recommend {
+  margin-top: 18px;
+}
+
+.student-room .chat-container .video-recommend-list {
+  gap: 12px;
+}
+
+.student-room .chat-container .video-card {
+  padding: 14px;
+  border: 1px solid var(--harbor-line);
+  border-radius: 14px;
+  background: var(--harbor-paper-raised);
+  box-shadow: none;
+}
+
+.student-room .chat-container .video-card-thumb {
+  flex: 0 0 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--harbor-paper-deep);
+  font-size: 20px;
+}
+
+.student-room .chat-container .video-card-meta {
+  font-size: 11px;
+  color: var(--harbor-ink-faint);
+}
+
+.student-room .chat-container .video-card-platform {
+  padding: 1px 7px;
+  background: var(--harbor-pine-soft);
+  color: var(--harbor-pine);
+  font-weight: 500;
+}
+
+.student-room .chat-container .video-card-badge {
+  padding: 1px 7px;
+  background: var(--harbor-clay-soft);
+  color: var(--harbor-clay);
+}
+
+.student-room .chat-container .video-card-title {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--harbor-ink);
+}
+
+.student-room .chat-container .video-card-desc {
+  font-size: 12px;
+  color: var(--harbor-ink-soft);
+}
+
+.student-room .chat-container .video-card-tags {
+  margin-top: 8px;
+}
+
+.student-room .chat-container .video-card-tag {
+  padding: 1px 7px;
+  border: 1px solid var(--harbor-line);
+  background: transparent;
+  color: var(--harbor-ink-faint);
+  font-size: 10.5px;
+}
+
+.student-room .chat-container .video-card-footer {
+  margin-top: 10px;
+}
+
+.student-room .chat-container .video-card-author {
+  font-size: 11px;
+  color: var(--harbor-ink-faint);
+}
+
+.student-room .chat-container .video-card-link {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--harbor-pine);
+}
+
+.student-room .chat-container .video-card-link:hover {
+  color: var(--harbor-pine-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.student-room .chat-container .video-recommend-icon {
+  font-size: 16px;
+  opacity: 0.8;
+}
+
+/* 学生端壳层：侧栏分类选中态与计数改成纸面/松墨绿（只调色，不改布局） */
+.student-room .category-item {
+  color: #4d5c55;
+}
+
+.student-room .category-item:hover {
+  background: #f3eee4;
+}
+
+.student-room .category-item.active {
+  background: #e7f0e9;
+  color: #24473c;
+  box-shadow: none;
+}
+
+.student-room .category-count {
+  background: rgba(47, 90, 76, 0.08);
+  color: #2f5a4c;
+}
+
+.student-room .category-item.active .category-count {
+  background: rgba(47, 90, 76, 0.14);
+  color: #24473c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .student-room .chat-container,
+  .student-room .chat-container .message-wrapper,
+  .student-room .chat-container .chat-welcome-hero {
+    animation: none;
+  }
+}

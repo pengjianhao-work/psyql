@@ -1,6 +1,23 @@
 import React, { useMemo, useState } from 'react';
 
-type TrainingType = 'emotion' | 'stress' | 'cbt' | 'affirmation' | 'sleep';
+type TrainingType =
+  | 'emotion'
+  | 'stress'
+  | 'cbt'
+  | 'affirmation'
+  | 'sleep'
+  | 'breathing'
+  | 'problem'
+  | 'focus'
+  | 'gratitude'
+  | 'communication';
+
+type TrainingProfile = {
+  topConcerns?: Array<{ category: string; label: string; count: number }>;
+  dominantEmotionLabel?: string | null;
+  avgStressLevel?: number | null;
+  avgAnxietyLevel?: number | null;
+};
 
 type EmotionForm = {
   triggerEvent: string;
@@ -56,7 +73,12 @@ const trainingCards: Array<{
     title: '睡前情绪放松训练',
     time: '6 分钟',
     description: '跟随文字引导做呼吸和肌肉放松'
-  }
+  },
+  { key: 'breathing', title: '呼吸稳定训练', time: '3 分钟', description: '用节律呼吸降低当下紧张感' },
+  { key: 'problem', title: '问题解决训练', time: '6 分钟', description: '把困扰转成一个今天能行动的小步骤' },
+  { key: 'focus', title: '专注启动训练', time: '5 分钟', description: '清理干扰并完成一段短时专注' },
+  { key: 'gratitude', title: '感恩记录训练', time: '3 分钟', description: '记录三件值得被看见的小事' },
+  { key: 'communication', title: '沟通表达训练', time: '5 分钟', description: '练习用具体、温和的方式表达需要' }
 ];
 
 const sleepSteps = [
@@ -69,10 +91,13 @@ const sleepSteps = [
 
 interface MicroTrainingPanelProps {
   userId?: string;
+  profile?: TrainingProfile | null;
 }
 
-export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId }) => {
+export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId, profile }) => {
   const [active, setActive] = useState<TrainingType | null>(null);
+  const [selected, setSelected] = useState<TrainingType[]>([]);
+  const [round, setRound] = useState(1);
   const [emotionForm, setEmotionForm] = useState<EmotionForm>(initialEmotionForm);
   const [stressTitle, setStressTitle] = useState('');
   const [stressItems, setStressItems] = useState<StressItem[]>([
@@ -89,6 +114,25 @@ export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId }
     () => trainingCards.find((card) => card.key === active)?.title || '',
     [active]
   );
+  const recommendedCards = useMemo(() => {
+    const text = `${profile?.dominantEmotionLabel || ''} ${(profile?.topConcerns || [])
+      .map((item) => `${item.category}${item.label}`)
+      .join(' ')}`;
+    const score = (card: (typeof trainingCards)[number]) => {
+      let value = 0;
+      if (/焦虑|压力|紧张/.test(text) && ['stress', 'breathing', 'problem'].includes(card.key)) value += 4;
+      if (/睡眠|疲惫/.test(text) && card.key === 'sleep') value += 4;
+      if (/沟通|人际/.test(text) && card.key === 'communication') value += 4;
+      if (/学习|注意|专注/.test(text) && card.key === 'focus') value += 4;
+      if ((profile?.avgStressLevel || 0) >= 4 && card.key === 'stress') value += 3;
+      return value;
+    };
+    return [...trainingCards].sort((a, b) => score(b) - score(a)).slice(0, 5);
+  }, [profile]);
+  const toggleSelection = (key: TrainingType) =>
+    setSelected((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : prev.length < 3 ? [...prev, key] : prev
+    );
 
   const saveLocalRecord = (type: string, payload: unknown) => {
     const key = `psyqa_micro_training_${userId || 'guest'}`;
@@ -105,7 +149,15 @@ export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId }
     };
     localStorage.setItem(key, JSON.stringify([...oldRecords, newRecord], null, 2));
     window.alert('已完成本次训练，记录已保存到浏览器本地。');
-    setActive(null);
+    setSelected((prev) => {
+      const remaining = prev.slice(1);
+      if (remaining.length) setActive(remaining[0]);
+      else {
+        setActive(null);
+        setRound((current) => current + 1);
+      }
+      return remaining;
+    });
   };
 
   const renderEmotionTraining = () => (
@@ -366,6 +418,17 @@ export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId }
     if (active === 'cbt') return renderCbtTraining();
     if (active === 'affirmation') return renderAffirmationTraining();
     if (active === 'sleep') return renderSleepTraining();
+    if (active) {
+      return (
+        <div>
+          <p>用几分钟完成这项练习，完成后记录你的感受。</p>
+          <textarea className="micro-training-input" rows={4} placeholder="写下你的练习内容或下一步行动" />
+          <button type="button" className="micro-training-btn primary" onClick={() => saveLocalRecord(active, { round })}>
+            完成本轮训练
+          </button>
+        </div>
+      );
+    }
     return null;
   };
 
@@ -376,16 +439,22 @@ export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId }
           <p className="micro-training-kicker">今日轻量练习</p>
           <h2 className="micro-training-title">3～8 分钟短期心理训练</h2>
           <p className="micro-training-desc">
-            适合课间、睡前、学习间隙完成。记录暂存浏览器本地，后续可对接服务端归档。
+            第 {round} 轮 · 根据你的近期画像预推荐 5 项。请选择 1～3 项后开始训练。
           </p>
         </div>
         <div className="micro-training-grid">
-          {trainingCards.map((card) => (
+          {recommendedCards.map((card) => (
             <button
               key={card.key}
               type="button"
               className="micro-training-card"
-              onClick={() => setActive(card.key)}
+              onClick={() => toggleSelection(card.key)}
+              aria-pressed={selected.includes(card.key)}
+              style={
+                selected.includes(card.key)
+                  ? { borderColor: '#7ba7bc', boxShadow: '0 0 0 2px rgba(123,167,188,.28)' }
+                  : undefined
+              }
             >
               <div className="micro-training-card-title">{card.title}</div>
               <div className="micro-training-card-time">{card.time}</div>
@@ -393,6 +462,20 @@ export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId }
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className="micro-training-btn primary"
+          disabled={!selected.length}
+          onClick={() => setActive(selected[0])}
+        >
+          开始本轮训练（已选 {selected.length}/3）
+        </button>
+        {selected.length > 0 && (
+          <p className="micro-training-tip success">
+            本轮将依次完成：
+            {selected.map((key) => trainingCards.find((card) => card.key === key)?.title).join('、')}
+          </p>
+        )}
       </section>
 
       {active && (
