@@ -126,6 +126,24 @@ function initSchema(database: Database.Database): void {
       created_at TEXT NOT NULL,
       PRIMARY KEY (user_id, dialog_time)
     );
+
+
+    CREATE TABLE IF NOT EXISTS training_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      training_type TEXT NOT NULL CHECK (training_type IN ('emotion', 'stress', 'cbt', 'affirmation', 'sleep')),
+      status TEXT NOT NULL CHECK (status IN ('in_progress', 'completed')),
+      answers_json TEXT NOT NULL DEFAULT '{}',
+      current_step INTEGER NOT NULL DEFAULT 0 CHECK (current_step >= 0),
+      feedback_json TEXT,
+      started_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_training_sessions_user_started
+      ON training_sessions(user_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_training_sessions_user_status
+      ON training_sessions(user_id, status);
   `);
 }
 

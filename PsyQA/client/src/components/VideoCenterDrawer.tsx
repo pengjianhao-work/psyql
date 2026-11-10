@@ -51,7 +51,7 @@ export const VideoCenterDrawer: React.FC<VideoCenterDrawerProps> = ({
       fetchVideoLibrary({
         emotion: activeEmotion || undefined,
         q: keyword.trim() || undefined,
-        limit: 30
+        limit: 500
       })
         .then((data) => {
           if (!cancelled) setVideos(data.videos);
@@ -84,7 +84,7 @@ export const VideoCenterDrawer: React.FC<VideoCenterDrawerProps> = ({
         <div className="video-drawer-header">
           <div>
             <h3>🎬 心理视频</h3>
-            <p>来自抖音的公开心理治愈内容，按情绪为你推荐</p>
+            <p>精选公开心理治愈内容，按情绪为你推荐</p>
           </div>
           <button type="button" className="video-drawer-close" onClick={onClose}>
             ✕

@@ -6,7 +6,7 @@ import path from 'path';
 import { questionRouter } from './routes/question';
 import { authRouter } from './routes/auth';
 import { schoolRouter } from './routes/school';
-import { videoRouter } from './routes/video';
+import { trainingRouter } from './routes/training';
 import { shouldUseOllamaLlm, isOllamaOnlyAvailable } from './services/ollamaAvailability';
 import {
   getLlmStatus
@@ -27,7 +27,7 @@ function mountApiRoutes(app: Express, base: string): void {
   app.use(`${base}/auth`, authRouter);
   app.use(`${base}/questions`, questionRouter);
   app.use(`${base}/school`, schoolRouter);
-  app.use(`${base}/videos`, videoRouter);
+  app.use(`${base}/training`, trainingRouter);
 }
 
 export function createApp(): Express {
