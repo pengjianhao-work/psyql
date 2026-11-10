@@ -9,8 +9,16 @@ export interface SensitiveCheckResult {
 const CRISIS_PATTERNS: Array<{ level: SensitiveLevel; keywords: string[]; message: string }> = [
   {
     level: 'critical',
-    keywords: ['自杀', '不想活', '结束生命', '跳楼', '割腕', '了结', '去死', '杀了他', '杀人'],
+    keywords: [
+      '自杀', '不想活', '结束生命', '跳楼', '割腕', '了结', '去死', '杀了他', '杀人',
+      '活着没什么意思', '活着没有意思', '没什么意思活着', '生无可恋'
+    ],
     message: '检测到可能的危机表述。你的生命非常宝贵，建议立即联系信任的人或拨打心理援助热线 400-161-9995。仍要发送吗？'
+  },
+  {
+    level: 'high',
+    keywords: ['停药', '断药', '减药', '换药', '不吃药了', '不想吃药', '把药停了'],
+    message: '停药、减药或换药要由开药的医生决定，这里不能讨论怎么停、怎么换。请联系医生或学校心理中心，必要时拨打心理援助热线 400-161-9995。仍要发送吗？'
   },
   {
     level: 'high',

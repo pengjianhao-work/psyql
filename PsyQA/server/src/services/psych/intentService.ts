@@ -1,4 +1,5 @@
 import { isLikelyThirdPersonCrisisMention } from '../../utils/psychTextAnalysis';
+import { assessRisk } from './emotionService';
 
 export type IntentKind = 'greeting' | 'venting' | 'advice' | 'followup' | 'crisis' | 'offtopic';
 
@@ -90,6 +91,8 @@ export function classifyIntent(text: string, options?: { hasHistory?: boolean })
   const raw = text.replace(/\s+/g, ' ').trim();
   if (!raw) return makeIntent('venting', 0.35);
 
+  const ruleRisk = assessRisk(raw);
+  if (ruleRisk.level === 'high' || ruleRisk.level === 'critical') return makeIntent('crisis', 0.93);
   if (hasFirstPersonCrisis(raw)) return makeIntent('crisis', 0.93);
 
   const looksOfftopic = OFFTOPIC_PATTERNS.some((pattern) => pattern.test(raw));
@@ -161,13 +164,13 @@ export function intentMemoryLimit(kind: IntentKind): number {
 export function formatIntentDirective(intent: IntentAnalysis): string {
   switch (intent.kind) {
     case 'venting':
-      return '【本轮意图：倾诉】以共情为主。充分回应用户的感受；建议最多一句，不要步骤清单，不要换成新话题。';
+      return '【本轮意图：倾诉】先接住这一轮原话里的感受，再给一个今天能做完的小行动。不要只安慰，也不要换成别的话题。';
     case 'advice':
-      return '【本轮意图：求建议】先简短共情，再给出可以做到的建议。';
+      return '【本轮意图：求建议】用一句接住他刚说的事，再给一个今天能做完的小行动。不要列成多条，不要诊断或讨论用药。';
     case 'followup':
-      return '【本轮意图：追问】顺着上一轮话题继续，不要重新开场，也不要换成新的知识主题。';
+      return '【本轮意图：追问】只顺着这一轮的追问往下说，补一个小行动。这一轮没再提起的旧事不要写回来。';
     case 'crisis':
-      return '【本轮意图：危机求助】先确认安全和可以联系的人，再倾听。不要展开长篇分析。';
+      return '【本轮意图：危机求助】走安全路径：不诊断、不讨论停药或换药，请对方联系信任的人或学校心理中心，并写出热线 400-161-9995。只留一个求助动作。';
     case 'greeting':
       return '【本轮意图：寒暄】用一两句打招呼，邀请对方说说最近的感受。不要给建议清单。';
     case 'offtopic':

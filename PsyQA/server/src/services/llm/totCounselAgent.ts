@@ -1,6 +1,7 @@
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { formatTurnMemory, type ReActCounselContext, type ReActCounselResult, type ReActStep } from './reactCounselAgent';
 import { formatPersonalMemories, MEMORY_BOUNDARY } from '../user/userMemoryService';
+import { CAMPUS_REPLY_REQUIREMENT } from './counselReplyPolicy';
 import type { ReactMode } from './agentPolicy';
 import { getCategoryName, type ProblemCategory } from '../psych/emotionService';
 
@@ -210,7 +211,8 @@ function buildResponderSystem(ctx: ReActCounselContext, best: ScoredBranch): str
 建议重点：${best.suggestionFocus}
 风险注意：${best.riskNote}
 
-要求：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。
+要求：${CAMPUS_REPLY_REQUIREMENT}
+${ctx.intentDirective || ''}
 语气：${ctx.tone}
 ${MEMORY_BOUNDARY}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();

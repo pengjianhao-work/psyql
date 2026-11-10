@@ -4,6 +4,7 @@ import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { formatTurnMemory, type ReActCounselContext, type ReActCounselResult, type ReActStep } from './reactCounselAgent';
 import { formatPersonalMemories, MEMORY_BOUNDARY } from '../user/userMemoryService';
 import type { ReactMode } from './agentPolicy';
+import { CAMPUS_REPLY_REQUIREMENT } from './counselReplyPolicy';
 
 export interface PlannerPlan {
   useKnowledge: boolean;
@@ -80,7 +81,8 @@ function formatPrefetchContext(ctx: ReActCounselContext, plan: PlannerPlan): str
 }
 
 function buildResponderSystem(ctx: ReActCounselContext): string {
-  return `你是大学生心理健康陪伴 AI。${ctx.intentDirective || '温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。'}
+  return `你是校园心理辅助支持，不是医生。${CAMPUS_REPLY_REQUIREMENT}
+${ctx.intentDirective || ''}
 语气：${ctx.tone}
 ${MEMORY_BOUNDARY}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();

@@ -1,5 +1,7 @@
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import type { ReActCounselContext, ReActCounselResult, ReActStep } from './reactCounselAgent';
+import { CAMPUS_REPLY_REQUIREMENT } from './counselReplyPolicy';
+import { requiresSafetyPath } from '../psych/safetyReply';
 
 export interface SelfAskCheck {
   question: string;
@@ -16,17 +18,16 @@ function truncate(text: string, max: number): string {
 
 /** 规则兜底：对草稿做三项自问自答核查 */
 export function ruleBasedSelfAskChecks(ctx: ReActCounselContext, draft: string): SelfAskCheck[] {
-  const highRisk = ctx.risk.level === 'high' || ctx.risk.level === 'critical';
+  const safety = requiresSafetyPath(ctx.risk) || ctx.risk.level === 'critical';
   const qTokens = ctx.question.replace(/\s+/g, '').slice(0, 24);
   const mentionsConcern =
     draft.includes(qTokens.slice(0, 8)) ||
     draft.length >= 120 ||
-    /焦虑|压力|睡眠|人际|考试|情绪|难过|害怕/.test(draft);
-  const hasEmpathy = /理解|听到|不容易|抱抱|陪伴|感受/.test(draft);
-  const hasAction = /可以|试试|建议|一步|呼吸|求助|心理中心|记录/.test(draft);
-  const hasDiagnosis = /确诊|诊断为|你有抑郁症|精神分裂|用药/.test(draft);
-  const hasCrisisHelp =
-    /心理中心|热线|求助|信任的人|危机|110|120|希望热线|生命热线/.test(draft) || !highRisk;
+    /焦虑|压力|睡眠|人际|考试|情绪|难过|害怕|停药|活着/.test(draft);
+  const hasEmpathy = /理解|听到|不容易|抱抱|陪伴|感受|不好受/.test(draft);
+  const hasAction = /可以|试试|建议|一步|呼吸|求助|心理中心|记录|今天/.test(draft);
+  const hasDiagnosis = /确诊|诊断为|你有抑郁症|精神分裂|建议停药|可以停药|把药停掉|处方/.test(draft);
+  const hasCrisisHelp = !safety || /400-161-9995/.test(draft);
 
   return [
     {
@@ -100,8 +101,8 @@ async function reviseAnswer(
   }
 ): Promise<string> {
   const failed = checks.filter((c) => !c.pass);
-  const systemPrompt = `你是大学生心理健康陪伴 AI。请根据 Self-Ask 核查未通过项修订回复。
-要求：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。
+  const systemPrompt = `你是校园心理辅助支持，不是医生。请根据 Self-Ask 核查未通过项修订回复。
+要求：${CAMPUS_REPLY_REQUIREMENT}
 语气：${ctx.tone}`;
 
   const userPrompt = [

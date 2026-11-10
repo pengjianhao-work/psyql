@@ -6,6 +6,7 @@ import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { isStrictFullReAct } from './agentPolicy';
 import type { ReactMode } from './agentPolicy';
 import { isValidCounselAnswer, sanitizeCounselAnswer } from './counselAnswerSanitizer';
+import { CAMPUS_REPLY_REQUIREMENT } from './counselReplyPolicy';
 
 export interface ReActStep {
   step: number;
@@ -251,7 +252,8 @@ Action: （工具名）
 Action Input: （JSON）
 
 收到 Observation 后继续推理，直到调用 finish。
-${ctx.intentDirective || '最终 answer 须：温暖共情、约 280–480 字、两大块（共情+建议）、不做医疗诊断。'}${strictNote}${prefetchNote}
+最终 answer 须遵守：${CAMPUS_REPLY_REQUIREMENT}
+${ctx.intentDirective || ''}${strictNote}${prefetchNote}
 语气：${ctx.tone}
 ${MEMORY_BOUNDARY}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();

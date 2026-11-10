@@ -1,5 +1,6 @@
 ﻿import {
   isLikelyThirdPersonCrisisMention,
+  isNegatedAt,
   normalizeConfidence,
   scoreKeywordMatches
 } from '../../utils/psychTextAnalysis';
@@ -75,12 +76,40 @@ export const PROBLEM_KEYWORDS: Record<ProblemCategory, string[]> = {
 };
 
 const CRISIS_KEYWORDS = {
-  suicide: ['自杀', '想死', '不想活', '结束生命', '跳楼', '割腕', '自缢', '跳河', '上吊', '服毒', '自尽', '寻死'],
+  suicide: [
+    '自杀', '想死', '不想活', '结束生命', '跳楼', '割腕', '自缢', '跳河', '上吊', '服毒', '自尽', '寻死', '轻生',
+    '活着没什么意思', '活着没有什么意思', '活着没啥意思', '活着没什么意义', '活着没有意思', '活着没意思',
+    '活着没意义', '没什么意思活着', '生无可恋'
+  ],
   selfharm: ['自残', '伤害自己', '割手', '撞墙', '自虐', '打自己', '咬自己'],
   desperate: ['绝望', '没有希望', '活不下去', '生不如死', '毫无意义', '彻底绝望', '心死了'],
   collapse: ['崩溃', '撑不住', '快疯了', '精神崩溃', '情绪崩溃', '撑不下去'],
   violence: ['杀人', '报复', '伤害别人', '打别人', '砍人', '攻击别人']
 };
+
+const IDEATION_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: '活着没什么意思', pattern: /活着(?:真的|确实|好像|就是)?(?:没什么|没有什么|没啥|没有)(?:意思|意义|盼头)/ },
+  { label: '活下去没什么意思', pattern: /活下去(?:真的|确实)?(?:没什么|没有什么|没啥|没有)(?:意思|意义|盼头)/ },
+  { label: '没什么意思活着', pattern: /(?:没什么|没有什么|没啥)意思(?:地)?活/ }
+];
+
+const MEDICATION_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: '停药', pattern: /停药|断药|减药|换药|擅自停|私自停|自行停/ },
+  { label: '把药停', pattern: /把药停|药停了|停了药|不吃药|不想吃药|不再吃药|没再吃药/ },
+  { label: '药后停', pattern: /药[^。！？\n]{0,6}(?:停药|停掉|停了|断药|不吃)/ },
+  { label: '停后药', pattern: /(?:停掉|停了|断了)[^。！？\n]{0,2}药/ }
+];
+
+function firstPersonHit(text: string, rules: Array<{ label: string; pattern: RegExp }>): string | null {
+  for (const rule of rules) {
+    const found = rule.pattern.exec(text);
+    if (!found || found.index === undefined) continue;
+    if (isNegatedAt(text, found.index)) continue;
+    if (isLikelyThirdPersonCrisisMention(text, found.index)) continue;
+    return found[0];
+  }
+  return null;
+}
 
 const CRISIS_HOTLINE = '全国心理援助热线：400-161-9995';
 
@@ -181,6 +210,26 @@ export function assessRisk(text: string): RiskAssessment {
         idx += kw.length;
       }
     }
+  }
+
+  const ideation = firstPersonHit(textLower, IDEATION_PATTERNS);
+  if (ideation) {
+    foundKeywords.push(ideation);
+    foundTypes.push('suicide');
+    applyLevel(
+      'critical',
+      '⚠️ 检测到严重危机信号！生命宝贵，请立即联系专业心理咨询师或拨打心理援助热线！'
+    );
+  }
+
+  const medication = firstPersonHit(textLower, MEDICATION_PATTERNS);
+  if (medication) {
+    foundKeywords.push(medication);
+    foundTypes.push('medication');
+    applyLevel(
+      'high',
+      '你提到了停药或换药。这要由开药的医生决定，我不能一起讨论怎么停、怎么换。'
+    );
   }
 
   return {

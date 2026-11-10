@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 
 os.environ.setdefault("RAGAS_DO_NOT_TRACK", "true")
 import random
@@ -292,12 +293,52 @@ def _num(value) -> float | None:
     return round(number, 4)
 
 
+def port_open(port: int) -> bool:
+    import socket
+
+    try:
+        with socket.create_connection(("127.0.0.1", port), 2):
+            return True
+    except OSError:
+        return False
+
+
+def missing_prerequisites() -> list[str]:
+    """缺密钥或本地服务时直接说明，避免写出空分数。"""
+    problems: list[str] = []
+    key = os.environ.get("SILICONFLOW_API_KEY") or os.environ.get("ZHIPU_API_KEY") or ""
+    if not key:
+        problems.append(
+            "缺少 SILICONFLOW_API_KEY 或 ZHIPU_API_KEY（写在 PsyQA/.env）。"
+            "生成和打分都走当前线上模型，没有密钥就不能跑，也不会写分数。"
+        )
+    if not port_open(8091):
+        problems.append("bge-m3 没有监听 127.0.0.1:8091。需要时在 PsyQA/ 下执行 npm run start:bge-m3。")
+    if not port_open(6333):
+        problems.append("Qdrant 没有监听 127.0.0.1:6333。需要时在 PsyQA/ 下执行 npm run start:qdrant。")
+    try:
+        import ragas  # noqa: F401
+    except ImportError:
+        problems.append(
+            "当前解释器没有 ragas。安装 ragas、datasets、langchain-openai 后再执行。"
+            f" 当前解释器：{sys.executable}"
+        )
+    return problems
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     load_env(ENV_PATH)
+    blocked = missing_prerequisites()
+    if blocked:
+        print("eval:ragas 没有运行，没有分数。", file=sys.stderr)
+        for item in blocked:
+            print(f"- {item}", file=sys.stderr)
+        print("补齐后在 PsyQA/ 下执行 npm run eval:ragas。Windows 上这条命令使用 D:\\Anaconda\\python.exe。", file=sys.stderr)
+        return 2
 
     samples = sample_rows(args.limit, args.seed)
     if not samples:
