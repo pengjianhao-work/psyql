@@ -1,21 +1,8 @@
-import fs from 'fs';
-import path from 'path';
 import { EmotionAnalysis, ProblemAnalysis, RiskAssessment } from '../psych/emotionService';
+import { VideoItem, loadVideos } from './videoLibrary';
+import { rankVideosBySimilarity } from './videoVectorService';
 
-export interface VideoItem {
-  id: string;
-  title: string;
-  author: string;
-  url: string;
-  tags: string[];
-  emotions: string[];
-  topics: string[];
-  riskLevel: 'low' | 'medium' | 'high';
-  description: string;
-  durationSec?: number;
-  /** 占位条目：链接暂未替换为具体视频 */
-  isPlaceholder?: boolean;
-}
+export type { VideoItem };
 
 export interface VideoListFilter {
   emotion?: string;
@@ -30,10 +17,6 @@ export interface VideoRecommendContext {
   emotion?: EmotionAnalysis;
   problem?: ProblemAnalysis;
 }
-
-const DATA_PATH = process.env.PSYQA_VIDEO_DATA_PATH
-  ? path.resolve(process.env.PSYQA_VIDEO_DATA_PATH)
-  : path.resolve(process.cwd(), 'server/data/psych_videos.json');
 
 /** 只在情绪明显时推荐，稳定/积极情绪不打扰用户 */
 const RECOMMENDABLE_EMOTIONS = new Set([
@@ -54,23 +37,15 @@ const MAX_CHAT_VIDEOS = 2;
 const RECENT_HISTORY_LIMIT = 8;
 const MIN_EMOTION_CONFIDENCE = 0.4;
 
-let cachedVideos: VideoItem[] = [];
-let cachedMtimeMs = 0;
-const recentByUser = new Map<string, string[]>();
+/** 向量相似度阈值：只有对话与视频的相关性超过它才推荐，否则宁可不推 */
+const SIM_THRESHOLD = clampThreshold(Number(process.env.PSYQA_VIDEO_SIM_THRESHOLD));
 
-function loadVideos(): VideoItem[] {
-  try {
-    const stat = fs.statSync(DATA_PATH);
-    if (stat.mtimeMs !== cachedMtimeMs) {
-      const parsed = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8')) as VideoItem[];
-      cachedVideos = Array.isArray(parsed) ? parsed : [];
-      cachedMtimeMs = stat.mtimeMs;
-    }
-  } catch (error) {
-    console.warn('读取心理视频库失败:', error instanceof Error ? error.message : error);
-  }
-  return cachedVideos;
+function clampThreshold(value: number): number {
+  if (!Number.isFinite(value)) return 0.55;
+  return Math.min(Math.max(value, 0.3), 0.85);
 }
+
+const recentByUser = new Map<string, string[]>();
 
 export function shouldRecommendVideos(
   emotion?: EmotionAnalysis,
@@ -102,9 +77,38 @@ function scoreVideo(video: VideoItem, ctx: VideoRecommendContext): number {
   return score;
 }
 
-export function recommendVideos(ctx: VideoRecommendContext): VideoItem[] {
-  if (!ctx.emotion) return [];
+/** 记录已推荐的视频，避免同一用户连续收到重复内容 */
+function rememberPicked(userId: string, picked: VideoItem[]): void {
+  if (!picked.length) return;
+  const recent = recentByUser.get(userId) ?? [];
+  recentByUser.set(
+    userId,
+    [...recent, ...picked.map((video) => video.id)].slice(-RECENT_HISTORY_LIMIT)
+  );
+}
 
+/**
+ * 向量相关性推荐：把对话和每条视频都转成向量求余弦相似度，
+ * 只有超过阈值的才算候选；一条都没有就返回空数组（宁可不推，也不推不相关的）。
+ * 返回 null 表示向量服务不可用，此时由调用方回退到规则匹配。
+ */
+async function recommendBySimilarity(ctx: VideoRecommendContext): Promise<VideoItem[] | null> {
+  const hits = await rankVideosBySimilarity(ctx.question);
+  if (!hits) return null;
+
+  const recent = recentByUser.get(ctx.userId) ?? [];
+  const aboveThreshold = hits.filter((hit) => hit.score >= SIM_THRESHOLD);
+  const fresh = aboveThreshold.filter((hit) => !recent.includes(hit.video.id));
+  const picked = (fresh.length >= MAX_CHAT_VIDEOS ? fresh : aboveThreshold)
+    .slice(0, MAX_CHAT_VIDEOS)
+    .map((hit) => hit.video);
+
+  rememberPicked(ctx.userId, picked);
+  return picked;
+}
+
+/** 规则匹配兜底：向量服务不可用（无密钥/断网）时保持原有行为 */
+function recommendByRules(ctx: VideoRecommendContext): VideoItem[] {
   const recent = recentByUser.get(ctx.userId) ?? [];
   const ranked = loadVideos()
     .filter((video) => video.riskLevel !== 'high')
@@ -117,14 +121,14 @@ export function recommendVideos(ctx: VideoRecommendContext): VideoItem[] {
     .slice(0, MAX_CHAT_VIDEOS)
     .map((entry) => entry.video);
 
-  if (picked.length > 0) {
-    recentByUser.set(
-      ctx.userId,
-      [...recent, ...picked.map((video) => video.id)].slice(-RECENT_HISTORY_LIMIT)
-    );
-  }
-
+  rememberPicked(ctx.userId, picked);
   return picked;
+}
+
+export async function recommendVideos(ctx: VideoRecommendContext): Promise<VideoItem[]> {
+  if (!ctx.emotion) return [];
+  const byVector = await recommendBySimilarity(ctx);
+  return byVector ?? recommendByRules(ctx);
 }
 
 export function listVideos(filter: VideoListFilter = {}): VideoItem[] {

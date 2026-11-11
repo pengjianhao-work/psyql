@@ -17,3 +17,5 @@ server/data/*.db-wal
 server/data/school_stats_cache.json
 # 视频采集的待审核清单（本地生成，不入库）
 server/data/pending_videos*.json
+# 视频向量索引（由 npm run videos:embed 生成，体积大且可重建）
+server/data/video_embeddings.json

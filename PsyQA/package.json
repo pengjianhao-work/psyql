@@ -14,6 +14,7 @@
     "dev:client": "cd client && npm start",
     "videos:collect": "ts-node server/scripts/collect-bilibili-videos.ts",
     "videos:merge": "ts-node server/scripts/merge-pending-videos.ts",
+    "videos:embed": "ts-node server/scripts/embed-videos.ts",
     "test": "npm run test:server",
     "test:server": "jest --config server/jest.config.js",
     "check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/preflight-check.ps1",

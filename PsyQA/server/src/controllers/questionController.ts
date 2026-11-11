@@ -164,7 +164,7 @@ async function recordAskSideEffects(
   return elapsedMs;
 }
 
-function buildAskResponsePayload(
+async function buildAskResponsePayload(
   userQuestion: string,
   description: string | undefined,
   result: CombinedAnswer,
@@ -172,7 +172,7 @@ function buildAskResponsePayload(
   activeUserId: string
 ) {
   const videos = shouldRecommendVideos(result.emotion, result.risk)
-    ? recommendVideos({
+    ? await recommendVideos({
         userId: activeUserId,
         question: userQuestion,
         emotion: result.emotion,
@@ -309,7 +309,7 @@ export const askQuestion = async (req: AuthRequest, res: Response) => {
     }
     void similarPromise.catch(() => undefined);
     const elapsedMs = await recordAskSideEffects(activeUserId, userQuestion, result, requestStart);
-    res.json(buildAskResponsePayload(userQuestion, description, result, elapsedMs, activeUserId));
+    res.json(await buildAskResponsePayload(userQuestion, description, result, elapsedMs, activeUserId));
   } catch (error) {
     const elapsedMs = Date.now() - requestStart;
     updateUserMetrics(activeUserId, elapsedMs, true, 'unknown');
@@ -366,7 +366,7 @@ export const askQuestionStream = async (req: AuthRequest, res: Response) => {
     const elapsedMs = await recordAskSideEffects(activeUserId, userQuestion, result, requestStart);
     sendEvent({
       type: 'done',
-      ...buildAskResponsePayload(userQuestion, description, result, elapsedMs, activeUserId)
+      ...(await buildAskResponsePayload(userQuestion, description, result, elapsedMs, activeUserId))
     });
     res.end();
   } catch (error) {
