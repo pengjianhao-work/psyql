@@ -7,7 +7,7 @@ import {
   cosineSimilarity,
   resolveEmbedRoutes
 } from '../knowledge/embeddingService';
-import { VideoItem, buildVideoDocText, loadVideos } from './videoLibrary';
+import { VideoItem, VIDEO_DATA_DIR, buildVideoDocText, loadVideos } from './videoLibrary';
 
 /**
  * 视频库向量索引：把每条视频（标题 + 标签 + 简介）转成 bge-m3 向量，
@@ -17,9 +17,13 @@ import { VideoItem, buildVideoDocText, loadVideos } from './videoLibrary';
 
 const CACHE_PATH = process.env.PSYQA_VIDEO_EMBED_PATH
   ? path.resolve(process.env.PSYQA_VIDEO_EMBED_PATH)
-  : path.resolve(process.cwd(), 'server/data/video_embeddings.json');
+  : path.join(VIDEO_DATA_DIR, 'video_embeddings.json');
 
 const EMBED_BATCH_SIZE = 16;
+/** 索引构建失败后的冷却时间，避免断网时每个请求都重试全量嵌入 */
+const FAILURE_COOLDOWN_MS = 10 * 60 * 1000;
+/** 后台预热的最小间隔 */
+const WARM_THROTTLE_MS = 60 * 1000;
 
 export interface VideoEmbeddingIndex {
   model: string;
@@ -33,6 +37,10 @@ export interface VideoSimilarityHit {
 }
 
 let memoryIndex: VideoEmbeddingIndex | null = null;
+/** 单飞：同一时刻只允许一次全量构建 */
+let buildPromise: Promise<VideoEmbeddingIndex | null> | null = null;
+let lastFailureAt = 0;
+let lastWarmAt = 0;
 
 function currentModel(): string {
   const routes = resolveEmbedRoutes();
@@ -82,10 +90,54 @@ async function embedAllVideos(videos: VideoItem[]): Promise<Map<string, number[]
 }
 
 /**
- * 获取（必要时构建）视频向量索引。
- * 成功返回索引；嵌入服务不可用或可用条数过少时返回 null，由调用方回退到规则匹配。
+ * 构建索引（单飞 + 失败冷却），供脚本和后台预热共用。
+ * 失败时返回 null，并在 FAILURE_COOLDOWN_MS 内不再重试。
  */
-export async function getVideoEmbeddingIndex(): Promise<VideoEmbeddingIndex | null> {
+function buildIndex(
+  videos: VideoItem[],
+  model: string,
+  hash: string
+): Promise<VideoEmbeddingIndex | null> {
+  if (buildPromise) return buildPromise;
+  if (Date.now() - lastFailureAt < FAILURE_COOLDOWN_MS) return Promise.resolve(null);
+
+  const task = (async (): Promise<VideoEmbeddingIndex | null> => {
+    const vectors = await embedAllVideos(videos);
+    if (vectors.size < Math.ceil(videos.length * 0.8)) {
+      lastFailureAt = Date.now();
+      console.warn(
+        `[video-embed] 仅成功向量化 ${vectors.size}/${videos.length} 条，本次回退到规则匹配`
+      );
+      return null;
+    }
+    writeCacheFile(model, hash, vectors);
+    console.log(`[video-embed] 已构建视频向量索引 ${vectors.size} 条（${model}）`);
+    memoryIndex = { model, hash, vectors };
+    return memoryIndex;
+  })().catch((error) => {
+    lastFailureAt = Date.now();
+    console.warn(
+      '[video-embed] 构建视频向量索引失败:',
+      error instanceof Error ? error.message : error
+    );
+    return null;
+  });
+
+  buildPromise = task;
+  void task.then(() => {
+    if (buildPromise === task) buildPromise = null;
+  });
+  return task;
+}
+
+/**
+ * 获取（必要时构建）视频向量索引。
+ * allowBuild=false 用于在线请求：只读缓存，缺失就返回 null，重建交给脚本或后台预热，
+ * 避免用户提问被全量嵌入阻塞。
+ */
+export async function getVideoEmbeddingIndex(
+  options: { allowBuild?: boolean } = {}
+): Promise<VideoEmbeddingIndex | null> {
   const videos = loadVideos();
   if (!videos.length) return null;
 
@@ -106,17 +158,8 @@ export async function getVideoEmbeddingIndex(): Promise<VideoEmbeddingIndex | nu
     }
   }
 
-  const vectors = await embedAllVideos(videos);
-  if (vectors.size < Math.ceil(videos.length * 0.8)) {
-    console.warn(
-      `[video-embed] 仅成功向量化 ${vectors.size}/${videos.length} 条，本次回退到规则匹配`
-    );
-    return null;
-  }
-  writeCacheFile(model, hash, vectors);
-  console.log(`[video-embed] 已构建视频向量索引 ${vectors.size} 条（${model}）`);
-  memoryIndex = { model, hash, vectors };
-  return memoryIndex;
+  if (options.allowBuild === false) return null;
+  return buildIndex(videos, model, hash);
 }
 
 /** 仅构建并落盘索引（供 npm run videos:embed 使用） */
@@ -124,13 +167,26 @@ export async function rebuildVideoEmbeddingIndex(): Promise<{ total: number; emb
   const videos = loadVideos();
   const model = currentModel();
   const vectors = await embedAllVideos(videos);
-  if (vectors.size) writeCacheFile(model, computeHash(videos, model), vectors);
+  if (vectors.size) {
+    writeCacheFile(model, computeHash(videos, model), vectors);
+    lastFailureAt = 0;
+  }
   memoryIndex = null;
   return { total: videos.length, embedded: vectors.size, model };
 }
 
+/** 后台预热：索引缺失时异步构建，失败进入冷却，不影响本次回答 */
+function warmIndexInBackground(): void {
+  if (buildPromise) return;
+  if (Date.now() - lastFailureAt < FAILURE_COOLDOWN_MS) return;
+  if (Date.now() - lastWarmAt < WARM_THROTTLE_MS) return;
+  lastWarmAt = Date.now();
+  void getVideoEmbeddingIndex().catch(() => undefined);
+}
+
 /**
  * 按对话与视频的向量相似度排序。索引不可用或提问向量化失败时返回 null。
+ * 索引缺失时只触发后台预热，不阻塞本次回答。
  */
 export async function rankVideosBySimilarity(
   question: string
@@ -138,8 +194,11 @@ export async function rankVideosBySimilarity(
   const text = (question || '').trim();
   if (!text) return null;
 
-  const index = await getVideoEmbeddingIndex();
-  if (!index) return null;
+  const index = await getVideoEmbeddingIndex({ allowBuild: false });
+  if (!index) {
+    warmIndexInBackground();
+    return null;
+  }
 
   const queryVec = await embedText(text);
   if (!queryVec) return null;

@@ -16,9 +16,22 @@ export interface VideoItem {
   isPlaceholder?: boolean;
 }
 
+const DATA_DIR = resolveDataDir();
 const DATA_PATH = process.env.PSYQA_VIDEO_DATA_PATH
   ? path.resolve(process.env.PSYQA_VIDEO_DATA_PATH)
-  : path.resolve(process.cwd(), 'server/data/psych_videos.json');
+  : path.join(DATA_DIR, 'psych_videos.json');
+
+/** 优先用源码目录定位，避免从仓库根启动时读不到视频库 */
+function resolveDataDir(): string {
+  const candidates = [
+    path.resolve(__dirname, '../../../data'),
+    path.resolve(process.cwd(), 'server/data')
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'psych_videos.json'))) return dir;
+  }
+  return candidates[1];
+}
 
 let cachedVideos: VideoItem[] = [];
 let cachedMtimeMs = 0;
@@ -45,4 +58,4 @@ export function buildVideoDocText(video: VideoItem): string {
     .join('。');
 }
 
-export { DATA_PATH as VIDEO_DATA_PATH };
+export { DATA_DIR as VIDEO_DATA_DIR, DATA_PATH as VIDEO_DATA_PATH };

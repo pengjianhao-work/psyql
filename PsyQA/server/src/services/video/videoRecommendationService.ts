@@ -1,6 +1,7 @@
 import { EmotionAnalysis, ProblemAnalysis, RiskAssessment } from '../psych/emotionService';
 import { VideoItem, loadVideos } from './videoLibrary';
 import { rankVideosBySimilarity } from './videoVectorService';
+import { logger } from '../../utils/logger';
 
 export type { VideoItem };
 
@@ -104,6 +105,12 @@ async function recommendBySimilarity(ctx: VideoRecommendContext): Promise<VideoI
     .map((hit) => hit.video);
 
   rememberPicked(ctx.userId, picked);
+  logger.info('[video] 向量推荐', {
+    top: hits.length ? Number(hits[0].score.toFixed(3)) : null,
+    threshold: SIM_THRESHOLD,
+    above: aboveThreshold.length,
+    picked: picked.length
+  });
   return picked;
 }
 
@@ -127,6 +134,7 @@ function recommendByRules(ctx: VideoRecommendContext): VideoItem[] {
 
 export async function recommendVideos(ctx: VideoRecommendContext): Promise<VideoItem[]> {
   if (!ctx.emotion) return [];
+  if (!ctx.question?.trim()) return [];
   const byVector = await recommendBySimilarity(ctx);
   return byVector ?? recommendByRules(ctx);
 }
