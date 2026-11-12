@@ -1,0 +1,415 @@
+/* 空中沙盘室 · 学生端整页壳层（仅 .student-room） */
+
+.student-room {
+  --sand-base: #f3ead8;
+  --sand-deep: #ebe0cc;
+  --sand-raised: #faf4ea;
+  --sky-mist: #d9ebe8;
+  --warm-mist: #f7efe3;
+  --pine: #2f5a4c;
+  --pine-deep: #24473c;
+  --pine-soft: #dfeae3;
+  --sea: #7ba7bc;
+  --sea-deep: #6d98ac;
+  --clay: #a2704f;
+  --ink: #1f2f2a;
+  --ink-soft: #4d5c55;
+  --ink-faint: #7c877f;
+  --line: #e3d8c6;
+  --line-strong: #d5c7b0;
+  --wood: linear-gradient(90deg, #e8dcc8 0%, #d9cbb4 48%, #e8dcc8 100%);
+  --display: '方正小标宋简体', 'FZXiaoBiaoSong-B05S', 'Source Han Serif SC', 'Songti SC', serif;
+  --text: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, sans-serif;
+  max-width: none;
+  background:
+    radial-gradient(1200px 520px at 18% -8%, rgba(217, 235, 232, 0.85), transparent 58%),
+    radial-gradient(900px 480px at 92% 0%, rgba(247, 239, 227, 0.9), transparent 55%),
+    linear-gradient(180deg, var(--sand-base) 0%, var(--sand-deep) 100%);
+  color: var(--ink);
+  font-family: var(--text);
+  animation: sand-room-in 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.student-room::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(162, 112, 79, 0.09) 1px, transparent 0);
+  background-size: 18px 18px;
+}
+
+/* 不要给 .student-room > * 设 position/z-index：
+   VideoCenterDrawer / 危机全屏等是 fragment 直接挂在 student-room 下，
+   会被盖掉自身的 position:fixed，表现为「点了没反应」。 */
+.student-room > .header,
+.student-room > .main-content,
+.student-room > .runtime-status-bar,
+.student-room > .guest-mode-banner,
+.student-room > .backend-offline-banner,
+.student-room > .transcript-approval-banner,
+.student-room > .crisis-support-banner,
+.student-room > .student-status-bar-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.student-room > .video-drawer-backdrop {
+  z-index: 1400;
+  background: rgba(47, 90, 76, 0.28);
+}
+
+.student-room > .video-drawer {
+  z-index: 1401;
+  background: #faf4ea;
+  border-left: 1px solid #e3d8c6;
+  box-shadow: -16px 0 48px rgba(47, 90, 76, 0.14);
+  color: #1f2f2a;
+}
+
+.student-room > .video-drawer .video-drawer-header h3 {
+  font-family: '方正小标宋简体', 'FZXiaoBiaoSong-B05S', 'Source Han Serif SC', 'Songti SC', serif;
+  color: #1f2f2a;
+}
+
+.student-room > .video-drawer .video-drawer-header p {
+  color: #7c877f;
+}
+
+@keyframes sand-room-in {
+  from {
+    opacity: 0;
+    filter: saturate(0.92);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+body:has(.student-room) {
+  background: var(--sand-base, #f3ead8);
+}
+
+body:has(.student-room)::before,
+body:has(.student-room)::after {
+  display: none !important;
+}
+
+/* —— 顶栏 —— */
+.student-room .header.header-campus {
+  background: rgba(250, 244, 234, 0.82);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 8px 28px rgba(47, 90, 76, 0.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.student-room .header-campus .brand-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 30% 28%, #fff8ee 0%, transparent 42%),
+    linear-gradient(160deg, var(--sea) 0%, var(--pine) 100%);
+  box-shadow: 0 10px 22px rgba(47, 90, 76, 0.18);
+  color: #fff8ee;
+  font-size: 0;
+  overflow: hidden;
+}
+
+.student-room .header-campus .brand-mark svg {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.student-room .header-campus .header-left h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.student-room .header-campus .header-left p {
+  color: var(--ink-faint);
+}
+
+.student-room .header-campus .sidebar-toggle-btn {
+  border: 1px solid var(--line);
+  background: var(--sand-raised);
+  color: var(--ink-soft);
+  border-radius: 12px;
+}
+
+.student-room .header-campus .sidebar-toggle-btn:hover {
+  background: var(--pine-soft);
+  color: var(--pine-deep);
+}
+
+.student-room .header-campus .session-badge,
+.student-room .header-campus .current-user {
+  background: var(--pine-soft);
+  color: var(--pine-deep);
+  box-shadow: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.student-room .header-campus .header-profile-btn {
+  border: 1px solid var(--line);
+  background: var(--sand-raised);
+  border-radius: 999px;
+}
+
+.student-room .header-campus .header-profile-btn:hover {
+  background: var(--pine-soft);
+}
+
+.student-room .header-campus .header-profile-name {
+  color: var(--ink);
+}
+
+.student-room .header-campus .account-switch-btn,
+.student-room .header-campus .demo-toggle {
+  background: var(--sand-raised);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.student-room .header-campus .account-switch-btn:hover,
+.student-room .header-campus .demo-toggle:hover {
+  background: var(--pine-soft);
+  color: var(--pine-deep);
+  transform: none;
+  box-shadow: none;
+}
+
+.student-room .header-campus .video-center-entry {
+  background: rgba(123, 167, 188, 0.16);
+  border-color: rgba(123, 167, 188, 0.45);
+  color: var(--pine-deep);
+}
+
+/* —— 侧栏 / 主区 —— */
+.student-room .main-content {
+  gap: 18px;
+}
+
+.student-room .sidebar-panel {
+  gap: 14px;
+}
+
+.student-room .sidebar-panel > * {
+  background: rgba(250, 244, 234, 0.88);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(47, 90, 76, 0.05);
+  backdrop-filter: blur(8px);
+}
+
+.student-room .sidebar-panel > *::before {
+  content: '';
+  display: block;
+  height: 3px;
+  margin: -1px -1px 12px;
+  border-radius: 18px 18px 0 0;
+  background: var(--wood);
+  opacity: 0.85;
+}
+
+.student-room .sidebar-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: 0.03em;
+}
+
+.student-room .sidebar-heading .category-glyph {
+  color: var(--pine);
+}
+
+.student-room .category-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+}
+
+.student-room .category-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--pine);
+  flex-shrink: 0;
+}
+
+.student-room .category-glyph {
+  display: block;
+}
+
+.student-room .category-item.active {
+  background: var(--pine-soft);
+  color: var(--pine-deep);
+  box-shadow: none;
+}
+
+.student-room .category-item.active .category-icon {
+  color: var(--pine-deep);
+}
+
+.student-room .main-panel {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+
+.student-room .student-status-bar-wrap,
+.student-room .insights-toolbar,
+.student-room .insights-panel-shell {
+  background: rgba(250, 244, 234, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(47, 90, 76, 0.05);
+}
+
+.student-room .insights-toggle-btn {
+  border: 1px solid var(--line);
+  background: var(--sand-raised);
+  color: var(--ink-soft);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.student-room .insights-toggle-btn:hover {
+  background: var(--pine-soft);
+  color: var(--pine-deep);
+  transform: none;
+}
+
+.student-room .crisis-support-banner {
+  position: relative;
+  z-index: 80;
+  box-shadow: 0 10px 28px rgba(162, 112, 79, 0.18);
+}
+
+.student-room .crisis-screen {
+  z-index: 2200;
+}
+
+/* —— 微训练 / 洞察 —— */
+.student-room .micro-training-panel {
+  background: rgba(250, 244, 234, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(47, 90, 76, 0.06);
+}
+
+.student-room .micro-training-kicker {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+.student-room .micro-training-title {
+  font-family: var(--display);
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: 0.03em;
+}
+
+.student-room .micro-training-desc {
+  color: var(--ink-soft);
+}
+
+.student-room .micro-training-card {
+  background: var(--sand-raised);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.student-room .micro-training-card:hover {
+  border-color: var(--sea);
+  box-shadow: 0 6px 16px rgba(123, 167, 188, 0.16);
+}
+
+.student-room .micro-training-card-title {
+  color: var(--ink);
+}
+
+.student-room .micro-training-card-time {
+  color: var(--sea-deep);
+}
+
+.student-room .micro-training-card-desc {
+  color: var(--ink-soft);
+}
+
+.student-room .micro-training-btn.primary {
+  background: var(--pine);
+  border-color: var(--pine);
+  color: #fff8ee;
+  box-shadow: none;
+}
+
+.student-room .micro-training-btn.primary:hover:not(:disabled) {
+  background: var(--pine-deep);
+}
+
+.student-room .micro-training-btn.secondary {
+  background: var(--sand-raised);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.student-room .micro-training-modal {
+  background: var(--sand-raised);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(47, 90, 76, 0.16);
+}
+
+.student-room .micro-training-input {
+  border: 1px solid var(--line-strong);
+  background: #fffdf8;
+  border-radius: 12px;
+  color: var(--ink);
+}
+
+.student-room .insights-panel-shell-title {
+  font-family: var(--display);
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.student-room .insights-grid .insights-col > * {
+  border-color: var(--line);
+}
+
+@media (max-width: 900px) {
+  .student-room .main-content {
+    padding: 12px 12px 20px;
+  }
+
+  .student-room .micro-training-grid {
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .student-room {
+    animation: none;
+  }
+}

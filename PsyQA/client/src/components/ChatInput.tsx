@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { checkSensitiveInput } from '../utils/sensitiveInputCheck';
 import { CrisisInputGuide } from './CrisisInputGuide';
+import { SandCompanions } from './SandCompanions';
 
 interface ChatInputProps {
   onSend: (question: string, description: string) => void;
@@ -8,6 +9,7 @@ interface ChatInputProps {
   loading?: boolean;
   initializing?: boolean;
   onValidateBeforeSend?: (question: string) => boolean;
+  hideCompanions?: boolean;
 }
 
 type SpeechRecognitionCtor = new () => SpeechRecognition;
@@ -25,15 +27,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   disabled,
   loading = false,
   initializing = false,
-  onValidateBeforeSend
+  onValidateBeforeSend,
+  hideCompanions = false
 }) => {
   const [content, setContent] = useState('');
   const [listening, setListening] = useState(false);
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
   const [crisisDismissed, setCrisisDismissed] = useState(false);
   const [breathing, setBreathing] = useState(false);
+  const [companionPulse, setCompanionPulse] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const pulseTimerRef = useRef<number | null>(null);
 
   const speechSupported = Boolean(getSpeechRecognition());
 
@@ -62,6 +67,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop();
+      if (pulseTimerRef.current != null) {
+        window.clearTimeout(pulseTimerRef.current);
+      }
     };
   }, []);
 
@@ -75,6 +83,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       setContent('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
+      }
+      if (!hideCompanions) {
+        setCompanionPulse(true);
+        if (pulseTimerRef.current != null) {
+          window.clearTimeout(pulseTimerRef.current);
+        }
+        pulseTimerRef.current = window.setTimeout(() => setCompanionPulse(false), 420);
       }
     }
   };
@@ -144,61 +159,64 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <CrisisInputGuide check={sensitiveCheck} onDismiss={() => setCrisisDismissed(true)} />
       )}
       {statusHint && <p className="chat-input-status">{statusHint}</p>}
-      <form onSubmit={handleSubmit} className={`input-box${disabled ? ' input-box-disabled' : ''}`}>
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            loading ? '请等待当前回复完成…' : '说说你的困扰吧，我会认真倾听…'
-          }
-          rows={1}
-          disabled={disabled}
-          aria-label="输入你的问题"
-        />
-        <div className="input-box-footer">
-          <span className="input-hint">
-            Enter 发送 · Shift+Enter 换行
-            {speechSupported ? ' · 可语音输入' : ''}
-          </span>
-          <div className="input-box-actions">
-            <button
-              type="button"
-              className="breath-btn"
-              onClick={() => {
-                setBreathing(true);
-                window.setTimeout(() => setBreathing(false), 3000);
-              }}
-              disabled={breathing}
-              aria-label="先深呼吸"
-              title="先深呼吸"
-            >
-              呼吸
-            </button>
-            {speechSupported && (
+      <div className="composer-sand-ledge">
+        <SandCompanions hidden={hideCompanions} pulse={companionPulse} />
+        <form onSubmit={handleSubmit} className={`input-box${disabled ? ' input-box-disabled' : ''}`}>
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              loading ? '请等待当前回复完成…' : '说说你的困扰吧，我会认真倾听…'
+            }
+            rows={1}
+            disabled={disabled}
+            aria-label="输入你的问题"
+          />
+          <div className="input-box-footer">
+            <span className="input-hint">
+              Enter 发送 · Shift+Enter 换行
+              {speechSupported ? ' · 可语音输入' : ''}
+            </span>
+            <div className="input-box-actions">
               <button
                 type="button"
-                className={`voice-btn${listening ? ' voice-btn-active' : ''}`}
-                onClick={toggleVoice}
-                disabled={disabled || loading}
-                aria-label={listening ? '停止语音输入' : '语音输入'}
-                title={listening ? '停止语音输入' : '语音输入'}
+                className="breath-btn"
+                onClick={() => {
+                  setBreathing(true);
+                  window.setTimeout(() => setBreathing(false), 3000);
+                }}
+                disabled={breathing}
+                aria-label="先深呼吸"
+                title="先深呼吸"
               >
-                {listening ? '停止' : '语音'}
+                呼吸
               </button>
-            )}
-            <button
-              type="submit"
-              className="send-btn"
-              disabled={disabled || !content.trim()}
-              aria-label="发送消息"
-            >
-              发送
-            </button>
+              {speechSupported && (
+                <button
+                  type="button"
+                  className={`voice-btn${listening ? ' voice-btn-active' : ''}`}
+                  onClick={toggleVoice}
+                  disabled={disabled || loading}
+                  aria-label={listening ? '停止语音输入' : '语音输入'}
+                  title={listening ? '停止语音输入' : '语音输入'}
+                >
+                  {listening ? '停止' : '语音'}
+                </button>
+              )}
+              <button
+                type="submit"
+                className="send-btn"
+                disabled={disabled || !content.trim()}
+                aria-label="发送消息"
+              >
+                发送
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
       {breathing && (
         <p className="breath-guide" role="status">
           吸气 4 · 停 7 · 呼气 8

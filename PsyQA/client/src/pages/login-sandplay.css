@@ -1,0 +1,145 @@
+/* 登录页对齐空中沙盘室色板（不改学校端） */
+
+.login-sandplay.login-overlay {
+  --sand-base: #f3ead8;
+  --sand-raised: #faf4ea;
+  --pine: #2f5a4c;
+  --pine-deep: #24473c;
+  --pine-soft: #dfeae3;
+  --sea: #7ba7bc;
+  --clay: #a2704f;
+  --ink: #1f2f2a;
+  --ink-soft: #4d5c55;
+  --ink-faint: #7c877f;
+  --line: #e3d8c6;
+  --display: '方正小标宋简体', 'FZXiaoBiaoSong-B05S', 'Source Han Serif SC', 'Songti SC', serif;
+  background:
+    radial-gradient(900px 420px at 16% 0%, rgba(217, 235, 232, 0.9), transparent 55%),
+    radial-gradient(780px 380px at 90% 10%, rgba(247, 239, 227, 0.95), transparent 50%),
+    linear-gradient(165deg, #f3ead8 0%, #ebe0cc 100%);
+  backdrop-filter: none;
+}
+
+.login-sandplay .login-spinner-card,
+.login-sandplay .login-card {
+  background: rgba(250, 244, 234, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 24px 64px rgba(47, 90, 76, 0.12);
+}
+
+.login-sandplay .login-card::before {
+  height: 3px;
+  background: linear-gradient(90deg, var(--sea), var(--pine));
+}
+
+.login-sandplay .login-brand {
+  margin-bottom: 14px;
+}
+
+.login-sandplay .login-brand-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, var(--sea) 0%, var(--pine) 100%);
+  box-shadow: 0 12px 28px rgba(47, 90, 76, 0.2);
+  color: #fff8ee;
+  font-size: 0;
+}
+
+.login-sandplay .login-brand-icon svg {
+  width: 30px;
+  height: 30px;
+  display: block;
+}
+
+.login-sandplay .login-title {
+  font-family: var(--display);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.login-sandplay .login-desc,
+.login-sandplay .login-hint,
+.login-sandplay .login-spinner-card p {
+  color: var(--ink-faint);
+}
+
+.login-sandplay .login-tabs button {
+  background: var(--sand-raised);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  border-radius: 12px;
+}
+
+.login-sandplay .login-tabs button.active {
+  background: var(--pine);
+  border-color: var(--pine);
+  color: #fff8ee;
+  box-shadow: 0 6px 16px rgba(47, 90, 76, 0.22);
+}
+
+.login-sandplay .login-form label {
+  color: var(--ink-soft);
+}
+
+.login-sandplay .login-form input {
+  background: #fffdf8;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+}
+
+.login-sandplay .login-form input:focus {
+  border-color: var(--pine);
+  box-shadow: 0 0 0 3px rgba(47, 90, 76, 0.12);
+}
+
+.login-sandplay .login-submit {
+  background: var(--pine);
+  box-shadow: 0 10px 24px rgba(47, 90, 76, 0.22);
+  border-radius: 12px;
+}
+
+.login-sandplay .login-submit:not(:disabled):hover {
+  background: var(--pine-deep);
+  transform: none;
+}
+
+.login-sandplay .login-guest {
+  background: rgba(123, 167, 188, 0.12);
+  border: 1px dashed rgba(123, 167, 188, 0.55);
+  color: var(--pine-deep);
+  border-radius: 12px;
+}
+
+.login-sandplay .login-guest:hover {
+  background: rgba(123, 167, 188, 0.2);
+}
+
+.login-sandplay .login-hint code {
+  background: var(--pine-soft);
+  color: var(--pine-deep);
+}
+
+.login-sandplay .login-backend-status {
+  background: var(--sand-raised);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.login-sandplay .login-backend-status.online {
+  background: var(--pine-soft);
+  color: var(--pine-deep);
+}
+
+.login-sandplay .login-backend-status.offline {
+  background: #f7ebe0;
+  color: var(--clay);
+}
+
+.login-sandplay .login-retry-btn {
+  border-color: var(--clay);
+  color: var(--clay);
+}

@@ -65,6 +65,7 @@ import { useBackendHealth } from './hooks/useBackendHealth';
 import { useStudentSession } from './hooks/useStudentSession';
 import '../App.css';
 import './chat-experience.css';
+import './sandplay-room.css';
 
 export interface StudentAppProps {
   sessionUser: AuthUserPublic | null;
@@ -892,13 +893,19 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             ☰
           </button>
           <div className="brand-mark" aria-hidden="true">
-            🏠
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="18" width="24" height="8" rx="2" fill="currentColor" opacity="0.35" />
+              <ellipse cx="16" cy="18" rx="11" ry="4.5" fill="currentColor" opacity="0.55" />
+              <circle cx="11" cy="14" r="2.2" fill="#fff8ee" />
+              <circle cx="17.5" cy="12.5" r="1.6" fill="#fff8ee" opacity="0.9" />
+              <path d="M21 15.5c1.8-.2 3.2 1 3.4 2.4" stroke="#fff8ee" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
           </div>
           <div>
             <BrandSchoolChip schoolName={sessionUser?.schoolName} />
-            <h1>心理港湾 · 学生端</h1>
+            <h1>心理港湾 · 沙盘室</h1>
             <p>
-              {studentIdentityLine || '温暖的心灵栖息地 · 大学生心理健康陪伴与咨询'}
+              {studentIdentityLine || '柔光沙盘里的倾听角落 · 大学生心理健康陪伴'}
             </p>
           </div>
         </div>
@@ -935,7 +942,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             onClick={() => setVideoDrawerOpen(true)}
             title="打开心理视频推荐"
           >
-            🎬 心理视频
+            心理视频
           </button>
           <button type="button" className="account-switch-btn" onClick={handleLogoutAccount}>
             {guestMode ? '改用账号登录' : sessionUser ? '退出登录' : '返回登录'}
@@ -1119,6 +1126,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 />
               }
               quickPrompts={filteredQuickPrompts}
+              hideCompanions={Boolean(crisisLevel)}
             />
           </div>
           <div className="insights-toolbar">

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LoginPanel } from '../components/LoginPanel';
 import { AuthUserPublic, fetchCurrentUser, setAuthToken } from '../api';
 import { GUEST_MODE_KEY } from '../App';
+import './login-sandplay.css';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -48,7 +49,7 @@ const LoginPage: React.FC = () => {
 
   if (checking) {
     return (
-      <div className="login-overlay">
+      <div className="login-overlay login-sandplay">
         <div className="login-spinner-card">
           <p>正在校验登录状态…</p>
         </div>

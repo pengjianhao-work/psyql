@@ -28,6 +28,7 @@ interface ChatContainerProps {
   onNewSession?: () => void;
   onEndSession?: () => void;
   onSelectSession?: (id: string) => void;
+  hideCompanions?: boolean;
 }
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({
@@ -54,7 +55,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   activeSessionId,
   onNewSession,
   onEndSession,
-  onSelectSession
+  onSelectSession,
+  hideCompanions = false
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -161,6 +163,11 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       >
         {showWelcome && (
           <div className="chat-welcome-hero">
+            <div className="sand-minis" aria-hidden="true">
+              <span className="sand-mini sand-mini-shell" />
+              <span className="sand-mini sand-mini-stone" />
+              <span className="sand-mini sand-mini-tree" />
+            </div>
             <h3 className="chat-welcome-heading">最近怎么样？</h3>
             <p className="chat-welcome-desc">学业、关系和心情，都可以。不是只有撑不住才来。</p>
           </div>
@@ -284,6 +291,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         loading={isLoading || isGenerating}
         initializing={initializing}
         onValidateBeforeSend={onValidateBeforeSend}
+        hideCompanions={hideCompanions}
       />
     </div>
   );

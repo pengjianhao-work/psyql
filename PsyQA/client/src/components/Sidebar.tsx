@@ -1,4 +1,5 @@
 import React from 'react';
+import { CategoryGlyph, stripCategoryEmoji } from './CategoryGlyph';
 
 interface CategoryInfo {
   id: string;
@@ -20,13 +21,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   return (
     <div className="sidebar">
-      <h3>🏷️ 问题分类</h3>
+      <h3 className="sidebar-heading">
+        <CategoryGlyph id="all" />
+        <span>问题分类</span>
+      </h3>
       <ul className="category-list">
         <li
           className={`category-item ${activeCategory === null ? 'active' : ''}`}
           onClick={() => onCategorySelect(null)}
         >
-          📋 全部问题
+          <span className="category-icon">
+            <CategoryGlyph id="all" />
+          </span>
+          <span className="category-name">全部问题</span>
         </li>
         {categories.map((category) => (
           <li
@@ -34,8 +41,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`category-item ${activeCategory === category.id ? 'active' : ''}`}
             onClick={() => onCategorySelect(category.id)}
           >
-            <span className="category-icon">{category.icon}</span>
-            <span className="category-name">{category.name.replace(/[📚👥🏠💑🚀🌟🧘👗🎮🕊️]/g, '')}</span>
+            <span className="category-icon">
+              <CategoryGlyph id={category.id} />
+            </span>
+            <span className="category-name">{stripCategoryEmoji(category.name)}</span>
             <span className="category-count">{category.count}</span>
           </li>
         ))}

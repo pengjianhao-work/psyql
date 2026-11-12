@@ -6,6 +6,7 @@ import {
   getErrorMessage,
   fetchRuntimeHealth
 } from '../api';
+import '../pages/login-sandplay.css';
 
 type Mode = 'login' | 'register';
 
@@ -72,9 +73,20 @@ export const LoginPanel: React.FC<LoginPanelProps> = ({ onLoggedIn, onGuest }) =
   };
 
   return (
-    <div className="login-overlay">
+    <div className="login-overlay login-sandplay">
       <div className="login-card">
-        <h2 className="login-title">心理港湾 · 登录</h2>
+        <div className="login-brand">
+          <div className="login-brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="18" width="24" height="8" rx="2" fill="currentColor" opacity="0.35" />
+              <ellipse cx="16" cy="18" rx="11" ry="4.5" fill="currentColor" opacity="0.55" />
+              <circle cx="11" cy="14" r="2.2" fill="#fff8ee" />
+              <circle cx="17.5" cy="12.5" r="1.6" fill="#fff8ee" opacity="0.9" />
+              <path d="M21 15.5c1.8-.2 3.2 1 3.4 2.4" stroke="#fff8ee" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </div>
+        </div>
+        <h2 className="login-title">心理港湾 · 沙盘室</h2>
         <p className="login-desc">登录后咨询记录与「用户选择」将绑定到账号；也可使用本地游客模式体验。</p>
 
         <div

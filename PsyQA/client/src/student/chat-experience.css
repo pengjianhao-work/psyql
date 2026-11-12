@@ -728,9 +728,17 @@
   width: 100%;
   max-width: 100%;
   margin: 0;
-  padding: 18px 28px 16px;
+  padding: 10px 28px 16px;
   border-top: 1px solid var(--harbor-line);
   background: var(--harbor-paper);
+}
+
+.student-room .chat-container .composer-sand-ledge {
+  position: relative;
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding-top: 28px;
 }
 
 .student-room .chat-container .input-box {
@@ -1101,10 +1109,118 @@ body:has(.student-room) *::-webkit-scrollbar-track {
   color: #24473c;
 }
 
+/* 沙盘微物与输入框伴侣 */
+.student-room .chat-container .sand-minis {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.student-room .chat-container .sand-mini {
+  display: block;
+  border-radius: 50%;
+}
+
+.student-room .chat-container .sand-mini-shell {
+  width: 18px;
+  height: 12px;
+  border-radius: 50% 50% 40% 40%;
+  background: radial-gradient(circle at 35% 35%, #f7efe3, #d9cbb4);
+  box-shadow: inset 0 -2px 0 rgba(162, 112, 79, 0.2);
+}
+
+.student-room .chat-container .sand-mini-stone {
+  width: 14px;
+  height: 10px;
+  background: linear-gradient(135deg, #cfc4b2, #a89982);
+  border-radius: 40% 55% 45% 50%;
+}
+
+.student-room .chat-container .sand-mini-tree {
+  width: 10px;
+  height: 18px;
+  border-radius: 60% 60% 20% 20%;
+  background: linear-gradient(180deg, #5f8f78 0%, #2f5a4c 70%, #a2704f 71%, #a2704f 100%);
+}
+
+.student-room .chat-container .sand-companions {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 0;
+  height: 36px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.student-room .chat-container .sand-pet {
+  width: 72px;
+  height: 40px;
+  transform-origin: 50% 100%;
+  animation: sand-pet-breathe 4.8s ease-in-out infinite;
+}
+
+.student-room .chat-container .sand-pet-dog {
+  width: 76px;
+  animation-delay: 0.8s;
+}
+
+.student-room .chat-container .sand-companions-pulse .sand-pet {
+  animation: sand-pet-nudge 420ms ease-out;
+}
+
+.student-room .chat-container .sand-companions-pulse .sand-pet-eye {
+  transform: scaleY(0.15);
+  transform-origin: center;
+}
+
+@keyframes sand-pet-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes sand-pet-nudge {
+  0% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-5px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .student-room .chat-container .sand-pet {
+    width: 56px;
+    height: 32px;
+  }
+
+  .student-room .chat-container .sand-pet-dog {
+    width: 60px;
+  }
+
+  .student-room .chat-container .composer-sand-ledge {
+    padding-top: 24px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .student-room .chat-container,
   .student-room .chat-container .message-wrapper,
-  .student-room .chat-container .chat-welcome-hero {
+  .student-room .chat-container .chat-welcome-hero,
+  .student-room .chat-container .sand-pet,
+  .student-room .chat-container .sand-companions-pulse .sand-pet {
     animation: none;
   }
 }
