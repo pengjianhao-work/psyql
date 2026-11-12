@@ -44,8 +44,6 @@ import {
   analyzeProblem
 } from '../psych/emotionService';
 import { getInterventionPlan, ETHICS_FOOTER, HIGH_RISK_CLARIFICATION } from '../psych/interventionService';
-import { buildSafetyReply, requiresSafetyPath } from '../psych/safetyReply';
-import { CAMPUS_REPLY_REQUIREMENT } from '../llm/counselReplyPolicy';
 import { analyzePsychState, PsychAnalysisBundle } from '../psych/psychAnalysisService';
 import {
   classifyIntent,
@@ -201,10 +199,10 @@ function trackQuestionRepeat(userId: string, question: string): number {
 function buildAnswerVariationHint(askRepeat: number): string {
   if (askRepeat <= 1) return '';
   const styles = [
-    '仍只给一个今天能做完的动作，换成另一件同样小的事',
-    '用他这一轮提到的场景来写这一个动作，不要换成别的话题',
-    '先接住「愿意再说一次」，再给一个不同的小行动',
-    '不要补充他没说过的经历，只把这一个动作说得更具体'
+    '从身体感受（失眠、胸闷、走神）切入，再谈学业压力',
+    '用「小步行动」角度给 2–3 条不同建议（如番茄钟、和室友聊一句、写 3 行日记）',
+    '先肯定「愿意反复来问」本身，再换一组放松/时间管理技巧',
+    '用宿舍或课堂具体场景举例，避免空泛鸡汤'
   ];
   const style = styles[(askRepeat - 2) % styles.length];
   return `【重要】用户第 ${askRepeat} 次提出相同或非常相似的问题。请换一种说法与结构，${style}；勿复制「亲爱的同学」等模板开头，避免与上次回复雷同。`;
@@ -217,7 +215,7 @@ function getCacheKey(
   intentKind: string,
   context: string
 ): string {
-  return `v7:${userId}:${riskLevel}:${intentKind}:${question}:${context}`.substring(0, 360);
+  return `v6:${userId}:${riskLevel}:${intentKind}:${question}:${context}`.substring(0, 360);
 }
 
 function shouldSkipAnswerCache(riskLevel: string): boolean {
@@ -253,6 +251,17 @@ function normalizeAnswerStructure(answer: string): string {
 }
 
 /** 去掉 LLM 开头复述用户原话 — 见 utils/answerSanitizer.ts */
+
+function simplifyStructureHint(hint: string): string {
+  return hint
+    .replace(/[①②③④⑤]/g, '')
+    .split(/[；\n]/)
+    .map((s) => s.replace(/^\s*\d+\.\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((s) => (s.length > 28 ? `${s.slice(0, 28)}…` : s))
+    .join(' · ');
+}
 
 function truncateSnippet(text: string, maxLen: number): string {
   const t = text.replace(/\s+/g, ' ').trim();
@@ -340,15 +349,18 @@ function buildExpandedFallbackAnswer(
   intervention: { openingPhrase: string; closingPhrase: string; frameworkName: string; structureHint: string },
   description?: string
 ): string {
-  const snippet = truncateSnippet(question, 80);
   const empathyBlock = [
     intervention.openingPhrase,
-    `你刚才说的是「${snippet}」。我只接这一件事，不补充你没说过的经历。`,
-    description ? `你还补充了「${truncateSnippet(description, 80)}」。` : ''
-  ]
+    `听到你说「${truncateSnippet(question, 80)}」，我能感受到这对你来说并不容易。愿意把这些说出来，本身就需要勇气——你的感受是真实、值得被认真对待的，并不是「想太多」或「不够坚强」。`,
+    description
+      ? `你也补充提到「${truncateSnippet(description, 100)}。这些细节说明你在认真面对自己的处境，这本身就很不容易。`
+      : '', '在人际、学业或生活环境里感到压抑或委屈时，不必急着给自己下结论；允许自己先停一停、把情绪放在前面被看见，往往比立刻「必须好起来」更能找到可持续的调整方式。']
     .filter(Boolean)
     .join('\n\n');
-  const adviceBlock = '今天只做一步：用三分钟把这件事写成一句话，发给一位你信任的同学，或学校心理中心。发完就停。';
+
+  const hintShort = simplifyStructureHint(intervention.structureHint);
+  const adviceBlock = `**${intervention.frameworkName}**${hintShort}`;
+
   const body = [empathyBlock, adviceBlock, intervention.closingPhrase].join('\n\n');
   return clampAnswerLength(normalizeAnswerStructure(body));
 }
@@ -537,17 +549,15 @@ const generateAIAnswerBody = async (
   const ruleEmotion = analyzeEmotion(fullText, priorEmotion);
   const ruleRisk = assessRisk(fullText);
   const ruleProblem = analyzeProblem(fullText);
-  const hasHistory = session ? session.turns > 0 : Boolean(lastPsych);
-  const earlyIntent = classifyIntent(fullText, { hasHistory });
 
-  if (earlyIntent.kind === 'crisis' || requiresSafetyPath(ruleRisk)) {
+  if (ruleRisk.level === 'critical') {
     const metrics = refineMetricsWithSignals(ruleEmotion, ruleRisk, ruleProblem);
     const historySnapshots = getUserPsychSnapshots(userId);
     const statModel = buildPsychStatModel(ruleEmotion, ruleRisk, ruleProblem, metrics, historySnapshots);
     const intervention = getInterventionPlan(ruleEmotion.emotion, ruleProblem.category, ruleRisk.level);
     const carePlan = getCarePlanSuggestion(ruleProblem.category);
     const emotionStyle = getEmotionStyle(ruleEmotion.emotion);
-    const crisisIntent = earlyIntent;
+    const crisisIntent = classifyIntent(fullText, { hasHistory: Boolean(lastPsych) });
     const psychSnapshot = buildPsychSnapshot(ruleEmotion, ruleRisk, ruleProblem, intervention.frameworkId, {
       emotion: 'rule',
       risk: 'rule',
@@ -555,8 +565,14 @@ const generateAIAnswerBody = async (
       intent: 'rule'
     });
     const placeholderReport = buildPlaceholderReport(psychSnapshot);
-    const priorityAnswer = buildSafetyReply(ruleRisk);
-    stream?.onAnswerReady?.(priorityAnswer);
+    const priorityAnswer = `
+⚠️ 我非常重视你现在的状态，你的安全是第一位的?
+【安全计划· 请按顺序完成?1. 环境安全：远离可能伤害自己或他人的物品或场景
+2. 当下冷静：离开冲突现场，深呼吸 10 ?3. 支持资源：联系辅导员/室友信任的同伴，并拨?${ruleRisk.hotline}
+4. 如有受伤或持续冲突：拨打 120 / 110
+
+你不是一个人。请先确保人身安全，再考虑沟通与和解读${ETHICS_FOOTER}
+    `.trim();
     const summary = generateSummary(question, priorityAnswer, psychSnapshot);
     const dialogId = saveDialog(
       userId,
@@ -626,7 +642,8 @@ const generateAIAnswerBody = async (
     };
   }
 
-  const ruleIntent = earlyIntent;
+  const hasHistory = session ? session.turns > 0 : Boolean(lastPsych);
+  const ruleIntent = classifyIntent(fullText, { hasHistory });
   console.log(`[intent] ${ruleIntent.label} ${(ruleIntent.confidence * 100).toFixed(0)}%`);
 
   if (ruleIntent.kind === 'greeting' || ruleIntent.kind === 'offtopic') {
@@ -771,9 +788,24 @@ const generateAIAnswerBody = async (
   } as Record<EmotionType, string>)[emotion.emotion];
   
   const systemPrompt = `
-你是校园里的心理辅助支持，温柔、耐心，但不是医生。
-${CAMPUS_REPLY_REQUIREMENT}
-短期会话、工作记忆和长期习惯只用来认识这个人。这轮没接着上一轮说时，不要把旧事写进回答。
+你是一位专业的大学生心理健康陪伴AI，具备以下特质：
+- 温柔、耐心、共情能力强
+- 严格遵守心理咨询伦理准则
+- 不做医疗诊断，只提供心理支持和建议
+- 引导用户寻求专业帮助（如需要）
+
+你的任务是：
+1. 认真倾听用户的困扰
+2. 给予情感上的理解和支持
+3. 提供科学、实用的心理调节建议
+4. 当检测到危机信号时，立即提供援助热线信息
+
+注意事项：
+- 回答要温暖、真诚，避免生硬的专业术语
+- 尊重用户隐私，不评判用户的感受
+- 如果不确定如何回答，坦诚说明并建议咨询专业人士
+- 短期会话、工作记忆和长期习惯只用来认识这个人。这轮没接着上一轮说时，不要把旧事写进回答
+- 不编造记忆里没有的事实
   `.trim();
 
   const recentRiskNote =
@@ -785,18 +817,19 @@ ${CAMPUS_REPLY_REQUIREMENT}
   const answerShape =
     intent.kind === 'venting'
       ? `【回答篇幅与结构 · 以倾诉为准】
-- 先接住这一轮原话，再给一个今天能做完的小行动
-- 不要只安慰，不要三条以上的清单，不要诊断
+- 全文约 220–360 汉字
+- 第一块用 2–3 段回应用户原话，肯定感受，不要诊断
+- 第二块最多一句轻轻的可选建议，不要步骤清单
 - 最后一句：${intervention.closingPhrase}`
       : intent.kind === 'followup'
         ? `【回答篇幅与结构 · 以追问为准】
-- 只顺着这一轮的追问往下说，补一个小行动
-- 这一轮没再提起的旧事不要写回来
+- 顺着上一轮往下说，约 220–400 汉字，不要重开话题
+- 先接住对方的追问，再补一小段建议
 - 最后一句：${intervention.closingPhrase}`
         : intent.kind === 'crisis'
           ? `【回答篇幅与结构 · 以安全为准】
-- 不诊断，不讨论停药、减药、换药或开药
-- 写出热线 400-161-9995，只留一个求助动作
+- 先写人身安全和可以联系的人，再简短共情
+- 不要长篇分析，不要步骤清单
 - 最后一句：${intervention.closingPhrase}`
           : '';
 
@@ -847,17 +880,17 @@ ${intentDirective}
 情绪置信度：${(emotion.confidence * 100).toFixed(0)}%（若偏低请谨慎推断）
 ${llmRationale ? `智能分析要点：${llmRationale}` : ''}
 
-【咨询干预框架】框架名只用来选语气：${intervention.frameworkName}
-不要把框架拆成多步清单。全文只保留一个今天能做完的小行动。
+【咨询干预框架】框架：${intervention.frameworkName}
+请按以下结构展开（每一段都要写完整句子，不要只写标题或关键词）：${intervention.structureHint}
 ${recentRiskNote}
 ${answerVariationHint ? `\n${answerVariationHint}\n` : ''}
 
 ${answerShape || `【回答篇幅与结构 · 必须遵守】
-- 全文大约 160–320 字
-- 先用一两句接住这一轮原话，不要答到别的话题，也不要写他没说过的经历
-- 然后只给一个今天能做完的小行动，写清做什么、做完就停
+- 全文约 **280–480 汉字**，分 **两大块**，不要第三块行动清单
+- **第一块（详细共情，约 150–220 字）**：用 2–3 段回应用户原话，肯定感受、说明「愿意说出来很不容易」、可点到宿舍/人际/学业等情境，但不要诊断
+- **第二块（简要建议，约 80–120 字）**：只写框架名「${intervention.frameworkName}」+ **2–3 条**极短建议（用「·」分隔，每条不超过 20 字）；知识库最多一句「详见下方参考」
 - 最后单独一句结尾：${intervention.closingPhrase}
-- 禁止：只安慰就结束、三条以上的行动清单、医疗或药物步骤、诊断、粘贴知识库原文`}
+- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何 3 步清单**`}
 
 【长期向量记忆】
 ${personalMemoryText || '没有检索到更早的相关原话。不要编造过去。'}
@@ -870,10 +903,11 @@ ${episodeNote ? `【这轮有几件事】\n${episodeNote}\n` : ''}
 ${description ? `补充描述：${description}` : ''}
 
 【回答要求】
-- 以${tone}的语气，像学校里面对面的短交谈
-- 先接住这一轮，再给一个小行动；不做诊断，不讨论用药
-- 不要把回答写成另一件事。知识库最多用一句话核对，不要抄成建议
-- 这轮没提到的旧事不要写进回答
+- 以${tone}的语气，像辅导员面对面简短交流
+- 先共情，再给建议；不做医疗诊断
+- **禁止**以重复或复述用户原话作为开头（不要写「${question.slice(0, 30)}…」这类开场）
+- 若有参考知识，最多用一两句话概括，不要展开成多篇
+- 语气、敏感点和以前有用的做法要符合这个人。这轮没提到的旧事不要写进回答
 
 请直接开始回答（不要元话语、不用 Markdown 小标题堆砌）：`.trim();
 
@@ -1012,9 +1046,7 @@ ${description ? `补充描述：${description}` : ''}
 
   answer = answer!;
 
-  if (requiresSafetyPath(risk) || intent.kind === 'crisis') {
-    answer = buildSafetyReply(risk);
-  } else if (risk.level === 'high' || risk.level === 'critical') {
+  if (risk.level === 'high' || risk.level === 'critical' || intent.kind === 'crisis') {
     const safetyLine = risk.warningMessage || '你的安全最重要，请先联系身边可信的人或专业支持。';
     answer = `
 ⚠️ ${safetyLine}
@@ -1195,20 +1227,21 @@ const generateAnswerWithContext = (
 ): string => {
   const empathyBlock = [
     intervention.openingPhrase,
-    `你刚才说的是「${truncateSnippet(question, 80)}」。我只接这一件事。`,
-    description ? `你还补充了「${truncateSnippet(description, 80)}」。` : ''
+    `听到你说「${truncateSnippet(question, 80)}」，不少同学也会在类似情境里感到为难。你的感受很重要，也值得被认真看见。`,
+    description ? `你提到：${truncateSnippet(description, 100)}。` : '',
+    '愿意把这些讲出来本身就需要勇气，不必急着给自己贴标签或立刻找到完美答案。'
   ]
     .filter(Boolean)
     .join('\n\n');
 
   const refLine =
     contextAnswers.length > 0
-      ? `参考里有一句可以核对：${truncateSnippet(contextAnswers[0], 40)}。`
+      ? `（相似情境要点见下方参考：${truncateSnippet(contextAnswers[0], 60)}）`
       : '';
 
   const body = [
     empathyBlock,
-    `今天只做一步：用三分钟把这件事写成一句话，发给一位你信任的同学，或学校心理中心。发完就停。${refLine}`,
+    `**${intervention.frameworkName}**${simplifyStructureHint(intervention.structureHint)}${refLine}`,
     intervention.closingPhrase
   ].join('\n\n');
 
