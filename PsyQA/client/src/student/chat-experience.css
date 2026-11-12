@@ -4,7 +4,7 @@
    层级：品牌题头 > 正文书信 > 会话操作 > 时间等元信息 > 法律说明。 */
 
 .student-room .chat-container {
-  min-height: min(880px, calc(100vh - 150px));
+  min-height: min(420px, calc(100vh - 320px));
   --harbor-paper: #f6f1e7;
   --harbor-paper-raised: #fdfaf3;
   --harbor-paper-deep: #efe7d8;
@@ -23,13 +23,20 @@
   --harbor-text: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, sans-serif;
 
   width: 100%;
-  max-width: 1040px;
-  margin: 0 auto;
-  background: var(--harbor-paper);
+  max-width: none;
+  margin: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(223, 234, 227, 0.55), transparent 70%),
+    var(--harbor-paper);
   border: 1px solid var(--harbor-line);
-  border-radius: 20px;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset,
-    0 30px 70px -46px rgba(31, 47, 42, 0.55);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 12px 36px -20px rgba(31, 47, 42, 0.45),
+    0 2px 0 rgba(213, 199, 176, 0.35);
   color: var(--harbor-ink);
   font-family: var(--harbor-text);
   animation: harbor-card-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -52,12 +59,13 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
-  padding: 22px 28px 18px;
-  background: var(--harbor-paper);
+  gap: 16px;
+  padding: 14px 18px 12px;
+  background: linear-gradient(180deg, #faf6ee 0%, var(--harbor-paper) 100%);
   border-bottom: 1px solid var(--harbor-line);
   color: var(--harbor-ink);
   overflow: visible;
+  flex-shrink: 0;
 }
 
 .student-room .chat-container .chat-header::after {
@@ -261,12 +269,24 @@
 /* ── 对话正文 ───────────────────────────────────────── */
 
 .student-room .chat-container .chat-stream {
-  background: var(--harbor-paper);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 70%, rgba(223, 234, 227, 0.35), transparent 72%),
+    transparent;
+}
+
+.student-room .chat-container .chat-stream:has(.chat-messages-welcome) {
+  justify-content: flex-end;
 }
 
 .student-room .chat-container .chat-messages.chat-messages-welcome {
-  justify-content: center;
-  padding-bottom: 52px;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .student-room .chat-container .chat-messages.chat-messages-welcome .chat-welcome-hero {
@@ -279,15 +299,17 @@
 }
 
 .student-room .chat-container .chat-messages {
-  max-width: 780px;
+  max-width: 920px;
+  width: 100%;
   margin: 0 auto;
-  padding: 30px 28px 36px;
-  gap: 30px;
+  padding: 16px 18px 20px;
+  gap: 16px;
   background: transparent;
-  font-size: 15.5px;
-  line-height: 1.9;
+  font-size: 15px;
+  line-height: 1.75;
   scrollbar-width: thin;
   scrollbar-color: #cabdaa transparent;
+  flex: 1;
 }
 
 .student-room .chat-container .chat-messages::-webkit-scrollbar {
@@ -328,9 +350,9 @@
 }
 
 .student-room .chat-container .chat-welcome-heading {
-  margin: 0 0 10px;
+  margin: 0 0 4px;
   font-family: var(--harbor-display);
-  font-size: 30px;
+  font-size: 22px;
   font-weight: 400;
   letter-spacing: 0.03em;
   line-height: 1.3;
@@ -338,43 +360,77 @@
 }
 
 .student-room .chat-container .chat-welcome-desc {
-  margin: 0;
-  max-width: 40ch;
-  font-size: 14px;
-  line-height: 1.85;
+  margin: 0 0 8px;
+  max-width: 48ch;
+  font-size: 13.5px;
+  line-height: 1.55;
   color: var(--harbor-ink-soft);
+}
+
+.student-room .chat-container .welcome-video-entry {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 4px;
+  padding: 7px 14px;
+  border: 1px solid rgba(123, 167, 188, 0.55);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(123, 167, 188, 0.22) 0%, rgba(223, 234, 227, 0.85) 100%);
+  color: var(--harbor-pine-deep);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255, 253, 248, 0.85) inset, 0 4px 12px rgba(47, 90, 76, 0.06);
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.student-room .chat-container .welcome-video-entry:hover {
+  background: var(--harbor-pine-soft);
+  border-color: var(--harbor-pine);
+}
+
+.student-room .chat-container .welcome-video-entry:focus-visible {
+  outline: 2px solid var(--harbor-pine);
+  outline-offset: 2px;
 }
 
 .student-room .chat-container .chat-welcome {
   text-align: left;
+  margin-top: 0;
+  padding: 10px;
+  border: 1px solid var(--harbor-line);
+  border-radius: 14px;
+  background: rgba(253, 250, 243, 0.92);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 6px 16px rgba(47, 90, 76, 0.04);
 }
 
 .student-room .chat-container .quick-prompts {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 8px;
 }
 
 .student-room .chat-container .quick-prompt-chip {
-  min-height: 100px;
-  padding: 18px 18px 16px;
+  min-height: 56px;
+  padding: 10px 12px;
   border: 1px solid var(--harbor-line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--harbor-paper-raised);
   color: var(--harbor-ink);
-  box-shadow: none;
+  box-shadow: 0 1px 0 rgba(255, 253, 248, 0.85) inset, 0 4px 12px rgba(47, 90, 76, 0.04);
   font-family: inherit;
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 13.5px;
+  line-height: 1.55;
   text-align: left;
   transform: none;
-  transition: border-color 150ms ease, background-color 150ms ease;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .student-room .chat-container .quick-prompt-chip:hover {
   transform: none;
-  border-color: var(--harbor-line-strong);
+  border-color: var(--harbor-pine);
   background: #fffdf8;
-  box-shadow: none;
+  box-shadow: 0 6px 16px rgba(47, 90, 76, 0.1);
 }
 
 .student-room .chat-container .quick-prompt-chip:focus-visible {
@@ -728,27 +784,30 @@
   width: 100%;
   max-width: 100%;
   margin: 0;
-  padding: 10px 28px 16px;
+  padding: 4px 14px 10px;
   border-top: 1px solid var(--harbor-line);
-  background: var(--harbor-paper);
+  background: linear-gradient(180deg, var(--harbor-paper-deep) 0%, var(--harbor-paper) 40%);
+  flex-shrink: 0;
 }
 
 .student-room .chat-container .composer-sand-ledge {
   position: relative;
   width: 100%;
-  max-width: 780px;
+  max-width: 920px;
   margin: 0 auto;
-  padding-top: 28px;
+  padding-top: 22px;
 }
 
 .student-room .chat-container .input-box {
   width: 100%;
-  max-width: 780px;
+  max-width: 920px;
   margin: 0 auto;
   border: 1px solid var(--harbor-line-strong);
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--harbor-paper-raised);
-  box-shadow: 0 18px 44px -38px rgba(31, 47, 42, 0.6);
+  box-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.9) inset,
+    0 10px 28px -18px rgba(31, 47, 42, 0.45);
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -759,8 +818,8 @@
 }
 
 .student-room .chat-container .input-box textarea {
-  min-height: 70px;
-  padding: 16px 18px 4px;
+  min-height: 56px;
+  padding: 12px 16px 2px;
   background: transparent;
   border: none;
   color: var(--harbor-ink);

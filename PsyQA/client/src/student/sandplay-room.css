@@ -42,6 +42,22 @@
   background-size: 18px 18px;
 }
 
+/* 左右裱花：纯 CSS SVG，不挡点击；低于主内容 / 抽屉 / 危机层 */
+.student-room::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.62;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 320' fill='none'%3E%3Cpath d='M48 320C52 220 34 160 58 72' stroke='%232f5a4c' stroke-width='2.2' stroke-linecap='round' opacity='.55'/%3E%3Cpath d='M48 250C28 230 18 200 22 172' stroke='%2324473c' stroke-width='1.8' stroke-linecap='round' opacity='.45'/%3E%3Cpath d='M50 210C72 194 86 168 90 140' stroke='%232f5a4c' stroke-width='1.8' stroke-linecap='round' opacity='.45'/%3E%3Cellipse cx='20' cy='168' rx='16' ry='9' fill='%23dfeae3' stroke='%232f5a4c' stroke-width='1.2' opacity='.75' transform='rotate(-28 20 168)'/%3E%3Cellipse cx='92' cy='136' rx='15' ry='8' fill='%23dfeae3' stroke='%232f5a4c' stroke-width='1.2' opacity='.7' transform='rotate(32 92 136)'/%3E%3Cellipse cx='36' cy='236' rx='14' ry='7' fill='%23ebe0cc' stroke='%2324473c' stroke-width='1' opacity='.65' transform='rotate(-18 36 236)'/%3E%3Ccircle cx='58' cy='70' r='11' fill='%23a2704f' opacity='.55'/%3E%3Ccircle cx='58' cy='70' r='4.5' fill='%23faf4ea' opacity='.85'/%3E%3Ccircle cx='78' cy='108' r='8' fill='%237ba7bc' opacity='.42'/%3E%3Ccircle cx='34' cy='118' r='7' fill='%23a2704f' opacity='.4'/%3E%3Ccircle cx='44' cy='156' r='6' fill='%237ba7bc' opacity='.35'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 320' fill='none'%3E%3Cpath d='M92 320C88 220 106 160 82 72' stroke='%232f5a4c' stroke-width='2.2' stroke-linecap='round' opacity='.55'/%3E%3Cpath d='M92 250C112 230 122 200 118 172' stroke='%2324473c' stroke-width='1.8' stroke-linecap='round' opacity='.45'/%3E%3Cpath d='M90 210C68 194 54 168 50 140' stroke='%232f5a4c' stroke-width='1.8' stroke-linecap='round' opacity='.45'/%3E%3Cellipse cx='120' cy='168' rx='16' ry='9' fill='%23dfeae3' stroke='%232f5a4c' stroke-width='1.2' opacity='.75' transform='rotate(28 120 168)'/%3E%3Cellipse cx='48' cy='136' rx='15' ry='8' fill='%23dfeae3' stroke='%232f5a4c' stroke-width='1.2' opacity='.7' transform='rotate(-32 48 136)'/%3E%3Cellipse cx='104' cy='236' rx='14' ry='7' fill='%23ebe0cc' stroke='%2324473c' stroke-width='1' opacity='.65' transform='rotate(18 104 236)'/%3E%3Ccircle cx='82' cy='70' r='11' fill='%23a2704f' opacity='.55'/%3E%3Ccircle cx='82' cy='70' r='4.5' fill='%23faf4ea' opacity='.85'/%3E%3Ccircle cx='62' cy='108' r='8' fill='%237ba7bc' opacity='.42'/%3E%3Ccircle cx='106' cy='118' r='7' fill='%23a2704f' opacity='.4'/%3E%3Ccircle cx='96' cy='156' r='6' fill='%237ba7bc' opacity='.35'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-position: left -8px bottom -12px, right -8px bottom -12px;
+  background-size: 132px auto, 132px auto;
+}
+
 /* 不要给 .student-room > * 设 position/z-index：
    VideoCenterDrawer / 危机全屏等是 fragment 直接挂在 student-room 下，
    会被盖掉自身的 position:fixed，表现为「点了没反应」。 */
@@ -64,19 +80,72 @@
 
 .student-room > .video-drawer {
   z-index: 1401;
-  background: #faf4ea;
+  background:
+    linear-gradient(180deg, rgba(250, 244, 234, 0.98) 0%, #f3ead8 100%);
   border-left: 1px solid #e3d8c6;
   box-shadow: -16px 0 48px rgba(47, 90, 76, 0.14);
   color: #1f2f2a;
 }
 
+.student-room > .video-drawer .video-drawer-header {
+  border-bottom: 1px solid #e3d8c6;
+  padding-bottom: 12px;
+}
+
+.student-room > .video-drawer .video-drawer-header::before {
+  content: '';
+  display: block;
+  height: 3px;
+  margin: -4px -20px 12px;
+  background: linear-gradient(90deg, #e8dcc8 0%, #d9cbb4 48%, #e8dcc8 100%);
+}
+
 .student-room > .video-drawer .video-drawer-header h3 {
   font-family: '方正小标宋简体', 'FZXiaoBiaoSong-B05S', 'Source Han Serif SC', 'Songti SC', serif;
   color: #1f2f2a;
+  letter-spacing: 0.04em;
 }
 
 .student-room > .video-drawer .video-drawer-header p {
   color: #7c877f;
+}
+
+.student-room > .video-drawer .video-filter-chip {
+  border: 1px solid #e3d8c6;
+  background: #faf4ea;
+  color: #4d5c55;
+  border-radius: 999px;
+}
+
+.student-room > .video-drawer .video-filter-chip.active {
+  background: #dfeae3;
+  border-color: #2f5a4c;
+  color: #24473c;
+}
+
+.student-room > .video-drawer .video-drawer-search {
+  border: 1px solid #d5c7b0;
+  background: #fffdf8;
+  border-radius: 12px;
+  color: #1f2f2a;
+}
+
+.student-room > .video-drawer .video-drawer-search:focus {
+  outline: none;
+  border-color: #2f5a4c;
+  box-shadow: 0 0 0 3px rgba(47, 90, 76, 0.12);
+}
+
+.student-room > .video-drawer .video-card {
+  background: #faf4ea;
+  border: 1px solid #e3d8c6;
+  border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(255, 248, 238, 0.75) inset;
+}
+
+.student-room > .video-drawer .video-drawer-note {
+  color: #7c877f;
+  border-top: 1px solid #e3d8c6;
 }
 
 @keyframes sand-room-in {
@@ -101,6 +170,7 @@ body:has(.student-room)::after {
 
 /* —— 顶栏 —— */
 .student-room .header.header-campus {
+  padding: 10px 18px;
   background: rgba(250, 244, 234, 0.82);
   border-bottom: 1px solid var(--line);
   box-shadow: 0 8px 28px rgba(47, 90, 76, 0.06);
@@ -191,45 +261,69 @@ body:has(.student-room)::after {
 }
 
 .student-room .header-campus .video-center-entry {
-  background: rgba(123, 167, 188, 0.16);
-  border-color: rgba(123, 167, 188, 0.45);
+  background: linear-gradient(180deg, rgba(123, 167, 188, 0.28) 0%, rgba(223, 234, 227, 0.9) 100%);
+  border-color: rgba(123, 167, 188, 0.55);
+  color: var(--pine-deep);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  box-shadow: 0 1px 0 rgba(255, 248, 238, 0.8) inset, 0 4px 12px rgba(47, 90, 76, 0.08);
+}
+
+.student-room .header-campus .video-center-entry:hover {
+  background: var(--pine-soft);
+  border-color: var(--sea);
   color: var(--pine-deep);
 }
 
 /* —— 侧栏 / 主区 —— */
 .student-room .main-content {
-  gap: 18px;
+  gap: 10px;
+  padding: 8px 12px 12px;
+  align-items: stretch;
 }
 
 .student-room .sidebar-panel {
-  gap: 14px;
+  gap: 8px;
+  width: 268px;
 }
 
 .student-room .sidebar-panel > * {
-  background: rgba(250, 244, 234, 0.88);
+  background: rgba(250, 244, 234, 0.94);
   border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: 0 10px 28px rgba(47, 90, 76, 0.05);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 0 rgba(255, 248, 238, 0.7) inset,
+    0 8px 20px rgba(47, 90, 76, 0.06);
   backdrop-filter: blur(8px);
+  padding: 12px 12px 10px;
 }
 
 .student-room .sidebar-panel > *::before {
   content: '';
   display: block;
   height: 3px;
-  margin: -1px -1px 12px;
-  border-radius: 18px 18px 0 0;
+  margin: -12px -12px 10px;
+  border-radius: 14px 14px 0 0;
   background: var(--wood);
-  opacity: 0.85;
+  opacity: 0.9;
+}
+
+.student-room .category-list {
+  gap: 4px;
+}
+
+.student-room .category-item {
+  padding: 6px 9px;
+  border-radius: 10px;
 }
 
 .student-room .sidebar-heading {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--ink);
   letter-spacing: 0.03em;
@@ -271,18 +365,42 @@ body:has(.student-room)::after {
 }
 
 .student-room .main-panel {
-  background: transparent;
-  box-shadow: none;
-  border: none;
+  background:
+    linear-gradient(180deg, rgba(250, 244, 234, 0.55) 0%, rgba(235, 224, 204, 0.35) 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 0 rgba(255, 248, 238, 0.65) inset,
+    0 16px 40px rgba(47, 90, 76, 0.08);
+  padding: 8px;
+  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.student-room .main-panel-chat-first .chat-section {
+  order: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.student-room .main-panel-chat-first .micro-training-panel {
+  order: 0;
+  margin-bottom: 0;
 }
 
 .student-room .student-status-bar-wrap,
 .student-room .insights-toolbar,
 .student-room .insights-panel-shell {
-  background: rgba(250, 244, 234, 0.9);
+  background: rgba(250, 244, 234, 0.96);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 8px 24px rgba(47, 90, 76, 0.05);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 0 rgba(255, 248, 238, 0.7) inset,
+    0 6px 16px rgba(47, 90, 76, 0.05);
 }
 
 .student-room .insights-toggle-btn {
@@ -311,10 +429,14 @@ body:has(.student-room)::after {
 
 /* —— 微训练 / 洞察 —— */
 .student-room .micro-training-panel {
-  background: rgba(250, 244, 234, 0.94);
+  background: rgba(250, 244, 234, 0.98);
   border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: 0 10px 28px rgba(47, 90, 76, 0.06);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 0 rgba(255, 248, 238, 0.75) inset,
+    0 8px 22px rgba(47, 90, 76, 0.07);
+  padding: 10px 12px;
+  margin-bottom: 0;
 }
 
 .student-room .micro-training-kicker {
@@ -327,22 +449,37 @@ body:has(.student-room)::after {
   font-weight: 500;
   color: var(--ink);
   letter-spacing: 0.03em;
+  margin: 2px 0;
+  font-size: 1.05rem;
 }
 
 .student-room .micro-training-desc {
   color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.student-room .micro-training-kicker {
+  margin: 0;
+}
+
+.student-room .micro-training-grid {
+  gap: 6px;
+  margin-top: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .student-room .micro-training-card {
   background: var(--sand-raised);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: none;
+  border-radius: 12px;
+  padding: 8px 10px;
+  box-shadow: 0 1px 0 rgba(255, 253, 248, 0.8) inset;
 }
 
 .student-room .micro-training-card:hover {
   border-color: var(--sea);
-  box-shadow: 0 6px 16px rgba(123, 167, 188, 0.16);
+  box-shadow: 0 6px 14px rgba(123, 167, 188, 0.18);
 }
 
 .student-room .micro-training-card-title {
@@ -399,12 +536,23 @@ body:has(.student-room)::after {
 }
 
 @media (max-width: 900px) {
+  .student-room::after {
+    opacity: 0.28;
+    background-size: 88px auto, 88px auto;
+  }
+
   .student-room .main-content {
     padding: 12px 12px 20px;
   }
 
   .student-room .micro-training-grid {
     grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .student-room::after {
+    display: none;
   }
 }
 

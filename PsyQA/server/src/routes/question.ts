@@ -26,6 +26,12 @@ import {
   postSessionFeedback
 } from '../controllers/feedbackController';
 import {
+  archiveConversationHandler,
+  createConversationHandler,
+  getConversationMessagesHandler,
+  listConversationsHandler
+} from '../controllers/conversationController';
+import {
   getUserAgentProfileAdmin,
   getSupportPreferences,
   saveSupportPreferences,
@@ -76,6 +82,10 @@ questionRouter.get('/progress', ...studentApi, getUserProgress);
 questionRouter.get('/progress/text', ...studentApi, getUserProgressText);
 questionRouter.get('/history/grouped', ...studentApi, getGroupedHistory);
 questionRouter.post('/history/clear', ...studentApi, clearUserHistoryData);
+questionRouter.get('/conversations', ...studentApi, listConversationsHandler);
+questionRouter.post('/conversations', ...studentApi, createConversationHandler);
+questionRouter.post('/conversations/:id/archive', ...studentApi, archiveConversationHandler);
+questionRouter.get('/conversations/:id/messages', ...studentApi, getConversationMessagesHandler);
 questionRouter.post('/session-feedback', ...studentApi, postSessionFeedback);
 questionRouter.get('/session-feedback', ...studentApi, getSessionFeedbackForDialog);
 questionRouter.get('/profile', ...studentApi, getUserProfileHandler);

@@ -29,6 +29,7 @@ interface ChatContainerProps {
   onEndSession?: () => void;
   onSelectSession?: (id: string) => void;
   hideCompanions?: boolean;
+  onOpenVideoCenter?: () => void;
 }
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({
@@ -56,7 +57,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   onNewSession,
   onEndSession,
   onSelectSession,
-  hideCompanions = false
+  hideCompanions = false,
+  onOpenVideoCenter
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -170,6 +172,15 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             </div>
             <h3 className="chat-welcome-heading">最近怎么样？</h3>
             <p className="chat-welcome-desc">学业、关系和心情，都可以。不是只有撑不住才来。</p>
+            {onOpenVideoCenter && (
+              <button
+                type="button"
+                className="welcome-video-entry"
+                onClick={onOpenVideoCenter}
+              >
+                看看心理视频
+              </button>
+            )}
           </div>
         )}
 

@@ -8,6 +8,8 @@ export interface InterventionPlan {
   closingPhrase: string;
 }
 
+type FrameworkCore = Omit<InterventionPlan, 'openingPhrase' | 'closingPhrase'>;
+
 const EMOTION_PHRASES: Partial<Record<EmotionType, { open: string; close: string }>> = {
   sad: {
     open: '我能感受到你现在心里很重，这种难过被看见本身就有意义。',
@@ -52,6 +54,20 @@ function pickPhrase(emotion: EmotionType): { open: string; close: string } {
   return EMOTION_PHRASES[emotion] ?? DEFAULT_PHRASE;
 }
 
+const SAFETY_PLAN: InterventionPlan = {
+  frameworkId: 'safety_plan',
+  frameworkName: '安全计划（危机优先）',
+  structureHint: [
+    '① 共情并确认当下是否安全（人在哪里、身边是否有人）',
+    '② 不深挖创伤细节；引导离开危险物、先稳住呼吸',
+    '③ 给出可立刻联系的人：室友/家人/辅导员，或校内心理中心',
+    '④ 提供全国心理援助热线，鼓励此刻就联系现实支持',
+    '禁止诊断、开药、原因分析或哲学讨论'
+  ].join('\n'),
+  openingPhrase: '我非常在意你现在的安全，我们先确保你此刻是安全的。',
+  closingPhrase: '请优先联系身边可信任的人或校内心理中心，也可拨打心理援助热线，你值得被帮助。'
+};
+
 const FRAMEWORK_LABELS: Record<string, string> = {
   safety_plan: '安全计划（危机优先）',
   cbt_academic: 'CBT 轻度 · 学业焦虑',
@@ -62,6 +78,8 @@ const FRAMEWORK_LABELS: Record<string, string> = {
   cbt_general: 'CBT 通用 · 压力管理',
   interpersonal_general: '人际沟通通用',
   mindfulness_general: '正念与情绪调节',
+  romantic_support: '恋爱关系支持',
+  identity_support: '自我认同支持',
   supportive_counseling: '支持性心理咨询'
 };
 
@@ -70,78 +88,180 @@ export function labelFramework(frameworkId?: string): string {
   return FRAMEWORK_LABELS[frameworkId] || frameworkId;
 }
 
+function fourStep(empathy: string, clarify: string, action: string, close: string): string {
+  return `① 共情：${empathy} ② 澄清/命名：${clarify} ③ 今日小步：${action} ④ 收尾：${close}`;
+}
+
 export function getInterventionPlan(
   emotion: EmotionType,
   problem: ProblemCategory,
   risk: RiskLevel
 ): InterventionPlan {
-  const phrases = pickPhrase(emotion);
-
-  if (risk === 'critical') {
-    return {
-      frameworkId: 'safety_plan',
-      frameworkName: '安全计划（危机优先）',
-      structureHint: [
-        '① 确认当下安全与环境（远离危险物品）',
-        '② 触发因素：最近什么情境让痛苦加剧',
-        '③ 应对策略：此刻可做的 2 个具体安抚动作',
-        '④ 支持人：可立即联系的人及热线',
-        '禁止展开原因分析或哲学讨论，只给可执行安全步骤'
-      ].join('\n'),
-      openingPhrase: '我非常在意你现在的安全，我们先确保你此刻是安全的。',
-      closingPhrase: '请优先联系现实中的人或拨打心理援助热线，你值得被帮助。'
-    };
+  if (risk === 'high' || risk === 'critical') {
+    return SAFETY_PLAN;
   }
 
+  const phrases = pickPhrase(emotion);
   const key = `${emotion}:${problem}`;
-  const table: Record<string, Omit<InterventionPlan, 'openingPhrase' | 'closingPhrase'>> = {
+
+  const table: Record<string, FrameworkCore> = {
     'anxious:academic_stress': {
       frameworkId: 'cbt_academic',
-      frameworkName: 'CBT 轻度 · 学业焦虑',
-      structureHint:
-        '① 情绪命名 ② 识别 1 条自动化思维（如「我肯定考砸」）③ 小实验：25 分钟专注 + 5 分钟休息 ④ 今晚 1 个可完成的小任务'
+      frameworkName: FRAMEWORK_LABELS.cbt_academic,
+      structureHint: fourStep(
+        '承认考试/学习带来的紧绷',
+        '点出 1 条自动化思维（如「我肯定考砸」）',
+        '25 分钟专注 + 5 分钟休息；今晚只完成 1 个最小任务',
+        '提醒可向同学/辅导员求助，必要时联系校内心理中心'
+      )
+    },
+    'frustrated:academic_stress': {
+      frameworkId: 'cbt_academic',
+      frameworkName: FRAMEWORK_LABELS.cbt_academic,
+      structureHint: fourStep(
+        '看见挫败背后的在乎',
+        '区分「这门课难」与「我整个人不行」',
+        '列出可控的 1 件事（复习一小节/约答疑）并设定 20 分钟起步',
+        '肯定已付出的努力，邀请明天再聊进展'
+      )
+    },
+    'lonely:interpersonal': {
+      frameworkId: 'interpersonal_activation',
+      frameworkName: FRAMEWORK_LABELS.interpersonal_activation,
+      structureHint: fourStep(
+        '承认孤独很真实',
+        '区分「此刻没人陪」与「永远不被需要」',
+        '发一句低负担问候，或去公共学习区待 20 分钟',
+        '若持续低落，建议预约校内心理咨询'
+      )
     },
     'sad:interpersonal': {
       frameworkId: 'interpersonal_activation',
-      frameworkName: '人际支持 + 行为激活',
-      structureHint:
-        '① 共情孤独/失落 ② 记录 1 次真实互动（哪怕很短）③ 设计 1 个微小社交行动（问候/共进餐）'
+      frameworkName: FRAMEWORK_LABELS.interpersonal_activation,
+      structureHint: fourStep(
+        '共情失落或被疏远的感觉',
+        '澄清最在意的一段关系/一次互动',
+        '设计 1 个微小社交行动（共进餐/短问候）',
+        '保持联系通道，不强迫立刻修复一切'
+      )
+    },
+    'anxious:romantic_relationship': {
+      frameworkId: 'romantic_support',
+      frameworkName: FRAMEWORK_LABELS.romantic_support,
+      structureHint: fourStep(
+        '承认恋爱里的不安很常见',
+        '命名担心（怕被冷落/不确定感）',
+        '用「我信息」说清 1 个需要，或先写下来不急着发',
+        '关系压力过大时，可寻求校内咨询支持'
+      )
+    },
+    'confused:self_identity': {
+      frameworkId: 'identity_support',
+      frameworkName: FRAMEWORK_LABELS.identity_support,
+      structureHint: fourStep(
+        '迷茫不代表失败',
+        '写下「我在乎的 3 件事」与「暂时不确定的」',
+        '本周只做 1 个探索行动（问学长/查一门课/试一项活动）',
+        '身份可以慢慢长出来，不必一次定终身'
+      )
+    },
+    'anxious:emotion_regulation': {
+      frameworkId: 'mindfulness_light',
+      frameworkName: FRAMEWORK_LABELS.mindfulness_light,
+      structureHint: fourStep(
+        '看见身体先报警的信号',
+        '给情绪一个名字（慌/紧/空）',
+        '做 1 轮 4-6 呼吸或 5-4-3-2-1 grounding',
+        '稳定后再谈具体压力源'
+      )
     },
     'angry:family_relationship': {
       frameworkId: 'emotion_boundary',
-      frameworkName: '情绪调节 + 边界',
-      structureHint:
-        '① 身体放松（呼吸/走动 3 分钟）② 「我信息」表达模板 ③ 是否需要第三方（辅导员/咨询师）协助沟通'
+      frameworkName: FRAMEWORK_LABELS.emotion_boundary,
+      structureHint: fourStep(
+        '允许生气，先不评判对错',
+        '分清「边界被碰」与「对方意图」',
+        '先做 3 分钟走动/呼吸；再用「我信息」模板写一句想说的话',
+        '需要时可通过辅导员等第三方协助沟通'
+      )
     },
     'anxious:career_future': {
       frameworkId: 'mi_future',
-      frameworkName: '动机访谈 · 未来迷茫',
-      structureHint:
-        '① 探索「我最在乎的 3 件事」② 利弊权衡 ③ 本周 1 个探索性行动（了解职业/访谈学长）'
+      frameworkName: FRAMEWORK_LABELS.mi_future,
+      structureHint: fourStep(
+        '承认对未来的不确定感',
+        '探索最在乎的 3 件事与利弊',
+        '本周 1 个探索行动（职业信息/访谈学长）',
+        '把大目标拆成可试错的小步'
+      )
     },
     'sad:emotion_regulation': {
       frameworkId: 'mindfulness_light',
-      frameworkName: '正念轻量 · 情绪调节',
-      structureHint:
-        '① 情绪命名 ② 5-4-3-2-1  grounding ③ 自我关怀一句（像对好友说话）'
+      frameworkName: FRAMEWORK_LABELS.mindfulness_light,
+      structureHint: fourStep(
+        '低落被看见本身就有意义',
+        '情绪命名 + 身体信号',
+        '5-4-3-2-1 grounding 或对自己说一句自我关怀',
+        '持续低落时鼓励联系校内心理中心'
+      )
     }
   };
 
-  const fallbackByProblem: Partial<Record<ProblemCategory, Omit<InterventionPlan, 'openingPhrase' | 'closingPhrase'>>> = {
+  const fallbackByProblem: Partial<Record<ProblemCategory, FrameworkCore>> = {
     academic_stress: {
       frameworkId: 'cbt_general',
-      frameworkName: 'CBT 通用 · 压力管理',
-      structureHint: '① 共情 ② 区分可控/不可控 ③ 3 步行动清单（今天就能开始）'
+      frameworkName: FRAMEWORK_LABELS.cbt_general,
+      structureHint: fourStep('承认学业压力', '区分可控/不可控', '今天能开始的 1～2 个小行动', '需要时寻求同学或校内支持')
     },
     interpersonal: {
       frameworkId: 'interpersonal_general',
-      frameworkName: '人际沟通通用',
-      structureHint: '① 共情 ② 澄清期待与边界 ③ 1 次具体沟通练习'
+      frameworkName: FRAMEWORK_LABELS.interpersonal_general,
+      structureHint: fourStep('共情关系里的难受', '澄清期待与边界', '1 次具体、温和的沟通练习', '关系修复可以慢慢来')
+    },
+    family_relationship: {
+      frameworkId: 'emotion_boundary',
+      frameworkName: FRAMEWORK_LABELS.emotion_boundary,
+      structureHint: fourStep('看见家庭议题带来的紧绷', '分清情绪与事实', '先稳定自己，再选 1 句想表达的话', '可借助辅导员等校内资源')
+    },
+    romantic_relationship: {
+      frameworkId: 'romantic_support',
+      frameworkName: FRAMEWORK_LABELS.romantic_support,
+      structureHint: fourStep('共情感情中的波动', '命名最卡的一点', '写清需要或暂停回应给自己空间', '压力大时联系信任的人或校内咨询')
+    },
+    career_future: {
+      frameworkId: 'mi_future',
+      frameworkName: FRAMEWORK_LABELS.mi_future,
+      structureHint: fourStep('承认迷茫正常', '理出价值优先级', '本周一个探索行动', '允许路径调整')
+    },
+    self_identity: {
+      frameworkId: 'identity_support',
+      frameworkName: FRAMEWORK_LABELS.identity_support,
+      structureHint: fourStep('看见自我怀疑', '分开「事实」与「苛刻评价」', '记录 2 条具体小证据或优点', '身份议题可慢慢谈')
     },
     emotion_regulation: {
       frameworkId: 'mindfulness_general',
-      frameworkName: '正念与情绪调节',
-      structureHint: '① 情绪命名 ② 身体信号 ③ 一个 5 分钟内可完成的调节动作'
+      frameworkName: FRAMEWORK_LABELS.mindfulness_general,
+      structureHint: fourStep('接纳当下情绪', '命名身体信号', '5 分钟内可完成的调节动作', '稳定后再处理具体事件')
+    },
+    body_image: {
+      frameworkId: 'supportive_counseling',
+      frameworkName: FRAMEWORK_LABELS.supportive_counseling,
+      structureHint: fourStep('外貌焦虑很常见', '减少比较与苛责语句', '今天做 1 件照顾身体但不惩罚自己的事', '持续痛苦时建议专业支持')
+    },
+    addiction: {
+      frameworkId: 'cbt_general',
+      frameworkName: FRAMEWORK_LABELS.cbt_general,
+      structureHint: fourStep('承认习惯难改', '找触发场景', '用 10 分钟替代行为打断一次循环', '不羞耻地寻求支持')
+    },
+    trauma: {
+      frameworkId: 'supportive_counseling',
+      frameworkName: FRAMEWORK_LABELS.supportive_counseling,
+      structureHint: fourStep(
+        '感谢信任，不追问细节',
+        '强调当下安全与节奏由你掌握',
+        '先做稳定动作（呼吸/到安全环境）',
+        '引导联系校内心理中心或专业咨询，不替代治疗'
+      )
     }
   };
 
@@ -149,8 +269,8 @@ export function getInterventionPlan(
     table[key] ??
     fallbackByProblem[problem] ?? {
       frameworkId: 'supportive_counseling',
-      frameworkName: '支持性心理咨询',
-      structureHint: '① 共情 ② 梳理困扰 ③ 可执行建议 ④ 简短鼓励'
+      frameworkName: FRAMEWORK_LABELS.supportive_counseling,
+      structureHint: fourStep('共情当下感受', '梳理最困扰的一点', '给出可执行的小建议', '简短鼓励并保持可继续聊')
     };
 
   return {

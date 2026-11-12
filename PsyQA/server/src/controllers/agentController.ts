@@ -14,6 +14,44 @@ import {
   listUserDialogMemories,
   deleteUserDialogMemory
 } from '../services/user/userMemoryService';
+import {
+  parseSupportAnswers,
+  supportQuestions
+} from '../services/user/supportPreferences';
+
+export function getSupportPreferences(req: AuthRequest, res: Response): void {
+  const userId = resolveStudentUserId(req, res, req.query.userId);
+  if (!userId) return;
+
+  const profile = ensureUserAgentProfile(userId);
+  const answers = parseSupportAnswers(profile.basicJson?.supportPreferences ?? {}) ?? {};
+  res.json({
+    questions: supportQuestions,
+    answers
+  });
+}
+
+export function saveSupportPreferences(req: AuthRequest, res: Response): void {
+  const userId = resolveStudentUserId(req, res, req.body?.userId);
+  if (!userId) return;
+
+  const parsed = parseSupportAnswers(req.body?.answers);
+  if (!parsed) {
+    res.status(400).json({ error: '支持偏好格式无效' });
+    return;
+  }
+
+  const current = ensureUserAgentProfile(userId);
+  const updated = updateUserAgentProfile(userId, {
+    basicJson: {
+      ...(current.basicJson ?? {}),
+      supportPreferences: parsed
+    }
+  });
+  res.json({
+    answers: updated.basicJson?.supportPreferences ?? parsed
+  });
+}
 
 export function getUserAgentProfileHandler(req: AuthRequest, res: Response): void {
   const userId = resolveStudentUserId(req, res, req.query.userId);

@@ -29,6 +29,15 @@ Action Input: {"query":"宿舍矛盾"}`;
     const parsed = parseReActOutput('Thought: 回顾\nAction: search psych\nAction Input: {}');
     expect(parsed.action).toBe('reflect_psych');
   });
+
+  test('parses suggest_micro_training and recommend_video', () => {
+    expect(parseReActOutput('Action: suggest_micro_training\nAction Input: {}').action).toBe(
+      'suggest_micro_training'
+    );
+    expect(parseReActOutput('Action: recommend_video\nAction Input: {}').action).toBe(
+      'recommend_video'
+    );
+  });
 });
 
 describe('resolveReActPlan', () => {

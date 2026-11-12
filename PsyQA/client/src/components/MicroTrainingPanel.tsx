@@ -92,9 +92,15 @@ const sleepSteps = [
 interface MicroTrainingPanelProps {
   userId?: string;
   profile?: TrainingProfile | null;
+  /** 来自支持偏好问卷，用于微调推荐（可选） */
+  supportAnswers?: Record<string, string[]>;
 }
 
-export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId, profile }) => {
+export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({
+  userId,
+  profile,
+  supportAnswers
+}) => {
   const [active, setActive] = useState<TrainingType | null>(null);
   const [selected, setSelected] = useState<TrainingType[]>([]);
   const [round, setRound] = useState(1);
@@ -115,20 +121,24 @@ export const MicroTrainingPanel: React.FC<MicroTrainingPanelProps> = ({ userId, 
     [active]
   );
   const recommendedCards = useMemo(() => {
+    const prefer = Object.values(supportAnswers || {})
+      .flat()
+      .join(' ');
     const text = `${profile?.dominantEmotionLabel || ''} ${(profile?.topConcerns || [])
       .map((item) => `${item.category}${item.label}`)
-      .join(' ')}`;
+      .join(' ')} ${prefer}`;
     const score = (card: (typeof trainingCards)[number]) => {
       let value = 0;
       if (/焦虑|压力|紧张/.test(text) && ['stress', 'breathing', 'problem'].includes(card.key)) value += 4;
       if (/睡眠|疲惫/.test(text) && card.key === 'sleep') value += 4;
       if (/沟通|人际/.test(text) && card.key === 'communication') value += 4;
       if (/学习|注意|专注/.test(text) && card.key === 'focus') value += 4;
+      if (/呼吸|放松|正念/.test(text) && card.key === 'breathing') value += 3;
       if ((profile?.avgStressLevel || 0) >= 4 && card.key === 'stress') value += 3;
       return value;
     };
     return [...trainingCards].sort((a, b) => score(b) - score(a)).slice(0, 5);
-  }, [profile]);
+  }, [profile, supportAnswers]);
   const toggleSelection = (key: TrainingType) =>
     setSelected((prev) =>
       prev.includes(key) ? prev.filter((item) => item !== key) : prev.length < 3 ? [...prev, key] : prev

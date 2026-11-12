@@ -27,12 +27,24 @@ export interface ReActCounselContext {
     closingPhrase: string;
   };
   historySummary: string;
+  /** 上一轮及更早的用户原话和回应，供多轮接着说 */
+  recentDialogs?: string;
+  /** 当前议题、情绪走向、上一轮用过的方法 */
+  workingMemory?: string;
+  /** 沟通习惯、反复议题、以往用过的方法 */
+  durableMemory?: string;
+  /** 这轮是在接着上一轮说。新话题时为 false，旧事不能进入回答和检索 */
+  continuePrevious?: boolean;
   agentContext: string;
   replyGuidance?: string;
   tone: string;
   llmRationale?: string;
   prefetchedKnowledge?: KnowledgeItem[];
   prefetchedMemory?: SearchResult[];
+  /** 重复提问时提示模型换表述，避免与上次雷同 */
+  answerVariationHint?: string;
+  /** 本轮意图对回答姿态的要求 */
+  intentDirective?: string;
 }
 
 export interface ReActCounselResult {
@@ -54,6 +66,8 @@ const TOOL_NAMES = [
   'search_knowledge',
   'search_user_memory',
   'reflect_psych',
+  'suggest_micro_training',
+  'recommend_video',
   'finish'
 ] as const;
 
@@ -79,6 +93,30 @@ export function resolveReActPlan(ctx: ReActCounselContext): ReActPlan {
 function truncate(text: string, max: number): string {
   const t = text.replace(/\s+/g, ' ').trim();
   return t.length <= max ? t : `${t.slice(0, max)}…`;
+}
+
+export function formatTurnMemory(ctx: ReActCounselContext): string[] {
+  const continuing = ctx.continuePrevious === true;
+  return [
+    ctx.recentDialogs
+      ? continuing
+        ? `【短期会话记忆】用户在接着上一轮说。接这些原话往下说。\n${ctx.recentDialogs}`
+        : `【短期会话记忆】这是上一轮，只供认识对方。这轮如果换了话题，不要把这些内容写进回答。\n${ctx.recentDialogs}`
+      : '',
+    ctx.workingMemory
+      ? continuing
+        ? `【工作记忆】沿着上一轮议题往下做。\n${ctx.workingMemory}`
+        : `【工作记忆】下面是上一轮的议题和情绪，不是这轮要回答的问题。\n${ctx.workingMemory}`
+      : '',
+    ctx.durableMemory
+      ? `【长期记忆 · 习惯与做过的事】只用来调整语气、避开敏感点、沿用对方觉得有用的做法。不要把旧议题当成这轮的问题。\n${ctx.durableMemory}`
+      : '',
+    !ctx.workingMemory && ctx.historySummary
+      ? `【历史摘要】只说明这个人，不要把摘要里的旧事写进这轮回答。\n${truncate(ctx.historySummary, 240)}`
+      : '',
+    ctx.intentDirective ? `【意图要求】${ctx.intentDirective}` : '',
+    ctx.answerVariationHint || ''
+  ].filter(Boolean);
 }
 
 function parseActionInput(raw: string | undefined): Record<string, unknown> {
@@ -162,6 +200,44 @@ async function executeTool(
     }
     case 'reflect_psych':
       return executeReflectPsych(ctx);
+    case 'suggest_micro_training': {
+      const { suggestMicroTrainings, formatMicroTrainingObservation } = await import(
+        '../psych/microTrainingCatalog'
+      );
+      return formatMicroTrainingObservation(
+        suggestMicroTrainings({
+          emotion: ctx.emotion.emotion,
+          problem: ctx.problem.category,
+          risk: ctx.risk.level,
+          limit: 2
+        })
+      );
+    }
+    case 'recommend_video': {
+      if (ctx.risk.level === 'high' || ctx.risk.level === 'critical') {
+        return '高风险或危机时不推荐视频，优先安全与求助通道。';
+      }
+      const { shouldRecommendVideos, recommendVideos } = await import(
+        '../video/videoRecommendationService'
+      );
+      if (!shouldRecommendVideos(ctx.emotion, ctx.risk)) {
+        return '当前情绪/风险不适合推视频，可继续共情与小步支持。';
+      }
+      const videos = await recommendVideos({
+        userId: ctx.userId,
+        question: ctx.question,
+        emotion: ctx.emotion,
+        problem: ctx.problem
+      });
+      if (!videos.length) return '未匹配到合适视频。';
+      return videos
+        .slice(0, 2)
+        .map(
+          (v, i) =>
+            `${i + 1}. ${truncate(v.title, 40)}（${v.url}）`
+        )
+        .join('\n');
+    }
     case 'finish': {
       const ans = String(input.answer || input.response || input.text || '').trim();
       return ans ? `已生成最终回复（${ans.length} 字）` : 'finish 缺少 answer 字段。';
@@ -185,7 +261,7 @@ function executeReflectPsych(ctx: ReActCounselContext): string {
 
 function buildReActSystemPrompt(ctx: ReActCounselContext, plan: ReActPlan): string {
   const prefetchNote = plan.prefetchOnly
-    ? '\n编排层已预检索知识与记忆，优先 reflect_psych 后直接 finish，勿重复 search。'
+    ? '\n编排层已预检索知识与记忆，优先 reflect_psych 后直接 finish，勿重复 search。高风险时禁止微训练与视频工具。'
     : '';
   return `你是大学生心理健康陪伴 AI，使用 ReAct（推理+行动）模式工作。
 
@@ -193,7 +269,10 @@ function buildReActSystemPrompt(ctx: ReActCounselContext, plan: ReActPlan): stri
 - search_knowledge：检索公共心理知识库，Action Input: {"query":"检索词"}
 - search_user_memory：检索该用户历史咨询私有记忆，Action Input: {"query":"检索词"}
 - reflect_psych：查看当前已融合的心理分析结论（无需参数）
+- suggest_micro_training：按情绪/议题建议 1～2 个微训练（高风险禁用），Action Input: {}
+- recommend_video：按情绪推荐公开心理视频（危机/高风险禁用），Action Input: {}
 - finish：输出最终回复，Action Input: {"answer":"给用户的完整中文回复"}
+
 
 每步严格输出（不要 Markdown 代码块）：
 Thought: （简短推理，中文）

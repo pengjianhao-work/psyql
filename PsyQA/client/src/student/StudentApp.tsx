@@ -20,8 +20,6 @@ import {
   AuthUserPublic,
   fetchStudentTranscriptRequests,
   batchResolveTranscript,
-  fetchCbtModule,
-  CbtMicroModule,
   TranscriptViewRequest
 } from '../api';
 import { Sidebar } from '../components/Sidebar';
@@ -32,9 +30,6 @@ import { shouldShowTrendCareAlert } from '../utils/trendCareAlert';
 import { TrendCareAlertModal } from '../components/TrendCareAlertModal';
 import { InsightsPanelShell } from '../components/InsightsPanelShell';
 import { EmotionRhythmCalendar } from '../components/EmotionRhythmCalendar';
-import { CbtMicroModuleModal } from '../components/CbtMicroModuleModal';
-import { TrendChart } from '../components/TrendChart';
-import { ReportPanel } from '../components/ReportPanel';
 import { PortraitHistoryList, ConversationPortraitPanel } from '../components/ConversationPortraitPanel';
 import { UserProfile, UserSelector } from '../components/UserSelector';
 import { SelfRatingPanel } from '../components/SelfRatingPanel';
@@ -65,6 +60,8 @@ import { useToast } from './hooks/useToast';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { useStudentSession } from './hooks/useStudentSession';
 import '../App.css';
+import './chat-experience.css';
+import './sandplay-room.css';
 
 export interface StudentAppProps {
   sessionUser: AuthUserPublic | null;
@@ -106,15 +103,24 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     reportPending,
     setReportPending,
     loadSessionFromServer,
-    refreshProgressAndHistory
+    refreshProgressAndHistory,
+    conversations,
+    conversationId,
+    setConversationId,
+    startConversation,
+    endConversation,
+    openConversation,
+    refreshConversations
   } = useStudentSession(pushToast);
+  const conversationIdRef = useRef<string | undefined>(undefined);
+  conversationIdRef.current = conversationId;
+  const activeConversation = conversations.find((item) => item.id === conversationId);
 
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [userProfiles, setUserProfiles] = useState<Record<string, UserProfile>>({});
   const [currentUserId, setCurrentUserId] = useState('');
-  const [cbtModule, setCbtModule] = useState<CbtMicroModule | null>(null);
   const [showSelfRating, setShowSelfRating] = useState(false);
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfilePayload | null>(null);
@@ -220,7 +226,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
 
   useEffect(() => {
     if (!latestReport) {
-      setReportEthicsOk(false);
+      // 无画像时不挡节律；有报告/画像再按会话伦理确认
+      setReportEthicsOk(true);
       return;
     }
     const ok = sessionStorage.getItem(reportEthicsSessionKey) === '1';
@@ -472,7 +479,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           const label = code ? labels[code] || code : '';
           pushToast(label ? `${label}：${msg}` : msg, 'warning');
         }
-      }, { signal: streamAbortRef.current.signal });
+      }, { signal: streamAbortRef.current.signal, conversationId: conversationIdRef.current });
 
       if (aborted) {
         return;
@@ -588,14 +595,19 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
         implicitNeeds: finalResponse.implicitNeeds
       });
       setLastDialogTime(finalResponse.dialogId || botTime);
+      if (finalResponse.conversationId) {
+        setConversationId(finalResponse.conversationId);
+        localStorage.setItem(`psyqa.conversation.${currentUserId}`, finalResponse.conversationId);
+        void refreshConversations(currentUserId);
+      }
       setShowSelfRating(true);
       setShowSessionFeedback(true);
       setInsightsOpen(false);
       setPortraitPending(Boolean(finalResponse.portraitPending));
       setReportPending(Boolean(finalResponse.reportPending));
       if (finalResponse.reportPending || finalResponse.portraitPending) {
-        pushToast('回复已生成；详细报告与画像正在后台生成', 'info', {
-          label: '查看报告',
+        pushToast('回复已生成；详细画像正在后台生成', 'info', {
+          label: '查看画像',
           onClick: () => {
             if (!reportEthicsOk) {
               setReportEthicsOpen(true);
@@ -718,7 +730,9 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     reportEthicsOk,
     loadUserProfileFromServer,
     runtimeHealth,
-    refreshProgressAndHistory
+    refreshProgressAndHistory,
+    refreshConversations,
+    setConversationId
   ]);
 
   const handleSimilarQuestionClick = (question: string) => {
@@ -755,6 +769,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       setUserProfile(null);
       setShowSelfRating(false);
       setShowSessionFeedback(false);
+      localStorage.removeItem(`psyqa.conversation.${currentUserId}`);
+      await startConversation(currentUserId);
     } catch (error) {
       console.error('Failed to clear history:', error);
       setMessages((prev) => [
@@ -857,9 +873,11 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
 
   const consultCount = trendData.length;
   const crisisLevel =
-    latestReport?.risk?.level === 'critical' || latestReport?.risk?.level === 'high'
-      ? latestReport.risk.level
-      : null;
+    activeConversation?.turns === 0
+      ? null
+      : latestReport?.risk?.level === 'critical' || latestReport?.risk?.level === 'high'
+        ? latestReport.risk.level
+        : null;
 
   const currentUser =
     userProfiles[currentUserId] ??
@@ -886,7 +904,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     : currentUserId || '请选择用户';
 
   return (
-    <div className="app-container">
+    <div className="app-container student-room">
       <PrivacyEthicsModal
         open={ethicsLoginOpen}
         onAccept={() => {
@@ -911,13 +929,14 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       <PrivacyEthicsModal
         open={reportEthicsOpen}
         title="查看心理分析报告 · 伦理提示"
-        onAccept={() => {
-          sessionStorage.setItem(reportEthicsSessionKey, '1');
-          setReportEthicsOpen(false);
-          setReportEthicsOk(true);
-        }}
-      />
-      <header className="header header-campus">
+          onAccept={() => {
+            sessionStorage.setItem(reportEthicsSessionKey, '1');
+            setReportEthicsOpen(false);
+            setReportEthicsOk(true);
+            setInsightsOpen(true);
+          }}
+        />
+        <header className="header header-campus">
         <div className="header-left">
           <button
             type="button"
@@ -1143,7 +1162,23 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               onValidateBeforeSend={handleValidateBeforeSend}
               onSimilarQuestionClick={handleSimilarQuestionClick}
               onClearHistory={handleClearHistory}
-              inputLocked={isLoading || historyLoading || backendOnline === false}
+              inputLocked={
+                isLoading ||
+                historyLoading ||
+                backendOnline === false ||
+                activeConversation?.status === 'archived'
+              }
+              sessions={conversations}
+              activeSessionId={conversationId}
+              onNewSession={currentUserId ? () => void startConversation(currentUserId) : undefined}
+              onEndSession={
+                currentUserId && activeConversation?.status === 'active'
+                  ? () => void endConversation(currentUserId, activeConversation.id)
+                  : undefined
+              }
+              onSelectSession={
+                currentUserId ? (id) => void openConversation(currentUserId, id) : undefined
+              }
               exportMenu={
                 <ExportMenu
                   onExport={handleExportHistory}
@@ -1151,6 +1186,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 />
               }
               quickPrompts={filteredQuickPrompts}
+              hideCompanions={Boolean(crisisLevel)}
+              onOpenVideoCenter={() => setVideoDrawerOpen(true)}
             />
           </div>
           <div className="insights-toolbar">
@@ -1158,30 +1195,29 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               type="button"
               className="insights-toggle-btn"
               onClick={() => {
-                if (!insightsOpen && !reportEthicsOk && latestReport) {
+                if (insightsOpen) {
+                  setInsightsOpen(false);
+                  return;
+                }
+                if (latestReport && !reportEthicsOk) {
                   setReportEthicsOpen(true);
                   return;
                 }
-                setInsightsOpen((v) => !v);
+                setInsightsOpen(true);
               }}
             >
-              {insightsOpen ? '收起趋势与报告 ▲' : '展开趋势与报告 ▼'}
+              {insightsOpen ? '收起节律与画像 ▲' : '情绪节律与画像 ▼'}
               {(portraitPending || reportPending) && ' · 生成中'}
             </button>
           </div>
-          {insightsOpen && reportEthicsOk && (
+          {insightsOpen && (
           <div className="insights-grid">
             <div className="insights-col insights-col-rhythm">
               <InsightsPanelShell title="智能情绪节律日历" className="insights-col-rhythm">
                 <EmotionRhythmCalendar userId={currentUserId} />
               </InsightsPanelShell>
             </div>
-            <div className="insights-col insights-col-chart">
-              <InsightsPanelShell title="心理变化趋势" className="insights-col-chart">
-                <TrendChart data={trendData} />
-              </InsightsPanelShell>
-            </div>
-            {latestReport?.portrait && (
+            {reportEthicsOk && latestReport?.portrait && (
               <div className="insights-col insights-col-portrait">
                 <InsightsPanelShell title="本次咨询画像" className="insights-col-portrait">
                   <ConversationPortraitPanel
@@ -1192,43 +1228,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 </InsightsPanelShell>
               </div>
             )}
-            {latestReport && (
-              <div className="insights-col insights-col-report">
-                <InsightsPanelShell title="心理咨询报告" className="insights-col-report">
-                  <ReportPanel
-                    emotion={latestReport.emotion}
-                    risk={latestReport.risk}
-                    problem={latestReport.problem}
-                    intervention={latestReport.intervention}
-                    carePlan={latestReport.carePlan}
-                    analysisSources={latestReport.analysisSources}
-                    llmUsed={latestReport.llmUsed}
-                    reportPending={reportPending}
-                    implicitNeeds={latestReport.implicitNeeds}
-                    onOpenCbt={() => {
-                      void fetchCbtModule(latestReport.problem?.category, latestReport.emotion?.emotion).then(
-                        (d) => setCbtModule(d.module)
-                      );
-                    }}
-                    emotionStyle={latestReport.emotionStyle}
-                    report={latestReport.report}
-                    statModel={latestReport.statModel}
-                    shareContext={
-                      sessionUser
-                        ? {
-                            studentLabel: sessionUser.realName || sessionUser.displayName,
-                            orgName: sessionUser.orgName,
-                            className: sessionUser.className,
-                            studentNo: sessionUser.studentNo,
-                            allowSchoolTranscriptView: sessionUser.allowSchoolTranscriptView !== false
-                          }
-                        : undefined
-                    }
-                  />
-                </InsightsPanelShell>
-              </div>
-            )}
-            {portraitHistoryItems.length > 0 && (
+            {reportEthicsOk && portraitHistoryItems.length > 0 && (
               <div className="insights-col insights-col-history">
                 <InsightsPanelShell title="历次咨询画像" className="insights-col-history">
                   <PortraitHistoryList items={portraitHistoryItems} />
@@ -1253,14 +1253,6 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           pushToast('可在「个人资料」中查看辅导员联系方式，或前往学校心理中心预约', 'info');
         }}
       />
-      {cbtModule && (
-        <CbtMicroModuleModal
-          module={cbtModule}
-          problem={latestReport?.problem?.category}
-          emotion={latestReport?.emotion?.emotion}
-          onClose={() => setCbtModule(null)}
-        />
-      )}
       <ToastStack messages={toasts} onDismiss={dismissToast} />
     </div>
   );

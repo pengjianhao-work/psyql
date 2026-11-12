@@ -83,7 +83,7 @@ export const VideoCenterDrawer: React.FC<VideoCenterDrawerProps> = ({
       <aside className="video-drawer" aria-label="心理视频推荐">
         <div className="video-drawer-header">
           <div>
-            <h3>🎬 心理视频</h3>
+            <h3>心理视频</h3>
             <p>精选公开心理治愈内容，按情绪为你推荐</p>
           </div>
           <button type="button" className="video-drawer-close" onClick={onClose}>

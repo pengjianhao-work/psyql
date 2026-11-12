@@ -19,11 +19,22 @@ export interface EmotionTimelineEntry {
   notes?: string;
 }
 
+export interface ExecutionExperience {
+  time: string;
+  problem: string;
+  emotion: string;
+  framework: string;
+}
+
 export interface InterventionProfile {
   effectiveApproaches: string[];
   avoidPhrases: string[];
   sensitiveTopics: string[];
   preferredTone?: 'gentle' | 'rational' | 'brief' | string;
+  /** 同一种语气反馈要累计到 3 次才写入 preferredTone */
+  preferenceSignals?: Record<string, number>;
+  /** 永久保留的历史执行经验，只留最近若干条 */
+  executionHistory?: ExecutionExperience[];
 }
 
 export interface UserAgentProfileRow {

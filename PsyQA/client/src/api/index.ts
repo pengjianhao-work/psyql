@@ -1294,6 +1294,7 @@ export async function batchResolveTranscript(
   const { data } = await api.post('/transcript-requests/batch-resolve', { userId, requestIds, approve });
   return data;
 }
+
 export type SupportAnswers = Record<string, string[]>;
 
 export interface SupportQuestion {
@@ -1305,12 +1306,17 @@ export interface SupportQuestion {
 
 export async function getSupportPreferences(userId: string, signal: AbortSignal) {
   const { data } = await api.get<{ questions: SupportQuestion[]; answers: SupportAnswers }>(
-    '/support-preferences', { params: { userId }, signal }
+    '/support-preferences',
+    { params: { userId }, signal }
   );
   return data;
 }
 
 export async function saveSupportPreferences(userId: string, answers: SupportAnswers) {
-  const { data } = await api.put<{ answers: SupportAnswers }>('/support-preferences', { userId, answers });
+  const { data } = await api.put<{ answers: SupportAnswers }>('/support-preferences', {
+    userId,
+    answers
+  });
   return data.answers;
 }
+
