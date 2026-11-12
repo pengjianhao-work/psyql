@@ -1,10 +1,8 @@
 import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
-import { formatTurnMemory, type ReActCounselContext, type ReActCounselResult, type ReActStep } from './reactCounselAgent';
-import { formatPersonalMemories, MEMORY_BOUNDARY } from '../user/userMemoryService';
+import type { ReActCounselContext, ReActCounselResult, ReActStep } from './reactCounselAgent';
 import type { ReactMode } from './agentPolicy';
-import { CAMPUS_REPLY_REQUIREMENT } from './counselReplyPolicy';
 
 export interface PlannerPlan {
   useKnowledge: boolean;
@@ -66,25 +64,27 @@ function formatPrefetchContext(ctx: ReActCounselContext, plan: PlannerPlan): str
     parts.push(
       '【参考知识】\n' +
         ctx.prefetchedKnowledge
-          .map((k, i) => `${i + 1}. ${truncate(k.question, 40)} → ${truncate(k.answer, 180)}`)
+          .map((k, i) => `${i + 1}. ${truncate(k.question, 40)} → ${truncate(k.answer, 140)}`)
           .join('\n')
     );
   }
   if (plan.useMemory && ctx.prefetchedMemory?.length) {
-    const memory = formatPersonalMemories(ctx.prefetchedMemory, ctx.recentDialogs, {
-      question: ctx.question,
-      continuePrevious: ctx.continuePrevious
-    });
-    if (memory) parts.push(`【长期向量记忆】\n${memory}`);
+    parts.push(
+      '【用户记忆】\n' +
+        ctx.prefetchedMemory
+          .map(
+            (h, i) =>
+              `${i + 1}. [${(h.similarity * 100).toFixed(0)}%] ${truncate(h.answer || h.question, 120)}`
+          )
+          .join('\n')
+    );
   }
   return parts.join('\n\n');
 }
 
 function buildResponderSystem(ctx: ReActCounselContext): string {
-  return `你是校园心理辅助支持，不是医生。${CAMPUS_REPLY_REQUIREMENT}
-${ctx.intentDirective || ''}
-语气：${ctx.tone}
-${MEMORY_BOUNDARY}
+  return `你是大学生心理健康陪伴 AI。不做医疗诊断。
+${ctx.replyGuidance || `温暖共情、约 280–480 字、两大块（共情+建议）。语气：${ctx.tone}`}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 }
 
@@ -118,10 +118,10 @@ export async function runPlannerRespondAgent(
   const userPrompt = [
     `【用户提问】${ctx.question}`,
     ctx.description ? `【补充】${ctx.description}` : '',
-    ...formatTurnMemory(ctx),
+    ctx.historySummary ? `【历史摘要】${truncate(ctx.historySummary, 200)}` : '',
     contextBlock,
-    `【开场参考】${ctx.intervention.openingPhrase}`,
-    `【结尾参考】${ctx.intervention.closingPhrase}`,
+    ctx.replyGuidance ? '' : `【开场参考】${ctx.intervention.openingPhrase}`,
+    ctx.replyGuidance ? '' : `【结尾参考】${ctx.intervention.closingPhrase}`,
     '',
     '请直接输出给用户的完整中文回复（不要 Thought/Action 格式）。'
   ]
@@ -158,7 +158,7 @@ export async function runPlannerRespondAgent(
     observation: finalAnswer ? `已生成（${finalAnswer.length} 字）` : '生成失败'
   });
 
-  const success = finalAnswer.length >= 80;
+  const success = finalAnswer.trim().length >= (ctx.replyGuidance ? 1 : 80);
   const reactMode: ReactMode = success ? 'planner' : 'off';
   return {
     answer: success ? finalAnswer : '',
