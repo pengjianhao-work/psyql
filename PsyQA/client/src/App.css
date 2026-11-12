@@ -6607,3 +6607,32 @@ body:has(.student-room)::after {
     transition: none;
   }
 }
+
+.support-preferences fieldset {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  min-width: 0;
+}
+
+.support-preferences fieldset label {
+  display: block;
+  margin: 0.45rem 0;
+}
+
+.support-preferences form > button + button {
+  margin-left: 0.5rem;
+}
+
+.support-preferences details {
+  margin-top: 0.75rem;
+}
+
+.support-preferences-summary dd {
+  margin: 0.25rem 0 0.75rem;
+}
+
+.support-preferences-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
