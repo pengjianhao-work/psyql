@@ -64,8 +64,6 @@ export interface RuntimeHealth {
     datasetUpdatedAt?: string;
     chromaConnected: boolean;
     chromaCount?: number;
-    qdrantConnected?: boolean;
-    qdrantCount?: number;
     embedReady: boolean;
   };
   build?: {
@@ -367,12 +365,10 @@ export async function askQuestionStream(
   handlers: {
     onToken: (text: string) => void;
     onReactStep?: (step: import('../types').ReActStep) => void;
-    onAnswer?: (text: string) => void;
-    onReset?: () => void;
     onDone: (payload: QuestionResponse & { portraitPending?: boolean }) => void;
     onError: (message: string, code?: string) => void;
   },
-  options?: { signal?: AbortSignal; conversationId?: string }
+  options?: { signal?: AbortSignal }
 ): Promise<{ aborted: boolean }> {
   const token = getAuthToken();
   let res: Response;
@@ -389,8 +385,7 @@ export async function askQuestionStream(
       body: JSON.stringify({
         question,
         description,
-        ...(userId ? { userId } : {}),
-        ...(options?.conversationId ? { conversationId: options.conversationId } : {})
+        ...(userId ? { userId } : {})
       })
     });
   } catch (err) {
@@ -443,10 +438,6 @@ export async function askQuestionStream(
           } & QuestionResponse;
           if (payload.type === 'token' && payload.text) {
             handlers.onToken(payload.text);
-          } else if (payload.type === 'answer' && payload.text) {
-            handlers.onAnswer?.(payload.text);
-          } else if (payload.type === 'reset') {
-            handlers.onReset?.();
           } else if (payload.type === 'react_step' && payload.step) {
             handlers.onReactStep?.(payload.step);
           } else if (payload.type === 'error') {
@@ -573,34 +564,6 @@ export const getGroupedHistory = async (userId: string): Promise<{ userId: strin
   const response = await api.get('/history/grouped', { params: { userId } });
   return response.data;
 };
-
-export type ConversationItem = {
-  id: string;
-  title: string;
-  status: 'active' | 'archived';
-  createdAt: string;
-  updatedAt: string;
-  turns: number;
-};
-
-export async function listConversations(userId: string): Promise<ConversationItem[]> {
-  const response = await api.get('/conversations', { params: { userId } });
-  return (response.data.conversations || []) as ConversationItem[];
-}
-
-export async function createConversation(userId: string): Promise<ConversationItem> {
-  const response = await api.post('/conversations', { userId });
-  return response.data.conversation as ConversationItem;
-}
-
-export async function archiveConversation(userId: string, conversationId: string): Promise<void> {
-  await api.post(`/conversations/${conversationId}/archive`, { userId });
-}
-
-export async function getConversationMessages(userId: string, conversationId: string) {
-  const response = await api.get(`/conversations/${conversationId}/messages`, { params: { userId } });
-  return (response.data.history || []) as import('../types').UserProgress['history'];
-}
 
 export interface CarePlanSuggestion {
   categoryName: string;
@@ -1293,4 +1256,24 @@ export async function batchResolveTranscript(
 ): Promise<{ message: string; count: number }> {
   const { data } = await api.post('/transcript-requests/batch-resolve', { userId, requestIds, approve });
   return data;
+}
+export type SupportAnswers = Record<string, string[]>;
+
+export interface SupportQuestion {
+  id: string;
+  title: string;
+  max: number;
+  options: Array<{ id: string; label: string }>;
+}
+
+export async function getSupportPreferences(userId: string, signal: AbortSignal) {
+  const { data } = await api.get<{ questions: SupportQuestion[]; answers: SupportAnswers }>(
+    '/support-preferences', { params: { userId }, signal }
+  );
+  return data;
+}
+
+export async function saveSupportPreferences(userId: string, answers: SupportAnswers) {
+  const { data } = await api.put<{ answers: SupportAnswers }>('/support-preferences', { userId, answers });
+  return data.answers;
 }
