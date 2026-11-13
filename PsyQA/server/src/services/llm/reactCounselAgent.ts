@@ -2,8 +2,10 @@ import type { KnowledgeItem } from '../knowledge/ragService';
 import type { SearchResult } from '../knowledge/vectorDBService';
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import { getCategoryName, type EmotionAnalysis, type RiskAssessment, type ProblemAnalysis, type ProblemCategory } from '../psych/emotionService';
-import { isReactDemoMode } from './agentPolicy';
+import { isReactDemoMode, isStrictFullReAct } from './agentPolicy';
 import type { ReactMode } from './agentPolicy';
+import { formatPersonalMemories, MEMORY_BOUNDARY } from '../user/userMemoryService';
+import { CAMPUS_REPLY_REQUIREMENT } from './counselReplyPolicy';
 
 export interface ReActStep {
   step: number;
@@ -74,7 +76,7 @@ const TOOL_NAMES = [
 const MIN_ANSWER_CHARS = 80;
 
 export function resolveReActPlan(ctx: ReActCounselContext): ReActPlan {
-  if (isReactDemoMode()) {
+  if (isStrictFullReAct()) {
     return { maxSteps: 4, skipSearchTools: false, prefetchOnly: false };
   }
 
@@ -129,23 +131,52 @@ function parseActionInput(raw: string | undefined): Record<string, unknown> {
   }
 }
 
+function parseActionInputJson(raw: string): string | undefined {
+  const start = raw.indexOf('{');
+  if (start < 0) return undefined;
+  let depth = 0;
+  for (let i = start; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return raw.slice(start, i + 1);
+    }
+  }
+  return undefined;
+}
+
+function normalizeReActAction(text: string): string | undefined {
+  const line = text.match(/Action:\s*([^\n]+)/i)?.[1]?.trim().toLowerCase() || '';
+  if (!line) return undefined;
+  if (line.startsWith('finish')) return 'finish';
+  if (line.includes('reflect') || line.includes('psych')) return 'reflect_psych';
+  if (line.includes('micro') || line.includes('training')) return 'suggest_micro_training';
+  if (line.includes('video')) return 'recommend_video';
+  if (line.includes('memory')) return 'search_user_memory';
+  if (line.includes('knowledge') || line === 'search') return 'search_knowledge';
+  const token = line.replace(/\s+/g, '_');
+  return TOOL_NAMES.includes(token as (typeof TOOL_NAMES)[number]) ? token : undefined;
+}
+
 export function parseReActOutput(text: string): {
   thought?: string;
   action?: string;
   actionInput: Record<string, unknown>;
 } {
   const thoughtMatch = text.match(/Thought:\s*([\s\S]*?)(?=\nAction:|\nAction Input:|$)/i);
-  const actionMatch = text.match(/Action:\s*([a-z_]+)/i);
-  const inputMatch =
-    text.match(/Action Input:\s*(\{[\s\S]*?\})(?:\s*\n|$)/i) ||
-    text.match(/Action Input:\s*([\s\S]*?)(?=\nObservation:|\nThought:|\nAction:|$)/i);
-
-  const action = actionMatch?.[1]?.trim().toLowerCase();
-  const actionInput = parseActionInput(inputMatch?.[1]);
+  const action = normalizeReActAction(text);
+  const inputMarker = text.match(/Action Input:\s*/i);
+  let actionInput: Record<string, unknown> = {};
+  if (inputMarker && inputMarker.index !== undefined) {
+    const tail = text.slice(inputMarker.index + inputMarker[0].length);
+    const jsonBlock = parseActionInputJson(tail);
+    actionInput = parseActionInput(jsonBlock || tail.split('\n')[0]);
+  }
 
   return {
     thought: thoughtMatch?.[1]?.trim(),
-    action: action && TOOL_NAMES.includes(action as (typeof TOOL_NAMES)[number]) ? action : undefined,
+    action,
     actionInput
   };
 }
@@ -157,14 +188,18 @@ function formatPrefetchKnowledge(items: KnowledgeItem[]): string {
     .join('\n');
 }
 
-function formatPrefetchMemory(hits: SearchResult[]): string {
-  if (!hits.length) return '该用户暂无相关私有记忆。';
-  return hits
-    .map(
-      (h, i) =>
-        `${i + 1}. [相似度 ${(h.similarity * 100).toFixed(0)}%] ${truncate(h.answer || h.question, 120)}`
-    )
-    .join('\n');
+function formatPrefetchMemory(ctx: ReActCounselContext, hits: SearchResult[]): string {
+  return (
+    formatPersonalMemories(hits, ctx.recentDialogs, {
+      question: ctx.question,
+      continuePrevious: ctx.continuePrevious
+    }) || '没有和这轮问题相关的更早原话。'
+  );
+}
+
+function groundedQuery(ctx: ReActCounselContext, toolQuery: string): string {
+  if (ctx.continuePrevious) return toolQuery.trim() || ctx.question;
+  return ctx.question;
 }
 
 async function executeTool(
@@ -173,7 +208,7 @@ async function executeTool(
   ctx: ReActCounselContext,
   plan: ReActPlan
 ): Promise<string> {
-  const query = String(input.query || input.q || ctx.question).trim() || ctx.question;
+  const query = groundedQuery(ctx, String(input.query || input.q || ctx.question));
 
   switch (action) {
     case 'search_knowledge': {
@@ -189,14 +224,14 @@ async function executeTool(
     }
     case 'search_user_memory': {
       if (plan.prefetchOnly && ctx.prefetchedMemory?.length) {
-        return `[预检索缓存]\n${formatPrefetchMemory(ctx.prefetchedMemory)}`;
+        return `[预检索缓存]\n${formatPrefetchMemory(ctx, ctx.prefetchedMemory)}`;
       }
       if (plan.skipSearchTools && ctx.prefetchedMemory?.length) {
-        return formatPrefetchMemory(ctx.prefetchedMemory);
+        return formatPrefetchMemory(ctx, ctx.prefetchedMemory);
       }
       const { searchBlendedUserMemory } = await import('../user/userMemoryService');
       const hits = await searchBlendedUserMemory(ctx.userId, query, 3);
-      return formatPrefetchMemory(hits);
+      return formatPrefetchMemory(ctx, hits);
     }
     case 'reflect_psych':
       return executeReflectPsych(ctx);
@@ -280,9 +315,11 @@ Action: （工具名）
 Action Input: （JSON）
 
 收到 Observation 后继续推理，直到调用 finish。
-最终 answer 须遵守安全要求，不做医疗诊断。
-${ctx.replyGuidance || '温暖共情、约 280–480 字、两大块（共情+建议）。'}${prefetchNote}
+最终 answer 须遵守：${CAMPUS_REPLY_REQUIREMENT}
+${ctx.replyGuidance ? `本轮语气与结构要求：${ctx.replyGuidance}` : '温暖共情、约 280–480 字、两大块（共情+建议）。'}${prefetchNote}
 ${ctx.replyGuidance ? '' : `语气：${ctx.tone}`}
+
+${MEMORY_BOUNDARY}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 }
 
@@ -290,7 +327,7 @@ function buildReActUserPrompt(ctx: ReActCounselContext, trajectory: string): str
   const parts = [
     `【用户提问】${ctx.question}`,
     ctx.description ? `【补充】${ctx.description}` : '',
-    ctx.historySummary ? `【历史摘要】${truncate(ctx.historySummary, 200)}` : '',
+    ...formatTurnMemory(ctx),
     ctx.replyGuidance ? '' : `【开场参考】${ctx.intervention.openingPhrase}`,
     ctx.replyGuidance ? '' : `【结尾参考】${ctx.intervention.closingPhrase}`
   ].filter(Boolean);
@@ -299,7 +336,7 @@ function buildReActUserPrompt(ctx: ReActCounselContext, trajectory: string): str
     parts.push('', '【已预检索知识】', formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2)));
   }
   if (ctx.prefetchedMemory?.length) {
-    parts.push('', '【已预检索记忆】', formatPrefetchMemory(ctx.prefetchedMemory.slice(0, 2)));
+    parts.push('', '【已预检索记忆】', formatPrefetchMemory(ctx, ctx.prefetchedMemory.slice(0, 2)));
   }
 
   if (trajectory) {
@@ -350,7 +387,7 @@ function buildPrefetchTrajectory(ctx: ReActCounselContext): string {
     parts.push(`Observation [prefetch]: ${formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2))}`);
   }
   if (ctx.prefetchedMemory?.length) {
-    parts.push(`Observation [prefetch]: ${formatPrefetchMemory(ctx.prefetchedMemory.slice(0, 2))}`);
+    parts.push(`Observation [prefetch]: ${formatPrefetchMemory(ctx, ctx.prefetchedMemory.slice(0, 2))}`);
   }
   parts.push(`Observation: ${executeReflectPsych(ctx)}`);
   return parts.join('\n');
