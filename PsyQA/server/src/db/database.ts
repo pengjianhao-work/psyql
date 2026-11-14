@@ -162,6 +162,16 @@ function initSchema(database: Database.Database): void {
       ON training_sessions(user_id, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_training_sessions_user_status
       ON training_sessions(user_id, status);
+
+    CREATE TABLE IF NOT EXISTS mood_checkins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      mood TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mood_checkins_user
+      ON mood_checkins(user_id, created_at DESC);
   `);
 }
 

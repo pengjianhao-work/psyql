@@ -61,6 +61,11 @@ import {
   postBatchResolveTranscript
 } from '../controllers/innovationController';
 import {
+  exportUserData,
+  getMoodCheckins,
+  postMoodCheckin
+} from '../controllers/userToolsController';
+import {
   attachAuth,
   requireAuth,
   requireRole,
@@ -111,6 +116,9 @@ questionRouter.patch('/memory-tag', ...studentApi, patchMemoryTag);
 questionRouter.post('/memory-batch-archive', ...studentApi, postMemoryBatchArchive);
 questionRouter.get('/implicit-needs', ...studentApi, getImplicitNeeds);
 questionRouter.get('/seasonal-rag', getSeasonalRag);
+questionRouter.get('/export', ...studentApi, exportUserData);
+questionRouter.post('/mood-checkin', ...studentApi, postMoodCheckin);
+questionRouter.get('/mood-checkins', ...studentApi, getMoodCheckins);
 
 questionRouter.get('/stats', requireAuth, requireRole('admin'), getSystemStats);
 questionRouter.get('/admin/agent-profile', requireAuth, requireRole('admin'), getUserAgentProfileAdmin);

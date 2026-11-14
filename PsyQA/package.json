@@ -35,6 +35,7 @@
     "sync:qdrant": "ts-node server/scripts/sync-qdrant.ts",
     "sync:qdrant:reset": "ts-node server/scripts/sync-qdrant.ts --reset",
     "chat:save_emb": "ts-node server/scripts/chat-save-emb.ts",
+    "memory:inspect": "ts-node server/scripts/inspect-user-memory.ts",
     "user:feature_summary": "ts-node server/scripts/user-feature-summary.ts",
     "user:annual_report": "ts-node server/scripts/user-annual-report.ts",
     "install:all": "npm install && cd client && npm install",

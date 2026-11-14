@@ -30,6 +30,7 @@ function getDb() {
     }
     db = new better_sqlite3_1.default(dbPath);
     db.pragma('journal_mode = WAL');
+    db.pragma('busy_timeout = 8000');
     db.pragma('foreign_keys = ON');
     initSchema(db);
     return db;
@@ -100,6 +101,23 @@ function initSchema(database) {
       PRIMARY KEY (user_id, dialog_time)
     );
 
+    -- LLM Wiki：离线生成的按主题聚合知识页，独立于 mental_dataset / vector_documents
+    CREATE TABLE IF NOT EXISTS wiki_documents (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      sections_json TEXT NOT NULL,
+      related_json TEXT NOT NULL DEFAULT '[]',
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      embedding_json TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      model TEXT,
+      prompt_hash TEXT,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_category_status ON wiki_documents(category, status);
+
     CREATE TABLE IF NOT EXISTS user_profile (
       user_id TEXT PRIMARY KEY,
       session_count INTEGER NOT NULL DEFAULT 0,
@@ -135,6 +153,34 @@ function initSchema(database) {
       created_at TEXT NOT NULL,
       PRIMARY KEY (user_id, dialog_time)
     );
+
+
+    CREATE TABLE IF NOT EXISTS training_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      training_type TEXT NOT NULL CHECK (training_type IN ('emotion', 'stress', 'cbt', 'affirmation', 'sleep')),
+      status TEXT NOT NULL CHECK (status IN ('in_progress', 'completed')),
+      answers_json TEXT NOT NULL DEFAULT '{}',
+      current_step INTEGER NOT NULL DEFAULT 0 CHECK (current_step >= 0),
+      feedback_json TEXT,
+      started_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_training_sessions_user_started
+      ON training_sessions(user_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_training_sessions_user_status
+      ON training_sessions(user_id, status);
+
+    CREATE TABLE IF NOT EXISTS mood_checkins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      mood TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mood_checkins_user
+      ON mood_checkins(user_id, created_at DESC);
   `);
 }
 function getMeta(key) {
