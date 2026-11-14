@@ -153,8 +153,23 @@ function normalizeReActAction(text: string): string | undefined {
   if (line.includes('micro') || line.includes('training')) return 'suggest_micro_training';
   if (line.includes('video')) return 'recommend_video';
   if (line.includes('memory')) return 'search_user_memory';
+  if (
+    line.includes('timeline') ||
+    line.includes('曲线') ||
+    line.includes('走势') ||
+    line.includes('打卡记录') ||
+    line.includes('打卡情况')
+  ) {
+    return 'emotion_timeline';
+  }
   if (line.includes('checkin') || line.includes('check_in') || line.includes('打卡') || line.includes('mood')) {
     return 'log_mood_checkin';
+  }
+  if (line.includes('safety') || line.includes('安全计划')) {
+    return 'crisis_safety_plan';
+  }
+  if (line.includes('summary') || line.includes('小结') || line.includes('总结')) {
+    return 'conversation_summary';
   }
   if (line.includes('counseling') || line.includes('resource') || line.includes('求助')) {
     return 'suggest_counseling_resource';
@@ -284,6 +299,64 @@ async function executeTool(
       return hits
         .map((t) => `· ${t.term}（${t.kind === 'slang' ? '流行语' : '时事'}）：${t.explanation}${t.example ? ` 例：${t.example}` : ''}`)
         .join('\n');
+    }
+    case 'emotion_timeline': {
+      const { getMoodTrend } = await import('../user/moodCheckinService');
+      const trend = getMoodTrend(ctx.userId, 30);
+      if (!trend.total) {
+        return '该用户还没有情绪打卡记录。可以先邀请对方记录几次此刻心情，之后再来看趋势。';
+      }
+      const directionText = {
+        up: '近 7 天整体好于之前',
+        down: '近 7 天整体低于之前',
+        flat: '近 7 天与之前基本持平',
+        unknown: '数据不足以判断方向'
+      }[trend.direction];
+      const lines = [
+        `共 ${trend.total} 次打卡，整体情绪均值 ${trend.averageValence.toFixed(1)}`,
+        directionText,
+        trend.topMoods.length
+          ? `最常见心情：${trend.topMoods.map((m) => `${m.mood}×${m.count}`).join('、')}`
+          : ''
+      ].filter(Boolean);
+      if (trend.recent.length) {
+        lines.push(
+          '最近打卡：' +
+            trend.recent
+              .map((c) => `${c.createdAt.slice(5, 10)} ${c.mood}${c.note ? `（${c.note}）` : ''}`)
+              .join('；')
+        );
+      }
+      return lines.join('\n');
+    }
+    case 'crisis_safety_plan':
+      return [
+        '【安全计划素材 · 仅高风险/危机时使用，不要在普通回答里展开】',
+        '一、警告信号（出现时立即启动计划）：连续失眠、完全封闭自我、不想见任何人、出现具体伤害自己的念头',
+        '二、此刻自己能做的：5-4-3-2-1 grounding（说出5个看到的、4个听到的、3个摸到的、2个闻到的、1个尝到的）；把冲动写下来，约定等 24 小时再做决定；暂时远离可能伤害自己的物品',
+        '三、分散注意力清单：联系一个信任的人待一会儿、出门走一段、做一件手头小事、听一首歌',
+        '四、支持联系人：现在就联系一个可信任的人（室友、家人、辅导员），把自己的状态告诉对方',
+        `五、专业求助：${ctx.risk.hotline || '全国心理援助热线：400-161-9995'}；学校心理中心可通过学校官方渠道预约`,
+        '规则：不要独处；把安全计划告诉一个人；今晚就联系上面任意一条。'
+      ].join('\n');
+    case 'conversation_summary': {
+      const { getUserHistoryFromDb } = await import('../../db/historyStore');
+      const history = getUserHistoryFromDb(ctx.userId);
+      const dialogs = (history?.dialogs ?? []).slice(-5);
+      if (!dialogs.length) {
+        return '该用户暂无历史对话记录。';
+      }
+      const lines = [`该用户共 ${history?.total_times ?? dialogs.length} 次对话，最近 ${dialogs.length} 次小结：`];
+      dialogs.forEach((d, i) => {
+        lines.push(`${i + 1}. ${d.time?.slice(0, 10) || ''}：${(d.summary || d.user || '').slice(0, 80)}`);
+      });
+      const { listMoodCheckins } = await import('../user/moodCheckinService');
+      const checkins = listMoodCheckins(ctx.userId, 10);
+      if (checkins.length) {
+        lines.push(`情绪打卡 ${checkins.length} 次，最近：${checkins[0].mood}${checkins[0].note ? `（${checkins[0].note}）` : ''}`);
+      }
+      lines.push('请据此用温暖简洁的语气给用户写一段可保存的「本次对话小结」。');
+      return lines.join('\n');
     }
     case 'get_user_profile': {
       const { getOrRefreshUserProfile } = await import('../user/userProfileService');

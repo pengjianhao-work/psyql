@@ -50,6 +50,21 @@ export const COUNSEL_TOOL_DEFS: ToolDef[] = [
       'lookup_trend：查询本周网络流行语/时事词条的解释（用户说了生僻梗或问热点时用），Action Input: {"query":"词或话题"}'
   },
   {
+    name: 'emotion_timeline',
+    signature:
+      'emotion_timeline：查看该用户情绪打卡的趋势统计（近7天 vs 之前、常见心情），Action Input: {}'
+  },
+  {
+    name: 'crisis_safety_plan',
+    signature:
+      'crisis_safety_plan：高风险/危机时输出结构化安全计划素材（警告信号、应对、联系人、求助渠道），Action Input: {}'
+  },
+  {
+    name: 'conversation_summary',
+    signature:
+      'conversation_summary：汇总该用户近期对话小结与打卡概况，供生成「本次对话小结」，Action Input: {}'
+  },
+  {
     name: 'reflect_psych',
     signature: 'reflect_psych：查看当前已融合的心理分析结论（无需参数），Action Input: {}'
   },
