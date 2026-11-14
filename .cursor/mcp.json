@@ -7,6 +7,15 @@
         "-y",
         "@playwright/mcp@latest"
       ]
+    },
+    "filesystem": {
+      "command": "D:\\node\\node.exe",
+      "args": [
+        "D:\\node\\node_modules\\npm\\bin\\npx-cli.js",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "D:\\code\\PsyQA1"
+      ]
     }
   }
 }
