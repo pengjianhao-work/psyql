@@ -47,6 +47,7 @@ import { StudentStatusBar } from '../components/StudentStatusBar';
 import { GuestModeBanner } from '../components/GuestModeBanner';
 import { CrisisSupportBanner } from '../components/CrisisSupportBanner';
 import { ExportMenu, ExportFormat } from '../components/ExportMenu';
+import { MoodCheckinCard } from '../components/MoodCheckinCard';
 import { ToastStack } from '../components/Toast';
 import { RuntimeStatusBar } from '../components/RuntimeStatusBar';
 import { BackendOfflineBanner } from '../components/BackendOfflineBanner';
@@ -1258,6 +1259,13 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               <div className="insights-col insights-col-history">
                 <InsightsPanelShell title="历次咨询画像" className="insights-col-history">
                   <PortraitHistoryList items={portraitHistoryItems} />
+                </InsightsPanelShell>
+              </div>
+            )}
+            {currentUserId && (
+              <div className="insights-col insights-col-mood">
+                <InsightsPanelShell title="情绪打卡" className="insights-col-mood">
+                  <MoodCheckinCard userId={currentUserId} />
                 </InsightsPanelShell>
               </div>
             )}

@@ -1401,3 +1401,39 @@ export async function saveSupportPreferences(userId: string, answers: SupportAns
   return data.answers;
 }
 
+
+export interface MoodCheckin {
+  id: number;
+  userId: string;
+  mood: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export async function submitMoodCheckin(
+  userId: string,
+  mood: string,
+  note?: string
+): Promise<{ checkin: MoodCheckin }> {
+  const { data } = await api.post('/mood-checkin', { userId, mood, note });
+  return data;
+}
+
+export async function fetchMoodCheckins(userId: string, limit = 10): Promise<{ checkins: MoodCheckin[] }> {
+  const { data } = await api.get('/mood-checkins', { params: { userId, limit } });
+  return data;
+}
+
+export async function downloadUserDataExport(userId: string, format: 'json' | 'md'): Promise<void> {
+  const { data } = await api.get('/export', {
+    params: { userId, format },
+    responseType: 'blob'
+  });
+  const blob = data as Blob;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `psyqa-export-${new Date().toISOString().slice(0, 10)}.${format === 'md' ? 'md' : 'json'}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
