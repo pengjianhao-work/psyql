@@ -234,7 +234,27 @@ async function executeTool(
       }
       const { retrieveKnowledge } = await import('../knowledge/ragService');
       const items = await retrieveKnowledge(query, 2, ctx.problem.category, ctx.emotion.emotion);
-      return formatPrefetchKnowledge(items);
+      // 统一检索：RAG 结果之外附带 wiki 主题页和本周热点词条，减少额外工具轮数
+      const { searchWiki, formatWikiForPrompt } = await import('../wiki/wikiService');
+      const { lookupTrend } = await import('../trend/trendService');
+      const wikiHits =
+        ctx.risk.level === 'high' || ctx.risk.level === 'critical'
+          ? []
+          : await searchWiki(query, { category: ctx.problem.category, topK: 2 });
+      const trendHits =
+        ctx.risk.level === 'high' || ctx.risk.level === 'critical' ? [] : lookupTrend(query, 3);
+      const parts = [formatPrefetchKnowledge(items)];
+      const wikiText = formatWikiForPrompt(wikiHits);
+      if (wikiText) parts.push('【主题知识页】\n' + wikiText);
+      if (trendHits.length) {
+        parts.push(
+          '【本周热点词条】\n' +
+            trendHits
+              .map((t) => `· ${t.term}（${t.kind === 'slang' ? '流行语' : '时事'}）：${t.explanation}`)
+              .join('\n')
+        );
+      }
+      return parts.join('\n\n');
     }
     case 'search_user_memory': {
       if (plan.prefetchOnly && ctx.prefetchedMemory?.length) {
