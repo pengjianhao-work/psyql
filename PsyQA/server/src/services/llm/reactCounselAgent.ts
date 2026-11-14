@@ -6,6 +6,9 @@ import { isReactDemoMode, isStrictFullReAct } from './agentPolicy';
 import type { ReactMode } from './agentPolicy';
 import { formatPersonalMemories, MEMORY_BOUNDARY } from '../user/userMemoryService';
 import { CAMPUS_REPLY_REQUIREMENT } from './counselReplyPolicy';
+import { sanitizeForumStyle } from '../../utils/forumStyleSanitizer';
+import { formatWikiForPrompt } from '../wiki/wikiService';
+import type { WikiHit } from '../wiki/wikiTypes';
 
 export interface ReActStep {
   step: number;
@@ -43,6 +46,8 @@ export interface ReActCounselContext {
   llmRationale?: string;
   prefetchedKnowledge?: KnowledgeItem[];
   prefetchedMemory?: SearchResult[];
+  /** 已发布 wiki 主题页，只给模型做内部背景，不进入前端 */
+  prefetchedWiki?: WikiHit[];
   /** 重复提问时提示模型换表述，避免与上次雷同 */
   answerVariationHint?: string;
   /** 本轮意图对回答姿态的要求 */
@@ -184,7 +189,11 @@ export function parseReActOutput(text: string): {
 function formatPrefetchKnowledge(items: KnowledgeItem[]): string {
   if (!items.length) return '未检索到相关公共知识条目。';
   return items
-    .map((k, i) => `${i + 1}. ${truncate(k.question, 50)} → ${truncate(k.answer, 160)}`)
+    .map((k, i) => {
+      const question = sanitizeForumStyle(k.question);
+      const answer = sanitizeForumStyle(k.answer);
+      return `${i + 1}. ${truncate(question, 50)} → ${truncate(answer, 160)}`;
+    })
     .join('\n');
 }
 
@@ -316,7 +325,11 @@ Action Input: （JSON）
 
 收到 Observation 后继续推理，直到调用 finish。
 最终 answer 须遵守：${CAMPUS_REPLY_REQUIREMENT}
-${ctx.replyGuidance ? `本轮语气与结构要求：${ctx.replyGuidance}` : '温暖共情、约 280–480 字、两大块（共情+建议）。'}${prefetchNote}
+${ctx.replyGuidance ? `本轮语气与结构要求：${ctx.replyGuidance}` : '温暖共情、约 350–600 字、两大块（共情+建议）。'}${prefetchNote}
+
+【finish 的 answer 格式（必须遵守）】
+第一段用 2–3 句接住用户这轮原话；第二段用「·」逐条换行列 3–4 条建议，每条 20–45 字，单独一行；最后一句鼓励收尾。
+不要用 Markdown 标题，不要罗列工具名、视频标题或“已检索”字样；不要一次只给一个动作。
 ${ctx.replyGuidance ? '' : `语气：${ctx.tone}`}
 
 ${MEMORY_BOUNDARY}
@@ -334,6 +347,13 @@ function buildReActUserPrompt(ctx: ReActCounselContext, trajectory: string): str
 
   if (ctx.prefetchedKnowledge?.length) {
     parts.push('', '【已预检索知识】', formatPrefetchKnowledge(ctx.prefetchedKnowledge.slice(0, 2)));
+  }
+  if (ctx.prefetchedWiki?.length) {
+    parts.push(
+      '',
+      '【内部主题背景 · 只帮你把握方向，不要复述、不要照抄、不要改变对用户的共情】',
+      formatWikiForPrompt(ctx.prefetchedWiki)
+    );
   }
   if (ctx.prefetchedMemory?.length) {
     parts.push('', '【已预检索记忆】', formatPrefetchMemory(ctx, ctx.prefetchedMemory.slice(0, 2)));

@@ -8,6 +8,7 @@ import {
   KnowledgeCategoryFilter,
   submitKnowledgeReview
 } from '../api';
+import { SchoolWikiAdmin } from './SchoolWikiAdmin';
 
 const CATEGORY_OPTIONS: Array<{ value: KnowledgeCategoryFilter; label: string }> = [
   { value: 'all', label: '全部分类' },
@@ -21,6 +22,7 @@ const CATEGORY_OPTIONS: Array<{ value: KnowledgeCategoryFilter; label: string }>
 const ADD_CATEGORIES = CATEGORY_OPTIONS.filter((c) => c.value !== 'all');
 
 export const SchoolKnowledgeAdmin: React.FC = () => {
+  const [tab, setTab] = useState<'kb' | 'wiki'>('kb');
   const [items, setItems] = useState<KnowledgeCatalogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [category, setCategory] = useState<KnowledgeCategoryFilter>('all');
@@ -95,14 +97,25 @@ export const SchoolKnowledgeAdmin: React.FC = () => {
   return (
     <div className="school-knowledge-admin">
       <div className="school-page-head">
-        <h2>知识库可视化后台</h2>
-        {stats && (
+        <h2>知识库与 LLM Wiki</h2>
+        {stats && tab === 'kb' && (
           <p className="muted school-page-sub">
             共 {stats.knowledgeBaseCount} 条知识 · 向量库 {stats.vectorDbCount} 条
           </p>
         )}
       </div>
 
+      <div className="school-page-tabs">
+        <button type="button" className={tab === 'kb' ? 'active' : ''} onClick={() => setTab('kb')}>
+          知识条目
+        </button>
+        <button type="button" className={tab === 'wiki' ? 'active' : ''} onClick={() => setTab('wiki')}>
+          LLM Wiki
+        </button>
+      </div>
+
+      {tab === 'kb' ? (
+        <>
       <section className="school-card school-kb-add">
         <h3>新增知识条目</h3>
         <div className="school-kb-form">
@@ -197,6 +210,10 @@ export const SchoolKnowledgeAdmin: React.FC = () => {
             下一页
           </button>
         </div>
+      )}
+        </>
+      ) : (
+        <SchoolWikiAdmin />
       )}
     </div>
   );

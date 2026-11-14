@@ -441,6 +441,28 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             );
           });
         },
+        onAnswer: (text) => {
+          // 非流式/ReAct 最终答案走 answer 事件，不接到的话 onReactStep 会先建一个空占位，
+          // 结束后再走“非流式追加”分支，就会出现连续两条回答。
+          streamOk = true;
+          setIsLoading(false);
+          setMessages((prev) => {
+            const existing = prev.find((m) => m.id === botId);
+            if (!existing) {
+              return [
+                ...prev,
+                {
+                  id: botId,
+                  type: 'bot',
+                  content: text,
+                  timestamp: botTime,
+                  streaming: true
+                }
+              ];
+            }
+            return prev.map((m) => (m.id === botId ? { ...m, content: text, streaming: true } : m));
+          });
+        },
         onReactStep: (step) => {
           setIsLoading(false);
           setMessages((prev) => {
@@ -619,9 +641,12 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
       }
 
       if (!streamOk) {
-        setMessages((prev) => [
-          ...prev,
-          {
+        setMessages((prev) => {
+          // onReactStep / onAnswer 可能已经建过这条消息，避免再追加一条重复回答
+          if (prev.some((m) => m.id === botId)) return prev;
+          return [
+            ...prev,
+            {
             id: botId,
             type: 'bot',
             content: finalResponse.answer,
@@ -634,8 +659,9 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             report: finalResponse.report,
             llmUsed: finalResponse.llmUsed,
             timestamp: botTime
-          }
-        ]);
+            }
+          ];
+        });
       }
 
       void loadUserProfileFromServer(currentUserId, true);

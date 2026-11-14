@@ -18,7 +18,11 @@ import {
   getKnowledgeUpdateStatus,
   postKnowledgeUpdate,
   getKnowledgeItems,
-  postKnowledgeItem
+  postKnowledgeItem,
+  getWikiPages,
+  getWikiPageDetail,
+  patchWikiPageStatus,
+  postWikiRebuild
 } from '../controllers/knowledgeAdminController';
 import {
   getSessionFeedbackForDialog,
@@ -114,6 +118,10 @@ questionRouter.get('/admin/knowledge-status', requireAuth, requireRole('admin'),
 questionRouter.get('/admin/knowledge-items', requireAuth, requireRole('admin'), getKnowledgeItems);
 questionRouter.post('/admin/knowledge-items', requireAuth, requireRole('admin'), postKnowledgeItem);
 questionRouter.post('/admin/knowledge-update', requireAuth, requireRole('admin'), postKnowledgeUpdate);
+questionRouter.get('/admin/wiki', requireAuth, requireRole('admin'), getWikiPages);
+questionRouter.get('/admin/wiki/:slug', requireAuth, requireRole('admin'), getWikiPageDetail);
+questionRouter.patch('/admin/wiki/:slug', requireAuth, requireRole('admin'), patchWikiPageStatus);
+questionRouter.post('/admin/wiki/rebuild', requireAuth, requireRole('admin'), postWikiRebuild);
 questionRouter.get('/:id', getQuestionById);
 
 export { questionRouter };

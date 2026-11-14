@@ -317,6 +317,13 @@ def missing_prerequisites() -> list[str]:
     if not port_open(6333):
         problems.append("Qdrant 没有监听 127.0.0.1:6333。需要时在 PsyQA/ 下执行 npm run start:qdrant。")
     try:
+        # ragas 新版仍会直接 import langchain_community.chat_models.vertexai；
+        # 真实打分路径 run_ragas 已 stub 过，这里先补同样的 stub 再探测。
+        import types
+        if "langchain_community.chat_models.vertexai" not in sys.modules:
+            stub = types.ModuleType("langchain_community.chat_models.vertexai")
+            stub.ChatVertexAI = type("ChatVertexAI", (), {})
+            sys.modules["langchain_community.chat_models.vertexai"] = stub
         import ragas  # noqa: F401
     except ImportError:
         problems.append(

@@ -1,0 +1,200 @@
+/* LLM Wiki 管理端：沿用学校端卡片/工具栏样式，只补布局与状态色 */
+.school-page-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.school-page-tabs button {
+  padding: 6px 14px;
+  border: 1px solid #d7e3da;
+  border-radius: 999px;
+  background: #fff;
+  color: #3f5a4d;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.school-page-tabs button.active {
+  background: #e8f2ec;
+  border-color: #2d6a4f;
+  color: #1f3d30;
+  font-weight: 600;
+}
+
+.school-wiki-build-hint {
+  margin: 4px 0 10px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  max-width: 62rem;
+}
+
+.school-wiki-build-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.school-wiki-build-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: #3f5a4d;
+}
+
+.school-wiki-build-count input {
+  width: 64px;
+  padding: 4px 6px;
+  border: 1px solid #d7e3da;
+  border-radius: 6px;
+}
+
+.school-wiki-build-status {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+}
+
+.school-wiki-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 5fr) minmax(320px, 6fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.school-wiki-list {
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.school-wiki-item {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.school-wiki-item.is-active {
+  border-color: #2d6a4f;
+  background: #f4faf6;
+}
+
+.school-wiki-item-meta {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+}
+
+.wiki-status {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  background: #edf2ef;
+  color: #46645a;
+}
+
+.wiki-status-published {
+  background: #e6f2ea;
+  color: #21603f;
+}
+
+.wiki-status-draft {
+  background: #fdf3e3;
+  color: #8a5a1c;
+}
+
+.wiki-status-archived {
+  background: #f0f0f0;
+  color: #6b6b6b;
+}
+
+.school-wiki-detail-wrap {
+  min-width: 0;
+}
+
+.school-wiki-detail {
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.school-wiki-detail h3 {
+  margin: 0 0 6px;
+}
+
+.school-wiki-detail-summary {
+  margin: 0 0 6px;
+  line-height: 1.6;
+}
+
+.school-wiki-detail-meta {
+  margin: 0 0 10px;
+  font-size: 0.76rem;
+}
+
+.school-wiki-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.school-wiki-detail-actions button.is-active {
+  border-color: #2d6a4f;
+  color: #1f3d30;
+  background: #e8f2ec;
+}
+
+.school-wiki-section {
+  margin: 0 0 12px;
+}
+
+.school-wiki-section h4 {
+  margin: 0 0 4px;
+  font-size: 0.86rem;
+  color: #22406f;
+}
+
+.school-wiki-section p {
+  margin: 0;
+  line-height: 1.7;
+  font-size: 0.86rem;
+  color: #334155;
+}
+
+.school-wiki-sources {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px dashed #d7e3da;
+}
+
+.school-wiki-sources h4 {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+}
+
+.school-wiki-sources ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 0.78rem;
+  color: #566b62;
+}
+
+.school-wiki-sources code {
+  font-size: 0.72rem;
+  background: #f0f4f1;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.school-wiki-empty {
+  padding: 18px;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+  .school-wiki-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .school-wiki-list,
+  .school-wiki-detail {
+    max-height: none;
+  }
+}

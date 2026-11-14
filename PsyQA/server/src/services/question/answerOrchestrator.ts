@@ -66,8 +66,10 @@ import {
   filterKnowledgeForDisplay
 } from '../../utils/relevanceFilter';
 import { stripUserQuestionEcho } from '../../utils/answerSanitizer';
+import { sanitizeForumStyle } from '../../utils/forumStyleSanitizer';
 import { mineImplicitNeeds } from '../psych/implicitNeedsService';
 import { getSeasonalRagBoost } from '../knowledge/seasonalRagPolicy';
+import { searchWiki, formatWikiForPrompt } from '../wiki/wikiService';
 import { env } from '../../config/env';
 
 export interface CombinedAnswer {
@@ -263,6 +265,15 @@ function simplifyStructureHint(hint: string): string {
     .join(' · ');
 }
 
+/** 模型常把「· 建议」写在同一行，这里拆成独立行，恢复分点排版 */
+function normalizeBulletLines(text: string): string {
+  let out = text;
+  out = out.replace(/([。！？；])\s*·\s*/g, '$1\n· ');
+  out = out.replace(/(^|\n)\s*·\s*/g, '$1· ');
+  out = out.replace(/\n{3,}/g, '\n\n');
+  return out.trim();
+}
+
 function truncateSnippet(text: string, maxLen: number): string {
   const t = text.replace(/\s+/g, ' ').trim();
   if (t.length <= maxLen) return t;
@@ -271,7 +282,11 @@ function truncateSnippet(text: string, maxLen: number): string {
 
 function formatKnowledgeForPrompt(knowledge: KnowledgeItem[]): string {
   return knowledge
-    .map((k, i) => `${i + 1}. 问：${truncateSnippet(k.question, 40)}\n   要点：${truncateSnippet(k.answer, 180)}`)
+    .map((k, i) => {
+      const question = sanitizeForumStyle(k.question);
+      const answer = sanitizeForumStyle(k.answer);
+      return `${i + 1}. 问：${truncateSnippet(question, 40)}\n   要点：${truncateSnippet(answer, 180)}`;
+    })
     .join('\n\n');
 }
 
@@ -763,6 +778,12 @@ const generateAIAnswerBody = async (
   );
 
   const knowledgeContext = formatKnowledgeForPrompt(rerankedKnowledge);
+  // 高风险/危机不走 wiki 背景，避免稀释安全路径；wiki 查询失败也不影响回答
+  const wikiHits =
+    risk.level === 'high' || risk.level === 'critical' || intent.kind === 'crisis'
+      ? []
+      : await searchWiki(retrievalQuery, { category: problem.category, topK: 2 });
+  const wikiContext = formatWikiForPrompt(wikiHits);
   const personalMemoryText = formatPersonalMemories(vectorDbResults, recentDialogs, {
     question: fullText,
     continuePrevious: intent.kind === 'followup'
@@ -806,6 +827,7 @@ const generateAIAnswerBody = async (
 - 如果不确定如何回答，坦诚说明并建议咨询专业人士
 - 短期会话、工作记忆和长期习惯只用来认识这个人。这轮没接着上一轮说时，不要把旧事写进回答
 - 不编造记忆里没有的事实
+- 知识库原文是论坛帖子：不要使用「楼主/楼楼/题主/层主/亲爱的楼主」这类称呼，也不要模仿原帖作者的自称或昵称，直接对用户说「你」
   `.trim();
 
   const recentRiskNote =
@@ -817,14 +839,14 @@ const generateAIAnswerBody = async (
   const answerShape =
     intent.kind === 'venting'
       ? `【回答篇幅与结构 · 以倾诉为准】
-- 全文约 220–360 汉字
-- 第一块用 2–3 段回应用户原话，肯定感受，不要诊断
-- 第二块最多一句轻轻的可选建议，不要步骤清单
+- 全文约 350–600 汉字
+- 第一块用 2–3 段回应用户原话，约 150–220 字，肯定感受，不要诊断
+- 第二块给 3–4 条具体建议（用「·」分行，每条 20–45 字），不要只安慰
 - 最后一句：${intervention.closingPhrase}`
       : intent.kind === 'followup'
         ? `【回答篇幅与结构 · 以追问为准】
-- 顺着上一轮往下说，约 220–400 汉字，不要重开话题
-- 先接住对方的追问，再补一小段建议
+- 顺着上一轮往下说，约 300–500 汉字，不要重开话题
+- 先接住对方的追问，再给 3–4 条具体建议（用「·」分行，每条 20–45 字）
 - 最后一句：${intervention.closingPhrase}`
         : intent.kind === 'crisis'
           ? `【回答篇幅与结构 · 以安全为准】
@@ -886,9 +908,9 @@ ${recentRiskNote}
 ${answerVariationHint ? `\n${answerVariationHint}\n` : ''}
 
 ${answerShape || `【回答篇幅与结构 · 必须遵守】
-- 全文约 **280–480 汉字**，分 **两大块**，不要第三块行动清单
+- 全文约 **350–600 汉字**，分 **两大块**，不要第三块行动清单
 - **第一块（详细共情，约 150–220 字）**：用 2–3 段回应用户原话，肯定感受、说明「愿意说出来很不容易」、可点到宿舍/人际/学业等情境，但不要诊断
-- **第二块（简要建议，约 80–120 字）**：只写框架名「${intervention.frameworkName}」+ **2–3 条**极短建议（用「·」分隔，每条不超过 20 字）；知识库最多一句「详见下方参考」
+- **第二块（具体建议，约 120–200 字）**：写框架名「${intervention.frameworkName}」+ **3–4 条**具体建议（用「·」分行，每条 20–45 字）；知识库最多一句「详见下方参考」
 - 最后单独一句结尾：${intervention.closingPhrase}
 - **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何 3 步清单**`}
 
@@ -896,7 +918,11 @@ ${answerShape || `【回答篇幅与结构 · 必须遵守】
 ${personalMemoryText || '没有检索到更早的相关原话。不要编造过去。'}
 
 ${episodeNote ? `【这轮有几件事】\n${episodeNote}\n` : ''}
-【参考知识 · 仅提炼要点，勿复制原文】${knowledgeContext || '暂无'}
+【参考知识 · 仅提炼要点，勿复制原文】${knowledgeContext || '暂无'}${wikiContext ? `
+
+【内部主题背景 · 仅供你组织思路，不要复述、不要改变对用户的共情】
+${wikiContext}
+（先回应用户原话和记忆里的具体细节；主题背景只用来把握方向，不要写成通用科普。）` : ''}
 
 【用户提问】
 问题：${question}
@@ -940,7 +966,13 @@ ${description ? `补充描述：${description}` : ''}
     answer = buildExpandedFallbackAnswer(question, intervention, description);
   } else if (answer === undefined && llmOk) {
     let llmAnswer = '';
-    const tryAgent = shouldRunCounselAgent();
+    // 普通问答走主 LLM 路径（共情+分点建议更稳定）；ReAct 只保留给高风险/危机或显式演示
+    const tryAgent =
+      shouldRunCounselAgent() &&
+      (risk.level === 'high' ||
+        risk.level === 'critical' ||
+        intent.kind === 'crisis' ||
+        process.env.PSYQA_REACT_DEMO === '1');
 
     if (tryAgent) {
       try {
@@ -963,6 +995,7 @@ ${description ? `补充描述：${description}` : ''}
             llmRationale,
             prefetchedKnowledge: rerankedKnowledge,
             prefetchedMemory: vectorDbResults,
+            prefetchedWiki: wikiHits,
             answerVariationHint: answerVariationHint || undefined,
             intentDirective
           },
@@ -1080,8 +1113,13 @@ ${answer}
     }
   }
 
+  // 知识库原文来自论坛，模型偶尔会模仿“亲爱的楼楼/楼主你好”之类称呼；顺手把同一行的分点拆行
+  answer = normalizeBulletLines(sanitizeForumStyle(answer));
+
   if (!answer.includes('不能替代医疗诊断')) {
-    answer = `${answer}\n\n---\n\n${ETHICS_FOOTER}`;
+    // ETHICS_FOOTER 自带 \n\n---\n，这里不要再补一条分隔线
+    answer = answer.replace(/\n?-{3,}\s*$/, '').trim();
+    answer = `${answer}${ETHICS_FOOTER}`;
   }
 
   stream?.onAnswerReady?.(answer);

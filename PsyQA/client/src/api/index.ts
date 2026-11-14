@@ -821,6 +821,87 @@ export async function submitKnowledgeReview(body: {
   await schoolApi.post('/knowledge-reviews', body);
 }
 
+// ── LLM Wiki 管理端 API ─────────────────────────────────────────
+
+export type WikiStatus = 'draft' | 'published' | 'archived';
+
+export interface WikiSection {
+  heading: string;
+  body: string;
+}
+
+export interface WikiSourceRef {
+  docId: string;
+  question: string;
+  answer: string;
+}
+
+export interface WikiPageSummary {
+  slug: string;
+  title: string;
+  category: string;
+  summary: string;
+  status: WikiStatus;
+  updatedAt: string;
+  sourceCount: number;
+  sectionCount: number;
+  hasEmbedding: boolean;
+}
+
+export interface WikiPageDetail extends WikiPageSummary {
+  sections: WikiSection[];
+  relatedQuestions: string[];
+  sourceRefs: WikiSourceRef[];
+  model: string;
+  promptHash: string;
+}
+
+export interface WikiBuildState {
+  running: boolean;
+  startedAt?: string;
+  finishedAt?: string;
+  ok?: boolean;
+  summary?: string;
+}
+
+export interface WikiListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: WikiPageSummary[];
+  totals: { total: number; published: number; draft: number; archived: number };
+  build: WikiBuildState;
+}
+
+export async function fetchWikiPages(params: {
+  category?: string;
+  status?: WikiStatus | 'all';
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<WikiListResponse> {
+  const { data } = await api.get('/admin/wiki', { params });
+  return data;
+}
+
+export async function fetchWikiPage(slug: string): Promise<WikiPageDetail> {
+  const { data } = await api.get('/admin/wiki/' + encodeURIComponent(slug));
+  return data;
+}
+
+export async function updateWikiStatus(slug: string, status: WikiStatus): Promise<void> {
+  await api.patch('/admin/wiki/' + encodeURIComponent(slug), { status });
+}
+
+export async function rebuildWiki(body: {
+  category?: string;
+  perCategory?: number;
+  force?: boolean;
+}): Promise<WikiBuildState> {
+  const { data } = await api.post('/admin/wiki/rebuild', body);
+  return data;
+}
+
 export async function downloadAgentProfileExport(userId: string): Promise<void> {
   const token = getAuthToken();
   const res = await fetch(

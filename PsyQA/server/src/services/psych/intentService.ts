@@ -164,9 +164,9 @@ export function intentMemoryLimit(kind: IntentKind): number {
 export function formatIntentDirective(intent: IntentAnalysis): string {
   switch (intent.kind) {
     case 'venting':
-      return '【本轮意图：倾诉】先接住这一轮原话里的感受，再给一个今天能做完的小行动。不要只安慰，也不要换成别的话题。';
+      return '【本轮意图：倾诉】先接住这一轮原话里的感受，再给 3–4 条具体建议（用「·」分行，每条 20–45 字）。不要只安慰，也不要换成别的话题。';
     case 'advice':
-      return '【本轮意图：求建议】用一句接住他刚说的事，再给一个今天能做完的小行动。不要列成多条，不要诊断或讨论用药。';
+      return '【本轮意图：求建议】用一段接住他刚说的事，再给 3–4 条具体建议（用「·」分行，每条 20–45 字）。不要超过 4 条，不要诊断或讨论用药。';
     case 'followup':
       return '【本轮意图：追问】只顺着这一轮的追问往下说，补一个小行动。这一轮没再提起的旧事不要写回来。';
     case 'crisis':

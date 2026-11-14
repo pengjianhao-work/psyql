@@ -34,12 +34,13 @@ describe('owner safety cases', () => {
 });
 
 describe('answer shape instructions', () => {
-  test('asks for one current-turn action and forbids invented history', () => {
+  test('asks for two-block empathy plus 2-3 concrete suggestions, forbids invented history', () => {
     expect(CAMPUS_REPLY_REQUIREMENT).toContain('这一轮');
-    expect(CAMPUS_REPLY_REQUIREMENT).toContain('一个今天能做完的小行动');
+    expect(CAMPUS_REPLY_REQUIREMENT).toContain('3–4 条具体建议');
+    expect(CAMPUS_REPLY_REQUIREMENT).toContain('350–600 字');
     expect(CAMPUS_REPLY_REQUIREMENT).toContain('送礼');
-    expect(CAMPUS_REPLY_REQUIREMENT).not.toContain('两大块');
-    expect(formatIntentDirective(classifyIntent('室友又吵起来了，我好难受'))).toContain('一个今天能做完的小行动');
+    expect(CAMPUS_REPLY_REQUIREMENT).not.toContain('一个今天能做完的小行动');
+    expect(formatIntentDirective(classifyIntent('室友又吵起来了，我好难受'))).toContain('3–4 条具体建议');
     expect(formatIntentDirective(classifyIntent('室友又吵起来了，我好难受'))).not.toContain('不要步骤清单');
   });
 });

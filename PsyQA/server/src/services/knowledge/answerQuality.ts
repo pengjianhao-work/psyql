@@ -1,11 +1,12 @@
 import type { SearchResult } from './searchTypes';
+import { sanitizeForumStyle } from '../../utils/forumStyleSanitizer';
 
 const ACTION = /可以先|建议|试试|不妨|试着|步骤|每天|分钟|写下来|呼吸|安排|计划|记录|休息|联系|先把|先做|你可以/;
 const GENERIC_START = /^(?:我理解|听起来|辛苦了|谢谢你的|抱抱|你并不孤单|我能感觉到|看到你|你愿意|你的感受)/;
 
 /** 去掉开头的纯安抚，留下后面的具体做法。不足 80 字的原样返回。 */
 export function polishKnowledgeAnswer(answer: string, maxLen = 480): string {
-  const text = answer.replace(/\s+/g, ' ').trim();
+  const text = sanitizeForumStyle(answer).replace(/\s+/g, ' ').trim();
   if (!text) return '';
   if (text.length <= 80) return text;
   const parts = text

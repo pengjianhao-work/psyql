@@ -20,6 +20,7 @@
 | [07_个性化Agent落地方案.md](./07_个性化Agent落地方案.md) | 两年专属 Agent、动态 RAG、档案 API |
 | [05_Chroma向量库.md](./05_Chroma向量库.md) | Chroma 部署与同步 |
 | [06_数据处理指南.md](./06_数据处理指南.md) | 知识库与 RAG 管道 |
+| [10_LLM_Wiki知识库.md](./10_LLM_Wiki知识库.md) | LLM Wiki 主题知识层：生成、检索接入、管理端 |
 | [../DEPLOYMENT.md](../DEPLOYMENT.md) | 生产部署 |
 | [生产部署.md](./生产部署.md) | 中文部署补充 |
 

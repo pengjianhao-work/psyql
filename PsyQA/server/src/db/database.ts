@@ -20,6 +20,7 @@ export function getDb(): Database.Database {
   }
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 8000');
   db.pragma('foreign_keys = ON');
   initSchema(db);
   return db;
@@ -90,6 +91,23 @@ function initSchema(database: Database.Database): void {
       created_at TEXT NOT NULL,
       PRIMARY KEY (user_id, dialog_time)
     );
+
+    -- LLM Wiki：离线生成的按主题聚合知识页，独立于 mental_dataset / vector_documents
+    CREATE TABLE IF NOT EXISTS wiki_documents (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      sections_json TEXT NOT NULL,
+      related_json TEXT NOT NULL DEFAULT '[]',
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      embedding_json TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      model TEXT,
+      prompt_hash TEXT,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wiki_category_status ON wiki_documents(category, status);
 
     CREATE TABLE IF NOT EXISTS user_profile (
       user_id TEXT PRIMARY KEY,
