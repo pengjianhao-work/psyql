@@ -102,6 +102,19 @@ ${listText}
 
   const saved = saveTrendTerms(terms, weekKey);
   console.log(`[trends] 已写入 trend_terms（week=${weekKey}），共 ${saved} 条`);
+
+  // 热点词条沉淀为 wiki 草稿页（draft 需管理员审核后才上线）；失败不影响词条入库
+  if (!process.argv.includes('--no-wiki')) {
+    try {
+      const { buildTrendWikiPages } = await import('../src/services/wiki/trendWikiBuilder');
+      const wikiResults = await buildTrendWikiPages(terms);
+      for (const r of wikiResults) {
+        console.log(`[trends] wiki ${r.status}: ${r.term}${r.slug ? ' -> ' + r.slug : ''}`);
+      }
+    } catch (err) {
+      console.warn('[trends] wiki 草稿生成失败（不影响词条入库）：', err instanceof Error ? err.message : err);
+    }
+  }
 }
 
 main().catch((err) => {
