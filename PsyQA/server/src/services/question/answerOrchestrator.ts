@@ -70,6 +70,7 @@ import { sanitizeForumStyle } from '../../utils/forumStyleSanitizer';
 import { mineImplicitNeeds } from '../psych/implicitNeedsService';
 import { getSeasonalRagBoost } from '../knowledge/seasonalRagPolicy';
 import { searchWiki, formatWikiForPrompt } from '../wiki/wikiService';
+import type { WikiHit } from '../wiki/wikiTypes';
 import { env } from '../../config/env';
 
 export interface CombinedAnswer {
@@ -713,24 +714,27 @@ const generateAIAnswerBody = async (
       ? searchVectorDb(retrievalText, Math.max(knowledgeLimit, 3)).catch(() => [] as SearchResult[])
       : Promise.resolve([] as SearchResult[]);
 
-  const [llmOk, psychBundle, retrievedKnowledge, vectorHits] = await Promise.all([
-    llmPromise,
-    psychPromise,
-    retrievalPromise,
-    vectorPromise
-  ]);
   const memoryLimit = intentMemoryLimit(ruleIntent.kind);
-  const memoryBox: { hits: SearchResult[] | null } = { hits: null };
-  if (memoryLimit > 0) {
-    void searchPersonalMemories(userId, retrievalText, Math.max(memoryLimit, 4))
-      .then((hits) => {
-        memoryBox.hits = hits;
-      })
-      .catch(() => {
-        memoryBox.hits = [];
-      });
-  }
-  const vectorDbResults: SearchResult[] = [];
+  const memoryPromise =
+    memoryLimit > 0
+      ? searchPersonalMemories(userId, retrievalText, Math.max(memoryLimit, 4)).catch(
+          () => [] as SearchResult[]
+        )
+      : Promise.resolve([] as SearchResult[]);
+  const wikiPromise =
+    ruleRisk.level === 'high' || ruleIntent.kind === 'crisis'
+      ? Promise.resolve([] as WikiHit[])
+      : searchWiki(ruleRetrievalQuery, { category: ruleProblem.category, topK: 2 });
+
+  const [llmOk, psychBundle, retrievedKnowledge, vectorHits, personalMemoryHits, wikiPrefetched] =
+    await Promise.all([
+      llmPromise,
+      psychPromise,
+      retrievalPromise,
+      vectorPromise,
+      memoryPromise,
+      wikiPromise
+    ]);
   const {
     emotion: rawEmotion,
     risk: rawRisk,
@@ -782,9 +786,9 @@ const generateAIAnswerBody = async (
   const wikiHits =
     risk.level === 'high' || risk.level === 'critical' || intent.kind === 'crisis'
       ? []
-      : await searchWiki(retrievalQuery, { category: problem.category, topK: 2 });
+      : wikiPrefetched;
   const wikiContext = formatWikiForPrompt(wikiHits);
-  const personalMemoryText = formatPersonalMemories(vectorDbResults, recentDialogs, {
+  const personalMemoryText = formatPersonalMemories(personalMemoryHits, recentDialogs, {
     question: fullText,
     continuePrevious: intent.kind === 'followup'
   });
@@ -994,7 +998,7 @@ ${description ? `补充描述：${description}` : ''}
             tone,
             llmRationale,
             prefetchedKnowledge: rerankedKnowledge,
-            prefetchedMemory: vectorDbResults,
+            prefetchedMemory: personalMemoryHits,
             prefetchedWiki: wikiHits,
             answerVariationHint: answerVariationHint || undefined,
             intentDirective
@@ -1096,23 +1100,6 @@ ${answer}
 
   answer = clampAnswerLength(stripUserQuestionEcho(normalizeAnswerStructure(answer), question));
 
-  if (
-    memoryBox.hits &&
-    memoryBox.hits.length > 0 &&
-    risk.level !== 'high' &&
-    risk.level !== 'critical' &&
-    intent.kind !== 'crisis'
-  ) {
-    const lateMemory = formatPersonalMemories(memoryBox.hits, recentDialogs, {
-      question: fullText,
-      continuePrevious: intent.kind === 'followup'
-    });
-    const remembered = lateMemory.match(/用户当时说：([^\n]+)/)?.[1]?.trim();
-    if (remembered) {
-      answer = `${answer}\n\n这和你之前提到的「${remembered.slice(0, 24)}」是同一条线上的事。`;
-    }
-  }
-
   // 知识库原文来自论坛，模型偶尔会模仿“亲爱的楼楼/楼主你好”之类称呼；顺手把同一行的分点拆行
   answer = normalizeBulletLines(sanitizeForumStyle(answer));
 
@@ -1209,7 +1196,7 @@ ${answer}
     answer,
     knowledgeSources: rerankedKnowledge,
     similarQuestions: displaySimilarQuestions,
-    vectorDbResults: memoryBox.hits ?? vectorDbResults,
+    vectorDbResults: personalMemoryHits,
     summary,
     emotion,
     risk,
