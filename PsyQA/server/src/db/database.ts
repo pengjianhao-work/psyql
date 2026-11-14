@@ -172,6 +172,23 @@ function initSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_mood_checkins_user
       ON mood_checkins(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS trend_terms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      term TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'event',
+      explanation TEXT NOT NULL DEFAULT '',
+      example TEXT,
+      source TEXT,
+      week_key TEXT NOT NULL,
+      heat INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(term, kind)
+    );
+    CREATE INDEX IF NOT EXISTS idx_trend_terms_status_week
+      ON trend_terms(status, week_key, heat DESC);
   `);
 }
 
