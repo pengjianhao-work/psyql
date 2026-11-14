@@ -7,8 +7,9 @@ import type { ReactMode } from './agentPolicy';
 import { formatPersonalMemories, MEMORY_BOUNDARY } from '../user/userMemoryService';
 import { CAMPUS_REPLY_REQUIREMENT } from './counselReplyPolicy';
 import { sanitizeForumStyle } from '../../utils/forumStyleSanitizer';
-import { formatWikiForPrompt } from '../wiki/wikiService';
+import { formatWikiForPrompt, searchWiki } from '../wiki/wikiService';
 import type { WikiHit } from '../wiki/wikiTypes';
+import { COUNSEL_TOOL_DEFS, TOOL_NAMES } from './counselTools';
 
 export interface ReActStep {
   step: number;
@@ -69,14 +70,7 @@ export interface ReActPlan {
   prefetchOnly: boolean;
 }
 
-const TOOL_NAMES = [
-  'search_knowledge',
-  'search_user_memory',
-  'reflect_psych',
-  'suggest_micro_training',
-  'recommend_video',
-  'finish'
-] as const;
+
 
 const MIN_ANSWER_CHARS = 80;
 
@@ -159,6 +153,14 @@ function normalizeReActAction(text: string): string | undefined {
   if (line.includes('micro') || line.includes('training')) return 'suggest_micro_training';
   if (line.includes('video')) return 'recommend_video';
   if (line.includes('memory')) return 'search_user_memory';
+  if (line.includes('checkin') || line.includes('check_in') || line.includes('打卡') || line.includes('mood')) {
+    return 'log_mood_checkin';
+  }
+  if (line.includes('counseling') || line.includes('resource') || line.includes('求助')) {
+    return 'suggest_counseling_resource';
+  }
+  if (line.includes('wiki')) return 'search_wiki';
+  if (line.includes('profile') || line.includes('画像')) return 'get_user_profile';
   if (line.includes('knowledge') || line === 'search') return 'search_knowledge';
   const token = line.replace(/\s+/g, '_');
   return TOOL_NAMES.includes(token as (typeof TOOL_NAMES)[number]) ? token : undefined;
@@ -242,6 +244,46 @@ async function executeTool(
       const hits = await searchBlendedUserMemory(ctx.userId, query, 3);
       return formatPrefetchMemory(ctx, hits);
     }
+    case 'search_wiki': {
+      if (ctx.risk.level === 'high' || ctx.risk.level === 'critical') {
+        return '高风险或危机时不注入主题知识页，优先安全与求助通道。';
+      }
+      const hits = await searchWiki(query, { category: ctx.problem.category, topK: 2 });
+      return hits.length ? formatWikiForPrompt(hits) : '没有匹配的主题知识页。';
+    }
+    case 'get_user_profile': {
+      const { getOrRefreshUserProfile } = await import('../user/userProfileService');
+      const profile = getOrRefreshUserProfile(ctx.userId);
+      if (!profile.sessionCount) {
+        return '该用户还没有咨询记录，暂无画像。';
+      }
+      const concerns = profile.topConcerns.map((c) => `${c.label}×${c.count}`).join('、');
+      return [
+        profile.summary,
+        concerns ? `困扰分布：${concerns}` : '',
+        profile.recentThemes.length ? `反复主题：${profile.recentThemes.join('、')}` : ''
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+    case 'log_mood_checkin': {
+      const mood = String(input.mood || '').trim();
+      if (!mood) return 'log_mood_checkin 缺少 mood 字段。';
+      const { addMoodCheckin } = await import('../user/moodCheckinService');
+      const checkin = addMoodCheckin(
+        ctx.userId,
+        mood,
+        input.note ? String(input.note) : undefined
+      );
+      return `已记录情绪打卡：${checkin.mood}${checkin.note ? `（${checkin.note}）` : ''}`;
+    }
+    case 'suggest_counseling_resource':
+      return [
+        '现实求助渠道（不要编造具体电话或地址）：',
+        '· 身边可信任的人：室友、家人、辅导员或班主任',
+        '· 学校心理咨询中心：通过学校官方渠道查询预约方式',
+        `· ${ctx.risk.hotline || '全国心理援助热线：400-161-9995'}`
+      ].join('\n');
     case 'reflect_psych':
       return executeReflectPsych(ctx);
     case 'suggest_micro_training': {
@@ -310,12 +352,7 @@ function buildReActSystemPrompt(ctx: ReActCounselContext, plan: ReActPlan): stri
   return `你是大学生心理健康陪伴 AI，使用 ReAct（推理+行动）模式工作。
 
 可用工具：
-- search_knowledge：检索公共心理知识库，Action Input: {"query":"检索词"}
-- search_user_memory：检索该用户历史咨询私有记忆，Action Input: {"query":"检索词"}
-- reflect_psych：查看当前已融合的心理分析结论（无需参数）
-- suggest_micro_training：按情绪/议题建议 1～2 个微训练（高风险禁用），Action Input: {}
-- recommend_video：按情绪推荐公开心理视频（危机/高风险禁用），Action Input: {}
-- finish：输出最终回复，Action Input: {"answer":"给用户的完整中文回复"}
+${COUNSEL_TOOL_DEFS.map((def) => `- ${def.signature}`).join('\n')}
 
 
 每步严格输出（不要 Markdown 代码块）：
