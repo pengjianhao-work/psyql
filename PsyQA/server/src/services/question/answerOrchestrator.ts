@@ -71,6 +71,7 @@ import { mineImplicitNeeds } from '../psych/implicitNeedsService';
 import { getSeasonalRagBoost } from '../knowledge/seasonalRagPolicy';
 import { searchWiki, formatWikiForPrompt } from '../wiki/wikiService';
 import type { WikiHit } from '../wiki/wikiTypes';
+import { listActiveTrendTerms, formatTrendContext } from '../trend/trendService';
 import { env } from '../../config/env';
 
 export interface CombinedAnswer {
@@ -788,6 +789,11 @@ const generateAIAnswerBody = async (
       ? []
       : wikiPrefetched;
   const wikiContext = formatWikiForPrompt(wikiHits);
+  // 趋势词条是本地 SQLite 读取，成本可忽略；与 wiki 同样的安全守卫
+  const trendContext =
+    risk.level === 'high' || risk.level === 'critical' || intent.kind === 'crisis'
+      ? ''
+      : formatTrendContext(listActiveTrendTerms(8));
   const personalMemoryText = formatPersonalMemories(personalMemoryHits, recentDialogs, {
     question: fullText,
     continuePrevious: intent.kind === 'followup'
@@ -926,7 +932,10 @@ ${episodeNote ? `【这轮有几件事】\n${episodeNote}\n` : ''}
 
 【内部主题背景 · 仅供你组织思路，不要复述、不要改变对用户的共情】
 ${wikiContext}
-（先回应用户原话和记忆里的具体细节；主题背景只用来把握方向，不要写成通用科普。）` : ''}
+（先回应用户原话和记忆里的具体细节；主题背景只用来把握方向，不要写成通用科普。）` : ''}${trendContext ? `
+
+【当下热点 · 仅供你理解流行语和时事语境，不要照搬复述、不要硬塞进回答】
+${trendContext}` : ''}
 
 【用户提问】
 问题：${question}

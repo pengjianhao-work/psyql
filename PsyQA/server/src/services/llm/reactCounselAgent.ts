@@ -160,6 +160,9 @@ function normalizeReActAction(text: string): string | undefined {
     return 'suggest_counseling_resource';
   }
   if (line.includes('wiki')) return 'search_wiki';
+  if (line.includes('trend') || line.includes('热搜') || line.includes('流行语') || line.includes('时事')) {
+    return 'lookup_trend';
+  }
   if (line.includes('profile') || line.includes('画像')) return 'get_user_profile';
   if (line.includes('knowledge') || line === 'search') return 'search_knowledge';
   const token = line.replace(/\s+/g, '_');
@@ -250,6 +253,17 @@ async function executeTool(
       }
       const hits = await searchWiki(query, { category: ctx.problem.category, topK: 2 });
       return hits.length ? formatWikiForPrompt(hits) : '没有匹配的主题知识页。';
+    }
+    case 'lookup_trend': {
+      if (ctx.risk.level === 'high' || ctx.risk.level === 'critical') {
+        return '高风险或危机时不查热点词条，优先安全与求助通道。';
+      }
+      const { lookupTrend } = await import('../trend/trendService');
+      const hits = lookupTrend(query, 5);
+      if (!hits.length) return '词库里没有匹配的本周流行语或时事词条。';
+      return hits
+        .map((t) => `· ${t.term}（${t.kind === 'slang' ? '流行语' : '时事'}）：${t.explanation}${t.example ? ` 例：${t.example}` : ''}`)
+        .join('\n');
     }
     case 'get_user_profile': {
       const { getOrRefreshUserProfile } = await import('../user/userProfileService');

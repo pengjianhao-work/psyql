@@ -71,6 +71,7 @@
     "wiki:build": "ts-node server/scripts/build-llm-wiki.ts",
     "wiki:health": "python ../scripts/eval_wiki.py",
     "wiki:build:dry": "ts-node server/scripts/build-llm-wiki.ts --dry-run --per-category=2 --sleep-ms=0",
+    "trends:build": "ts-node server/scripts/build-trend-digest.ts",
     "export:lora-dataset": "python ../scripts/export_lora_dataset.py",
     "train:lora": "python ../scripts/train_lora.py",
     "pipeline:lora": "python ../scripts/export_lora_dataset.py && python ../scripts/train_lora.py",

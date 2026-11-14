@@ -45,6 +45,11 @@ export const COUNSEL_TOOL_DEFS: ToolDef[] = [
       'suggest_counseling_resource：给出现实求助渠道（身边可信任的人、校内心理中心、心理援助热线），Action Input: {}'
   },
   {
+    name: 'lookup_trend',
+    signature:
+      'lookup_trend：查询本周网络流行语/时事词条的解释（用户说了生僻梗或问热点时用），Action Input: {"query":"词或话题"}'
+  },
+  {
     name: 'reflect_psych',
     signature: 'reflect_psych：查看当前已融合的心理分析结论（无需参数），Action Input: {}'
   },
