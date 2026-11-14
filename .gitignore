@@ -27,6 +27,20 @@ tools/qdrant/
 server/data/*.json
 !server/data/.gitkeep
 
+# 运行时聊天与交互记录
+**/user_history.json
+**/agent_interaction_log.json
+
+# 训练下载缓存（脚本会重新写入 training_data/.hf_cache）
+**/.hf_cache/
+
+# 本地向量引擎运行时（历史里曾提交 qdrant 数据目录与二进制）
+qdrant_data/
+**/qdrant.exe
+
+# 调度与运行日志
+logs/
+
 # 系统与日志
 .DS_Store
 Thumbs.db

@@ -15,6 +15,13 @@ server/data/*.db
 server/data/*.db-shm
 server/data/*.db-wal
 server/data/school_stats_cache.json
+server/data/knowledge_scheduler_state.json
+server/data/load_test_progress.json
+server/data/test_accounts_credentials.json
+
+# 聊天与交互记录（运行时生成，勿提交）
+user_history.json
+agent_interaction_log.json
 # 视频采集的待审核清单（本地生成，不入库）
 server/data/pending_videos*.json
 # 视频向量索引（由 npm run videos:embed 生成，体积大且可重建）
