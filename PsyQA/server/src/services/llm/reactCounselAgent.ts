@@ -10,6 +10,7 @@ import { sanitizeForumStyle } from '../../utils/forumStyleSanitizer';
 import { formatWikiForPrompt, searchWiki } from '../wiki/wikiService';
 import type { WikiHit } from '../wiki/wikiTypes';
 import { COUNSEL_TOOL_DEFS, TOOL_NAMES } from './counselTools';
+import { resolveCounselSkill } from '../skills/counselSkills';
 
 export interface ReActStep {
   step: number;
@@ -175,6 +176,9 @@ function normalizeReActAction(text: string): string | undefined {
     return 'suggest_counseling_resource';
   }
   if (line.includes('wiki')) return 'search_wiki';
+  if (line.includes('web') || line.includes('联网') || line.includes('实时') || line.includes('新闻') || line.includes('搜索')) {
+    return 'search_web';
+  }
   if (line.includes('trend') || line.includes('热搜') || line.includes('流行语') || line.includes('时事')) {
     return 'lookup_trend';
   }
@@ -238,6 +242,8 @@ async function executeTool(
   plan: ReActPlan
 ): Promise<string> {
   const query = groundedQuery(ctx, String(input.query || input.q || ctx.question));
+  // skill 守卫与 orchestrator 同一份定义：高风险/危机不注入背景类上下文
+  const skill = resolveCounselSkill({ riskLevel: ctx.risk.level });
 
   switch (action) {
     case 'search_knowledge': {
@@ -252,12 +258,10 @@ async function executeTool(
       // 统一检索：RAG 结果之外附带 wiki 主题页和本周热点词条，减少额外工具轮数
       const { searchWiki, formatWikiForPrompt } = await import('../wiki/wikiService');
       const { lookupTrend } = await import('../trend/trendService');
-      const wikiHits =
-        ctx.risk.level === 'high' || ctx.risk.level === 'critical'
-          ? []
-          : await searchWiki(query, { category: ctx.problem.category, topK: 2 });
-      const trendHits =
-        ctx.risk.level === 'high' || ctx.risk.level === 'critical' ? [] : lookupTrend(query, 3);
+      const wikiHits = skill.topicBackground
+        ? await searchWiki(query, { category: ctx.problem.category, topK: 2 })
+        : [];
+      const trendHits = skill.topicBackground ? lookupTrend(query, 3) : [];
       const parts = [formatPrefetchKnowledge(items)];
       const wikiText = formatWikiForPrompt(wikiHits);
       if (wikiText) parts.push('【主题知识页】\n' + wikiText);
@@ -283,14 +287,14 @@ async function executeTool(
       return formatPrefetchMemory(ctx, hits);
     }
     case 'search_wiki': {
-      if (ctx.risk.level === 'high' || ctx.risk.level === 'critical') {
+      if (!skill.topicBackground) {
         return '高风险或危机时不注入主题知识页，优先安全与求助通道。';
       }
       const hits = await searchWiki(query, { category: ctx.problem.category, topK: 2 });
       return hits.length ? formatWikiForPrompt(hits) : '没有匹配的主题知识页。';
     }
     case 'lookup_trend': {
-      if (ctx.risk.level === 'high' || ctx.risk.level === 'critical') {
+      if (!skill.topicBackground) {
         return '高风险或危机时不查热点词条，优先安全与求助通道。';
       }
       const { lookupTrend } = await import('../trend/trendService');
@@ -299,6 +303,15 @@ async function executeTool(
       return hits
         .map((t) => `· ${t.term}（${t.kind === 'slang' ? '流行语' : '时事'}）：${t.explanation}${t.example ? ` 例：${t.example}` : ''}`)
         .join('\n');
+    }
+    case 'search_web': {
+      if (!skill.web) {
+        return '高风险或危机时不联网检索，优先安全与求助通道。';
+      }
+      const { searchWeb, formatWebResultsForPrompt } = await import('../search/webSearchService');
+      const hits = await searchWeb(query, { budgetMs: 6_000, maxResults: 5 });
+      const text = formatWebResultsForPrompt(hits);
+      return text || '联网没有搜到相关结果，可以基于已有信息回答并如实说明不确定。';
     }
     case 'emotion_timeline': {
       const { getMoodTrend } = await import('../user/moodCheckinService');

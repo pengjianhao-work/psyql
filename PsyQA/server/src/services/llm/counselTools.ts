@@ -50,6 +50,11 @@ export const COUNSEL_TOOL_DEFS: ToolDef[] = [
       'lookup_trend：查询本周网络流行语/时事词条的解释（用户说了生僻梗或问热点时用），Action Input: {"query":"词或话题"}'
   },
   {
+    name: 'search_web',
+    signature:
+      'search_web：联网搜索最新背景（比赛结果、新闻、版本更新等时效信息；用户问"最近/今天"的事时用），Action Input: {"query":"搜索词"}'
+  },
+  {
     name: 'emotion_timeline',
     signature:
       'emotion_timeline：查看该用户情绪打卡的趋势统计（近7天 vs 之前、常见心情），Action Input: {}'
