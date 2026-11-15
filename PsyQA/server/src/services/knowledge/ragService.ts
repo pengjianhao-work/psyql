@@ -31,6 +31,8 @@ let knowledgeBase: KnowledgeItem[] = [];
 const MIN_KNOWLEDGE_SCORE = 3;
 const MIN_RELATIVE_RATIO = 0.5;
 const RAG_CACHE_TTL_MS = 120_000;
+/** 标题含「怎么/如何/方法/技巧」等求助信号的知识条目 */
+const ACTIONABLE_HINT = /(怎么|如何|方法|技巧|步骤|话术|练习|调节|缓解|应对)/;
 
 function ragCacheKey(
   query: string,
@@ -133,6 +135,11 @@ export function scoreKnowledgeItem(
   }
 
   score += tagBoost(item, options?.problemCategory, options?.emotion);
+
+  // 标题带「怎么/如何/方法」等求助信号的条目小幅加权，让回答能引用更具体的方法/话术
+  if (ACTIONABLE_HINT.test(item.question)) {
+    score += 0.5;
+  }
 
   if (options?.vectorSimilarity) {
     score += options.vectorSimilarity * 5;

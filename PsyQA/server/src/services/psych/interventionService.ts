@@ -6,6 +6,8 @@ export interface InterventionPlan {
   structureHint: string;
   openingPhrase: string;
   closingPhrase: string;
+  /** 可直接改写进回答的话术/微步骤参考（不进 safety_plan） */
+  actionScripts?: string[];
 }
 
 type FrameworkCore = Omit<InterventionPlan, 'openingPhrase' | 'closingPhrase'>;
@@ -91,6 +93,65 @@ export function labelFramework(frameworkId?: string): string {
 function fourStep(empathy: string, clarify: string, action: string, close: string): string {
   return `① 共情：${empathy} ② 澄清/命名：${clarify} ③ 今日小步：${action} ④ 收尾：${close}`;
 }
+
+/** 各框架可直接使用的话术/微步骤库：供回答改写引用，须保持非医疗、非诊断口吻 */
+const ACTION_SCRIPTS: Record<string, string[]> = {
+  cbt_academic: [
+    '番茄钟：25 分钟专注 + 5 分钟休息，先从「今晚只写开题 3 行」这种最小任务开始',
+    '考前自我对话：「我现在能控制的只有这一页纸，先把它弄明白」',
+    '焦虑上头时写下脑中最担心的一件事，评估它真实发生的概率和可控程度'
+  ],
+  cbt_general: [
+    '把大任务拆成「15 分钟能做完」的粒度，完成一小步就给自己记一笔',
+    '压力大时先做 4-6 次慢呼吸，再决定要不要立刻处理这件事',
+    '睡前把明天最重要的 1 件事写下来，告诉自己「已记录，明天再做」'
+  ],
+  interpersonal_activation: [
+    '「我信息」公式：我感觉…＋当…时…＋我希望…，例如「我感觉有点被忽略，当群里没人回我消息时，我希望你能回个表情」',
+    '低负担开场：「最近还好吗？想跟你说个小事，不用急着给建议」',
+    '先共处不说话也可以：一起吃饭、散步，熟悉感本身就是连接'
+  ],
+  interpersonal_general: [
+    '「我信息」公式：我感觉…＋当…时…＋我希望…，先说感受不说对错',
+    '先问对方「你现在方便聊吗」，给彼此留退出的余地',
+    '一次只提一件事，不翻旧账、不扩大化'
+  ],
+  emotion_boundary: [
+    '事后单独谈：「刚才那件事我很难受，想找个时间单独说，不在孩子/人多的时候争」',
+    '先稳定再沟通：激动时先走开 10 分钟或做 3 分钟拉伸，再回来谈',
+    '表达边界：「我可以接受你按你的方式带，但请不要当着孩子否定我」'
+  ],
+  mi_future: [
+    '本周只做 1 个探索行动：问一位学长/学姐「你当年怎么选的」，或查一门感兴趣的课',
+    '列「我在乎的 3 件事」和「暂时不确定的」，允许答案是「还不知道」',
+    '把大目标拆成本周可验证的小实验，而不是一次定终身'
+  ],
+  mindfulness_light: [
+    '4-6 呼吸法：吸气 4 秒、屏息 2 秒、呼气 6 秒，重复 5 轮',
+    '5-4-3-2-1 grounding：说出眼前 5 样东西、摸到 4 种触感、听到 3 种声音',
+    '给情绪命名：「我现在是慌/紧/空/沉」，说出来本身就能降一点强度'
+  ],
+  mindfulness_general: [
+    '情绪来了先停 10 秒，观察身体哪个部位最紧，再决定怎么回应',
+    '写一句自我关怀：「我现在很难受，这很正常，我允许自己慢慢来」',
+    '每天固定 5 分钟什么都不做，只关注呼吸或身体感受'
+  ],
+  romantic_support: [
+    '想发消息时先放进草稿箱 30 分钟，情绪过了再决定发不发',
+    '「我信息」表达需要：「我最近有点不安，需要你多跟我说说你的安排」',
+    '分清「对方没回消息」和「对方不在乎我」是两件事，先确认事实再解读'
+  ],
+  identity_support: [
+    '记录 2 条今天做得还行的小事，不评价大小，只记录事实',
+    '把「我是不是很差」改写成「我现在遇到了什么具体困难」',
+    '问自己「一年后的我希望我现在做了什么」，从答案里找一个本周能做的'
+  ],
+  supportive_counseling: [
+    '先做一件照顾身体的事：喝口水、洗把脸、下楼走 10 分钟',
+    '把压在心里的事写下来或对信任的人说一遍，不用解决它，只是让它出来',
+    '给自己定一个「今天只做到这里」的边界，允许不完美'
+  ]
+};
 
 export function getInterventionPlan(
   emotion: EmotionType,
@@ -276,7 +337,8 @@ export function getInterventionPlan(
   return {
     ...picked,
     openingPhrase: phrases.open,
-    closingPhrase: phrases.close
+    closingPhrase: phrases.close,
+    actionScripts: ACTION_SCRIPTS[picked.frameworkId]
   };
 }
 

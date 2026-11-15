@@ -72,6 +72,13 @@ import { getSeasonalRagBoost } from '../knowledge/seasonalRagPolicy';
 import { searchWiki, formatWikiForPrompt } from '../wiki/wikiService';
 import type { WikiHit } from '../wiki/wikiTypes';
 import { listActiveTrendTerms, formatTrendContext } from '../trend/trendService';
+import {
+  searchWeb,
+  needsFreshWebSearch,
+  formatWebResultsForPrompt,
+  type WebResult
+} from '../search/webSearchService';
+import { resolveCounselSkill, shouldPrefetchWeb, isSafetyContext } from '../skills/counselSkills';
 import { env } from '../../config/env';
 
 export interface CombinedAnswer {
@@ -722,19 +729,30 @@ const generateAIAnswerBody = async (
           () => [] as SearchResult[]
         )
       : Promise.resolve([] as SearchResult[]);
-  const wikiPromise =
-    ruleRisk.level === 'high' || ruleIntent.kind === 'crisis'
-      ? Promise.resolve([] as WikiHit[])
-      : searchWiki(ruleRetrievalQuery, { category: ruleProblem.category, topK: 2 });
+  // skill 决定这轮允许注入哪些背景（危机只留安全路径）；时效性问题联网补背景
+  const freshInfo = needsFreshWebSearch(fullText);
+  const skill = resolveCounselSkill({
+    riskLevel: ruleRisk.level,
+    intentKind: ruleIntent.kind,
+    category: ruleProblem.category,
+    freshInfo
+  });
+  const wikiPromise = skill.topicBackground
+    ? searchWiki(ruleRetrievalQuery, { category: ruleProblem.category, topK: 2 })
+    : Promise.resolve([] as WikiHit[]);
+  const webPromise = shouldPrefetchWeb(skill, freshInfo)
+    ? searchWeb(question, { budgetMs: 3_500, maxResults: 5 }).catch(() => [] as WebResult[])
+    : Promise.resolve([] as WebResult[]);
 
-  const [llmOk, psychBundle, retrievedKnowledge, vectorHits, personalMemoryHits, wikiPrefetched] =
+  const [llmOk, psychBundle, retrievedKnowledge, vectorHits, personalMemoryHits, wikiPrefetched, webPrefetched] =
     await Promise.all([
       llmPromise,
       psychPromise,
       retrievalPromise,
       vectorPromise,
       memoryPromise,
-      wikiPromise
+      wikiPromise,
+      webPromise
     ]);
   const {
     emotion: rawEmotion,
@@ -783,17 +801,15 @@ const generateAIAnswerBody = async (
   );
 
   const knowledgeContext = formatKnowledgeForPrompt(rerankedKnowledge);
+  // 融合后风险再过一次安全守卫（rule 信号可能低估）；只影响注入，不影响预取
+  const safetyPath = isSafetyContext(risk.level, intent.kind);
   // 高风险/危机不走 wiki 背景，避免稀释安全路径；wiki 查询失败也不影响回答
-  const wikiHits =
-    risk.level === 'high' || risk.level === 'critical' || intent.kind === 'crisis'
-      ? []
-      : wikiPrefetched;
+  const wikiHits = safetyPath ? [] : wikiPrefetched;
   const wikiContext = formatWikiForPrompt(wikiHits);
   // 趋势词条是本地 SQLite 读取，成本可忽略；与 wiki 同样的安全守卫
-  const trendContext =
-    risk.level === 'high' || risk.level === 'critical' || intent.kind === 'crisis'
-      ? ''
-      : formatTrendContext(listActiveTrendTerms(8));
+  const trendContext = safetyPath ? '' : formatTrendContext(listActiveTrendTerms(8));
+  // 联网结果同样过融合后风险守卫；只进提示词，不进 knowledgeSources
+  const webContext = safetyPath ? '' : formatWebResultsForPrompt(webPrefetched);
   const personalMemoryText = formatPersonalMemories(personalMemoryHits, recentDialogs, {
     question: fullText,
     continuePrevious: intent.kind === 'followup'
@@ -849,14 +865,14 @@ const generateAIAnswerBody = async (
   const answerShape =
     intent.kind === 'venting'
       ? `【回答篇幅与结构 · 以倾诉为准】
-- 全文约 350–600 汉字
-- 第一块用 2–3 段回应用户原话，约 150–220 字，肯定感受，不要诊断
-- 第二块给 3–4 条具体建议（用「·」分行，每条 20–45 字），不要只安慰
+- 全文约 450–700 汉字
+- 第一块用 3–4 段回应用户原话，约 200–280 字：命名情绪、正常化感受、去病耻（「这不是你的错」类表达），不要诊断
+- 第二块给 3–5 条具体建议（用「·」分行，每条 25–60 字）；其中 1 条可以是「可以直接发给对方/照做」的话术或微步骤，须贴合用户原话改写
 - 最后一句：${intervention.closingPhrase}`
       : intent.kind === 'followup'
         ? `【回答篇幅与结构 · 以追问为准】
-- 顺着上一轮往下说，约 300–500 汉字，不要重开话题
-- 先接住对方的追问，再给 3–4 条具体建议（用「·」分行，每条 20–45 字）
+- 顺着上一轮往下说，约 350–550 汉字，不要重开话题
+- 先接住对方的追问，再给 3–4 条具体建议（用「·」分行，每条 25–60 字）；其中 1 条可以是可直接使用的话术
 - 最后一句：${intervention.closingPhrase}`
         : intent.kind === 'crisis'
           ? `【回答篇幅与结构 · 以安全为准】
@@ -914,15 +930,18 @@ ${llmRationale ? `智能分析要点：${llmRationale}` : ''}
 
 【咨询干预框架】框架：${intervention.frameworkName}
 请按以下结构展开（每一段都要写完整句子，不要只写标题或关键词）：${intervention.structureHint}
+${intervention.actionScripts?.length ? `
+【可直接使用的话术/微步骤参考】（挑 1 条贴合用户处境改写进建议，不要照抄、不要全列）
+${intervention.actionScripts.map((s) => `· ${s}`).join('\n')}` : ''}
 ${recentRiskNote}
 ${answerVariationHint ? `\n${answerVariationHint}\n` : ''}
 
 ${answerShape || `【回答篇幅与结构 · 必须遵守】
-- 全文约 **350–600 汉字**，分 **两大块**，不要第三块行动清单
-- **第一块（详细共情，约 150–220 字）**：用 2–3 段回应用户原话，肯定感受、说明「愿意说出来很不容易」、可点到宿舍/人际/学业等情境，但不要诊断
-- **第二块（具体建议，约 120–200 字）**：写框架名「${intervention.frameworkName}」+ **3–4 条**具体建议（用「·」分行，每条 20–45 字）；知识库最多一句「详见下方参考」
+- 全文约 **450–700 汉字**，分 **两大块**，不要第三块行动清单
+- **第一块（心理疏导，约 200–280 字）**：用 3–4 段回应用户原话，做到：① 命名情绪（帮用户把模糊感受说出来，如「这听起来是委屈多过生气」）；② 正常化（说明这种感受在类似处境很常见）；③ 去病耻（「这不是你的错/不是你不够好」类表达）；④ 可点到宿舍/人际/学业等具体情境，但不要诊断
+- **第二块（具体建议，约 180–280 字）**：写框架名「${intervention.frameworkName}」+ **3–5 条**具体建议（用「·」分行，每条 25–60 字）；其中 **1 条**可以是「可以直接发给对方/照做」的话术或微步骤（注明说给谁听/怎么做）；知识库最多一句「详见下方参考」
 - 最后单独一句结尾：${intervention.closingPhrase}
-- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何 3 步清单**`}
+- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何多步清单**`}
 
 【长期向量记忆】
 ${personalMemoryText || '没有检索到更早的相关原话。不要编造过去。'}
@@ -935,7 +954,10 @@ ${wikiContext}
 （先回应用户原话和记忆里的具体细节；主题背景只用来把握方向，不要写成通用科普。）` : ''}${trendContext ? `
 
 【当下热点 · 仅供你理解流行语和时事语境，不要照搬复述、不要硬塞进回答】
-${trendContext}` : ''}
+${trendContext}` : ''}${webContext ? `
+
+【实时检索 · 联网背景】
+${webContext}` : ''}
 
 【用户提问】
 问题：${question}
@@ -943,7 +965,8 @@ ${description ? `补充描述：${description}` : ''}
 
 【回答要求】
 - 以${tone}的语气，像辅导员面对面简短交流
-- 先共情，再给建议；不做医疗诊断
+- 先共情疏导，再给建议；不做医疗诊断
+- 疏导部分注意：命名情绪、正常化感受、去病耻，不要只重复「我理解你的感受」
 - **禁止**以重复或复述用户原话作为开头（不要写「${question.slice(0, 30)}…」这类开场）
 - 若有参考知识，最多用一两句话概括，不要展开成多篇
 - 语气、敏感点和以前有用的做法要符合这个人。这轮没提到的旧事不要写进回答
