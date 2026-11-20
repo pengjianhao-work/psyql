@@ -1,7 +1,7 @@
 import { SupportPreferencesCard } from '../components/SupportPreferencesCard';
 import type { SupportAnswers } from '../api';
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { Message, QuestionResponse } from '../types';
+import { CounselMode, Message, QuestionResponse } from '../types';
 import {
   askQuestion,
   askQuestionStream,
@@ -39,6 +39,7 @@ import { AgentProfileCard } from '../components/AgentProfileCard';
 import { StudentProfileCard } from '../components/StudentProfileCard';
 import { PrivacyEthicsModal, ethicsStorageKey, reportEthicsSessionKey } from '../components/PrivacyEthicsModal';
 import { VideoCenterDrawer } from '../components/VideoCenterDrawer';
+import { WikiReaderModal } from '../components/WikiReaderModal';
 import {
   formatStudentIdentityLine,
   getStudentProfileCompleteness
@@ -48,6 +49,7 @@ import { GuestModeBanner } from '../components/GuestModeBanner';
 import { CrisisSupportBanner } from '../components/CrisisSupportBanner';
 import { ExportMenu, ExportFormat } from '../components/ExportMenu';
 import { MoodCheckinCard } from '../components/MoodCheckinCard';
+import { TaskBoardPanel } from '../components/TaskBoardPanel';
 import { ToastStack } from '../components/Toast';
 import { RuntimeStatusBar } from '../components/RuntimeStatusBar';
 import { BackendOfflineBanner } from '../components/BackendOfflineBanner';
@@ -139,6 +141,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [insightsRefreshing, setInsightsRefreshing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [counselMode, setCounselMode] = useState<CounselMode>('companion');
+  const [wikiReader, setWikiReader] = useState<{ slug: string; title: string } | null>(null);
   const [trendCareOpen, setTrendCareOpen] = useState(false);
   const [trendCareReason, setTrendCareReason] = useState('');
   const sendLockRef = useRef(false);
@@ -502,7 +506,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           const label = code ? labels[code] || code : '';
           pushToast(label ? `${label}：${msg}` : msg, 'warning');
         }
-      }, { signal: streamAbortRef.current.signal, conversationId: conversationIdRef.current });
+      }, { signal: streamAbortRef.current.signal, conversationId: conversationIdRef.current, mode: counselMode });
 
       if (aborted) {
         return;
@@ -510,7 +514,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
 
       if (!response) {
         setMessages((prev) => prev.filter((m) => m.id !== botId));
-        response = await askQuestion(question, description, currentUserId);
+        response = await askQuestion(question, description, currentUserId, counselMode);
         // 流式已产生的内容已被移除，改由下方非流式分支完整写入回复
         streamOk = false;
       } else if (!streamOk) {
@@ -521,6 +525,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                   ...m,
                   content: response!.answer,
                   knowledgeSources: response!.knowledgeSources,
+                  wikiSource: response!.wikiSource ?? null,
                   similarQuestions: response!.similarQuestions,
                   emotion: response!.emotion,
                   risk: response!.risk,
@@ -547,6 +552,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                   ...m,
                   content: response!.answer,
                   knowledgeSources: response!.knowledgeSources,
+                  wikiSource: response!.wikiSource ?? null,
                   similarQuestions: response!.similarQuestions,
                   emotion: response!.emotion,
                   risk: response!.risk,
@@ -759,7 +765,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     runtimeHealth,
     refreshProgressAndHistory,
     refreshConversations,
-    setConversationId
+    setConversationId,
+    counselMode
   ]);
 
   const handleSimilarQuestionClick = (question: string) => {
@@ -1213,6 +1220,9 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 />
               }
               quickPrompts={filteredQuickPrompts}
+              counselMode={counselMode}
+              onCounselModeChange={setCounselMode}
+              onOpenWiki={(slug, title) => setWikiReader({ slug, title })}
               hideCompanions={Boolean(crisisLevel)}
               onOpenVideoCenter={() => setVideoDrawerOpen(true)}
             />
@@ -1269,6 +1279,13 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 </InsightsPanelShell>
               </div>
             )}
+            {currentUserId && (
+              <div className="insights-col insights-col-tasks">
+                <InsightsPanelShell title="每日打卡看板" className="insights-col-tasks">
+                  <TaskBoardPanel userId={currentUserId} />
+                </InsightsPanelShell>
+              </div>
+            )}
           </div>
           )}
         </div>
@@ -1286,6 +1303,10 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           setTrendCareOpen(false);
           pushToast('可在「个人资料」中查看辅导员联系方式，或前往学校心理中心预约', 'info');
         }}
+      />
+      <WikiReaderModal
+        page={wikiReader}
+        onClose={() => setWikiReader(null)}
       />
       <ToastStack messages={toasts} onDismiss={dismissToast} />
     </div>

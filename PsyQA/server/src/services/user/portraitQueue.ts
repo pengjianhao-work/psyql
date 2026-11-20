@@ -6,6 +6,7 @@ import {
 } from '../common/historyManager';
 import { PsychStatModel } from '../psych/psychStatsService';
 import { ConversationPortrait } from '../common/historyManager';
+import { scheduleFactDistillation } from './factDistillService';
 
 const inFlight = new Set<string>();
 
@@ -35,6 +36,7 @@ export function schedulePortraitGeneration(params: {
         tryLlm: params.tryLlm
       });
       updateDialogPortrait(params.userId, params.dialogTime, portrait);
+      scheduleFactDistillation(params.userId);
     } catch (err) {
       console.warn('Async portrait generation failed:', err);
     } finally {

@@ -35,6 +35,7 @@ import { embedText } from '../knowledge/embeddingService';
 import { embedMultiLocal } from '../knowledge/localBgeClient';
 import { cacheGetOrSet } from '../../utils/memoryCache';
 import { getLockedMemoryBoost, isMemoryArchived } from './memoryTagService';
+import { formatUserFactsForPrompt } from './userFactService';
 import {
   PHASE_LABELS,
   computeTimelineUserWeight,
@@ -455,6 +456,9 @@ export function buildAgentPromptContext(userId: string): string {
   if (latestMonthly?.summary) {
     parts.push(`近月心理特征：${latestMonthly.summary}`);
   }
+
+  const factsBlock = formatUserFactsForPrompt(userId);
+  if (factsBlock) parts.push(factsBlock);
 
   if (profile.agentSystemPrompt?.trim()) {
     parts.push(`【专属Agent人设】\n${profile.agentSystemPrompt.trim()}`);

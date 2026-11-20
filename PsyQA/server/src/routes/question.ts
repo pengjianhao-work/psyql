@@ -10,7 +10,8 @@ import {
   clearUserHistoryData,
   getSystemStats,
   getGroupedHistory,
-  getInsightsStatus
+  getInsightsStatus,
+  getPublishedWikiPage
 } from '../controllers/questionController';
 import { postAnalyzePsych } from '../controllers/analyzeController';
 import { postSelfRating } from '../controllers/ratingController';
@@ -56,6 +57,10 @@ import {
   getMemoryTags,
   patchMemoryTag,
   postMemoryBatchArchive,
+  getMemoryFacts,
+  patchMemoryFact,
+  deleteMemoryFact,
+  postDistillMemoryFacts,
   getSeasonalRag,
   getImplicitNeeds,
   postBatchResolveTranscript
@@ -63,7 +68,11 @@ import {
 import {
   exportUserData,
   getMoodCheckins,
-  postMoodCheckin
+  postMoodCheckin,
+  getTaskBoardHandler,
+  postTaskBoardTask,
+  postTaskBoardToggle,
+  deleteTaskBoardTask
 } from '../controllers/userToolsController';
 import {
   attachAuth,
@@ -114,11 +123,20 @@ questionRouter.post('/cbt-complete', ...studentApi, postCbtComplete);
 questionRouter.get('/memory-tags', ...studentApi, getMemoryTags);
 questionRouter.patch('/memory-tag', ...studentApi, patchMemoryTag);
 questionRouter.post('/memory-batch-archive', ...studentApi, postMemoryBatchArchive);
+questionRouter.get('/memory-facts', ...studentApi, getMemoryFacts);
+questionRouter.patch('/memory-fact', ...studentApi, patchMemoryFact);
+questionRouter.post('/memory-fact/delete', ...studentApi, deleteMemoryFact);
+questionRouter.post('/memory-facts/distill', ...studentApi, postDistillMemoryFacts);
 questionRouter.get('/implicit-needs', ...studentApi, getImplicitNeeds);
 questionRouter.get('/seasonal-rag', getSeasonalRag);
 questionRouter.get('/export', ...studentApi, exportUserData);
 questionRouter.post('/mood-checkin', ...studentApi, postMoodCheckin);
 questionRouter.get('/mood-checkins', ...studentApi, getMoodCheckins);
+questionRouter.get('/task-board', ...studentApi, getTaskBoardHandler);
+questionRouter.post('/task-board/tasks', ...studentApi, postTaskBoardTask);
+questionRouter.post('/task-board/toggle', ...studentApi, postTaskBoardToggle);
+questionRouter.post('/task-board/tasks/delete', ...studentApi, deleteTaskBoardTask);
+questionRouter.get('/wiki/:slug', ...studentApi, getPublishedWikiPage);
 
 questionRouter.get('/stats', requireAuth, requireRole('admin'), getSystemStats);
 questionRouter.get('/admin/agent-profile', requireAuth, requireRole('admin'), getUserAgentProfileAdmin);

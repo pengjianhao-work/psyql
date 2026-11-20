@@ -22,6 +22,9 @@ import { vectorDb } from '../services/knowledge/vectorDBService';
 import { cacheGetOrSet } from '../utils/memoryCache';
 import { env } from '../config/env';
 import { getInsightsStatusForUser } from '../services/user/insightsStatus';
+import { CounselMode, COUNSEL_MODES } from '../services/question/answerOrchestrator';
+import { getWikiPage } from '../services/wiki/wikiStore';
+import { WikiSection } from '../services/wiki/wikiTypes';
 import {
   recommendVideos,
   shouldRecommendVideos
@@ -86,8 +89,13 @@ const updateUserMetrics = (
 function validateAskRequest(
   req: AuthRequest,
   res: Response
-): { userQuestion: string; description?: string; activeUserId: string; conversationId?: string } | null {
+): { userQuestion: string; description?: string; activeUserId: string; conversationId?: string; mode?: CounselMode } | null {
   const { question: userQuestion, description } = req.body;
+  const rawMode = req.body?.mode;
+  const mode =
+    typeof rawMode === 'string' && (COUNSEL_MODES as readonly string[]).includes(rawMode)
+      ? (rawMode as CounselMode)
+      : undefined;
   const normalizedUserId = resolveStudentUserId(req, res, req.body?.userId);
   if (!normalizedUserId) return null;
 
@@ -115,7 +123,8 @@ function validateAskRequest(
     userQuestion: String(userQuestion),
     description,
     activeUserId: normalizedUserId,
-    conversationId: req.body?.conversationId ? String(req.body.conversationId) : undefined
+    conversationId: req.body?.conversationId ? String(req.body.conversationId) : undefined,
+    mode
   };
 }
 
@@ -207,6 +216,7 @@ async function buildAskResponsePayload(
     dialogId: result.dialogId,
     conversationId: result.conversationId,
     portrait: result.portrait,
+    wikiSource: result.wikiSource ?? null,
     portraitPending: result.portrait?.summary?.includes('生成中') ?? false,
     reportPending: result.report?.includes('详细心理评估报告生成中') ?? false,
     videos
@@ -285,7 +295,7 @@ export const getQuestionById = async (req: Request, res: Response) => {
 export const askQuestion = async (req: AuthRequest, res: Response) => {
   const parsed = validateAskRequest(req, res);
   if (!parsed) return;
-  const { userQuestion, description, activeUserId, conversationId } = parsed;
+  const { userQuestion, description, activeUserId, conversationId, mode } = parsed;
   const requestStart = Date.now();
 
   try {
@@ -302,7 +312,8 @@ export const askQuestion = async (req: AuthRequest, res: Response) => {
       [],
       activeUserId,
       undefined,
-      conversationId
+      conversationId,
+      mode
     );
     if (result.similarQuestions.length === 0 && similarReady) {
       result.similarQuestions = similarReady;
@@ -324,7 +335,7 @@ export const askQuestion = async (req: AuthRequest, res: Response) => {
 export const askQuestionStream = async (req: AuthRequest, res: Response) => {
   const parsed = validateAskRequest(req, res);
   if (!parsed) return;
-  const { userQuestion, description, activeUserId, conversationId } = parsed;
+  const { userQuestion, description, activeUserId, conversationId, mode } = parsed;
   const requestStart = Date.now();
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -356,7 +367,8 @@ export const askQuestionStream = async (req: AuthRequest, res: Response) => {
         onAnswerReady: (answer) => sendEvent({ type: 'answer', text: answer }),
         onStreamReset: () => sendEvent({ type: 'reset' })
       },
-      conversationId
+      conversationId,
+      mode
     );
 
     if (result.similarQuestions.length === 0 && similarReady) {
@@ -407,6 +419,25 @@ export const getUserProgressText = (req: AuthRequest, res: Response) => {
   if (!userId) return;
   const progressText = getProgressText(userId);
   res.json({ progress: progressText });
+};
+
+export const getPublishedWikiPage = (req: Request, res: Response) => {
+  const slug = String(req.params.slug || '').trim();
+  const page = slug ? getWikiPage(slug) : null;
+  if (!page || page.status !== 'published') {
+    res.status(404).json({ error: '页面不存在或未发布' });
+    return;
+  }
+  res.json({
+    slug: page.slug,
+    title: page.title,
+    category: page.category,
+    summary: page.summary,
+    sections: page.sections as WikiSection[],
+    relatedQuestions: page.relatedQuestions,
+    sourceRefs: page.sourceRefs,
+    updatedAt: page.updatedAt
+  });
 };
 
 export const getGroupedHistory = (req: AuthRequest, res: Response) => {

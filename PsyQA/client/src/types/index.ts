@@ -78,6 +78,30 @@ export interface Message {
   aborted?: boolean;
   /** 发送失败时，点这条系统消息可重试 */
   retryQuestion?: string;
+  /** 本轮回答引用的 Wiki 主题页（延伸阅读） */
+  wikiSource?: WikiSourceRef | null;
+}
+
+export interface WikiSourceRef {
+  slug: string;
+  title: string;
+  summary: string;
+}
+
+export interface WikiSection {
+  heading: string;
+  body: string;
+}
+
+export interface WikiPageDetail {
+  slug: string;
+  title: string;
+  category: string;
+  summary: string;
+  sections: WikiSection[];
+  relatedQuestions: string[];
+  sourceRefs: Array<{ docId: string; question: string; answer: string }>;
+  updatedAt: string;
 }
 
 export interface ReActStep {
@@ -140,6 +164,9 @@ export interface AnalysisSources {
 }
 
 export type IntentKind = 'greeting' | 'venting' | 'advice' | 'followup' | 'crisis' | 'offtopic';
+
+/** 对话模式：companion 陪伴倾诉（默认）/ guided 疏导练习 / insight 自我认知 / reading 知识阅读 */
+export type CounselMode = 'companion' | 'guided' | 'insight' | 'reading';
 
 export interface IntentAnalysis {
   kind: IntentKind;
@@ -317,6 +344,8 @@ export interface QuestionResponse {
   portraitPending?: boolean;
   /** 完整评估报告异步生成中时为 true */
   reportPending?: boolean;
+  /** 本轮回答引用的 Wiki 主题页 */
+  wikiSource?: WikiSourceRef | null;
 }
 
 export interface GroupedHistoryItem {

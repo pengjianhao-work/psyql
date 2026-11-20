@@ -1,7 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Message } from '../types';
+import { CounselMode, Message } from '../types';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+
+const MODE_OPTIONS: Array<{ id: CounselMode; label: string; hint: string }> = [
+  { id: 'companion', label: '陪伴倾诉', hint: '默认模式：先共情，再给建议' },
+  { id: 'guided', label: '疏导练习', hint: '一次问一个引导性问题，帮你自己想清楚' },
+  { id: 'insight', label: '自我认知', hint: '帮你看清情绪、想法和处境的关系' },
+  { id: 'reading', label: '知识阅读', hint: '以知识讲解为主，结构化、可查参考' }
+];
 
 interface ChatContainerProps {
   messages: Message[];
@@ -30,6 +37,9 @@ interface ChatContainerProps {
   onSelectSession?: (id: string) => void;
   hideCompanions?: boolean;
   onOpenVideoCenter?: () => void;
+  onOpenWiki?: (slug: string, title: string) => void;
+  counselMode?: CounselMode;
+  onCounselModeChange?: (mode: CounselMode) => void;
 }
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({
@@ -58,7 +68,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   onEndSession,
   onSelectSession,
   hideCompanions = false,
-  onOpenVideoCenter
+  onOpenVideoCenter,
+  onOpenWiki,
+  counselMode = 'companion',
+  onCounselModeChange
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -207,6 +220,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             message={message}
             knowledgeSources={message.knowledgeSources}
             onSimilarQuestionClick={onSimilarQuestionClick}
+            onOpenWiki={onOpenWiki}
             onRetry={onRetry}
           />
         ))}
@@ -295,6 +309,24 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       </div>
 
       {userTurns >= 10 && <p className="session-close-hint">今天先聊到这？我随时在。</p>}
+
+      {onCounselModeChange && (
+        <div className="mode-bar" role="tablist" aria-label="对话模式">
+          {MODE_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              role="tab"
+              aria-selected={counselMode === opt.id}
+              className={`mode-chip${counselMode === opt.id ? ' mode-chip-active' : ''}`}
+              onClick={() => onCounselModeChange(opt.id)}
+              title={opt.hint}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <ChatInput
         onSend={onSend}

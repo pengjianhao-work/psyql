@@ -8,6 +8,7 @@ interface ChatMessageProps {
   message: Message;
   knowledgeSources?: KnowledgeItem[];
   onSimilarQuestionClick?: (question: string) => void;
+  onOpenWiki?: (slug: string, title: string) => void;
   onRetry?: (question: string) => void;
 }
 
@@ -79,6 +80,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   knowledgeSources,
   onSimilarQuestionClick,
+  onOpenWiki,
   onRetry
 }) => {
   const [thinkOpen, setThinkOpen] = useState(Boolean(message.reactTrace?.length) && !message.content);
@@ -253,6 +255,34 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </section>
         )}
 
+        {!streaming && isBot && message.wikiSource && (
+          <button
+            type="button"
+            className="wiki-source-card"
+            onClick={() => onOpenWiki?.(message.wikiSource!.slug, message.wikiSource!.title)}
+          >
+            <span className="wiki-source-icon" aria-hidden="true">📖</span>
+            <span className="wiki-source-text">
+              <strong>{message.wikiSource.title}</strong>
+              <em>{message.wikiSource.summary}</em>
+            </span>
+            <span className="wiki-source-cta">读全文 →</span>
+          </button>
+        )}
+
+        {!streaming && isBot && knowledgeList.length > 0 && (
+          <details className="knowledge-refs">
+            <summary>参考资料 · {knowledgeList.length} 条</summary>
+            <ul>
+              {knowledgeList.map((item, idx) => (
+                <li key={idx}>
+                  <strong>{item.question}</strong>
+                  <span>{item.answer.slice(0, 120)}{item.answer.length > 120 ? '…' : ''}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {isBot && message.generationHint && GENERATION_HINT_LABEL[message.generationHint] && (
           <p
             className={`generation-hint-tag${message.generationHint === 'fast_kb' ? ' generation-hint-fast' : ''}`}

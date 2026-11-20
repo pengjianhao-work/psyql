@@ -12,7 +12,13 @@ import {
   batchArchiveMemories,
   AgentMemoryRow,
   UserStaticProfile,
-  InterventionProfile
+  InterventionProfile,
+  UserFact,
+  MemoryFactsResponse,
+  getMemoryFacts,
+  patchMemoryFact,
+  deleteMemoryFact,
+  distillMemoryFacts
 } from '../api';
 import { RagWeightBar } from './RagWeightBar';
 
@@ -50,6 +56,29 @@ const TAG_LABEL: Record<string, string> = {
   other: '其他'
 };
 
+const FACT_CATEGORY_LABEL: Record<UserFact['category'], string> = {
+  emotion: '情绪模式',
+  relationship: '人际关系',
+  academic: '学业',
+  habit: '生活习惯',
+  preference: '偏好',
+  context: '处境背景'
+};
+
+const FACT_CONFIDENCE_LABEL: Record<UserFact['confidence'], string> = {
+  low: '初步',
+  medium: '较稳定',
+  high: '稳定'
+};
+
+type MemoryTab = 'portrait' | 'facts' | 'memories';
+
+const TAB_LABEL: Record<MemoryTab, string> = {
+  portrait: 'L3 心理画像',
+  facts: 'L2 记忆事实',
+  memories: 'L1 对话记忆'
+};
+
 interface AgentProfileCardProps {
   userId: string;
 }
@@ -65,6 +94,11 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
   const [memories, setMemories] = useState<AgentMemoryRow[]>([]);
   const [tagFilter, setTagFilter] = useState('');
   const [selectedMem, setSelectedMem] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<MemoryTab>('portrait');
+  const [factsData, setFactsData] = useState<MemoryFactsResponse | null>(null);
+  const [distilling, setDistilling] = useState(false);
+  const [editingFactId, setEditingFactId] = useState<string | null>(null);
+  const [factDraft, setFactDraft] = useState('');
 
   const [basicAge, setBasicAge] = useState('');
   const [basicOccupation, setBasicOccupation] = useState('');
@@ -122,6 +156,19 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
       })
     );
   }, [userId]);
+
+  const loadFacts = useCallback(async () => {
+    try {
+      const data = await getMemoryFacts(userId, true);
+      setFactsData(data);
+    } catch {
+      setFactsData(null);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void loadFacts();
+  }, [loadFacts, profile?.updatedAt]);
 
   useEffect(() => {
     void loadMemories();
@@ -187,6 +234,42 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
     }
   };
 
+  const handleDistill = async () => {
+    setDistilling(true);
+    setError(null);
+    try {
+      const result = await distillMemoryFacts(userId);
+      setMessage(result.touched > 0 ? `已更新 ${result.touched} 条记忆事实` : '暂无新的可提炼内容');
+      await loadFacts();
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setDistilling(false);
+    }
+  };
+
+  const handleFactPatch = async (factId: string, patch: { fact?: string; status?: 'active' | 'archived' }) => {
+    try {
+      await patchMemoryFact(userId, factId, patch);
+      setEditingFactId(null);
+      setFactDraft('');
+      await loadFacts();
+      setMessage('记忆事实已更新');
+    } catch (e) {
+      setError(getErrorMessage(e));
+    }
+  };
+
+  const handleFactDelete = async (factId: string) => {
+    try {
+      await deleteMemoryFact(userId, factId);
+      await loadFacts();
+      setMessage('已删除该条记忆事实');
+    } catch (e) {
+      setError(getErrorMessage(e));
+    }
+  };
+
   if (loading) {
     return (
       <div className="agent-profile-card">
@@ -225,7 +308,177 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
 
       <RagWeightBar weights={profile.ragWeights} />
 
-      {!editing ? (
+      <div className="memory-tabs" role="tablist">
+        {(Object.keys(TAB_LABEL) as MemoryTab[]).map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={`memory-tab${tab === key ? ' active' : ''}`}
+            onClick={() => setTab(key)}
+          >
+            {TAB_LABEL[key]}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'portrait' && (
+        <div className="memory-tab-panel">
+          <p className="agent-profile-muted memory-layer-desc">
+            L3 心理画像：系统根据历次对话综合生成的阶段性理解，仅供参考，不构成心理评估或诊断。
+          </p>
+          {recentTimeline.length > 0 && (
+            <div className="agent-profile-section">
+              <strong>情绪时序</strong>
+              <ul className="agent-timeline-list">
+                {recentTimeline.map((e) => (
+                  <li key={e.month}>
+                    <span className="agent-timeline-month">{e.month}</span>
+                    {e.dominantEmotions?.length ? e.dominantEmotions.join('、') : '—'}
+                    {e.triggers?.length ? ` · 诱因：${e.triggers.join('、')}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {latestMonthly?.summary && (
+            <div className="agent-profile-section">
+              <strong>近月心理特征</strong>
+              <p>{latestMonthly.summary}</p>
+            </div>
+          )}
+
+          {latestAnnual?.report && (
+            <div className="agent-profile-section">
+              <strong>{latestAnnual.year} 年度档案摘要</strong>
+              <p className="agent-annual-excerpt">{latestAnnual.report.slice(0, 200)}…</p>
+            </div>
+          )}
+
+          {profile.agentSystemPrompt && (
+            <div className="agent-profile-section agent-prompt-block">
+              <strong>专属 Agent 人设</strong>
+              <p>{profile.agentSystemPrompt}</p>
+            </div>
+          )}
+
+          {profile.firstDialogAt && (
+            <p className="agent-profile-muted">
+              首条咨询：{profile.firstDialogAt.slice(0, 10)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {tab === 'facts' && (
+        <div className="memory-tab-panel">
+          <div className="agent-memory-list">
+            <div className="agent-memory-head">
+              <h4>记忆事实 · 对话蒸馏</h4>
+              <button
+                type="button"
+                className="agent-profile-btn small"
+                onClick={() => void handleDistill()}
+                disabled={distilling}
+              >
+                {distilling ? '蒸馏中…' : '重新蒸馏'}
+              </button>
+            </div>
+            {factsData?.distill.lastDistillAt && (
+              <p className="agent-profile-muted">
+                上次蒸馏：{factsData.distill.lastDistillAt.slice(0, 10)} · 共{' '}
+                {factsData.facts.filter((f) => f.status === 'active').length} 条生效
+              </p>
+            )}
+            {factsData && factsData.facts.length === 0 && (
+              <p className="agent-profile-muted">
+                还没有记忆事实。对话积累后会自动蒸馏，也可以点「重新蒸馏」立即尝试。
+              </p>
+            )}
+            <ul>
+              {factsData?.facts.map((f) => (
+                <li key={f.id} className={f.status === 'archived' ? 'agent-memory-archived' : ''}>
+                  {editingFactId === f.id ? (
+                    <div className="agent-fact-edit">
+                      <input
+                        type="text"
+                        value={factDraft}
+                        onChange={(e) => setFactDraft(e.target.value)}
+                        maxLength={120}
+                      />
+                      <button
+                        type="button"
+                        className="agent-profile-btn small primary"
+                        onClick={() => void handleFactPatch(f.id, { fact: factDraft })}
+                      >
+                        保存
+                      </button>
+                      <button
+                        type="button"
+                        className="agent-profile-btn small"
+                        onClick={() => {
+                          setEditingFactId(null);
+                          setFactDraft('');
+                        }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="agent-memory-body">
+                        <span>{f.fact}</span>
+                        <div className="agent-memory-tags">
+                          <span className="group-tag">{FACT_CATEGORY_LABEL[f.category]}</span>
+                          <span className="group-tag">{FACT_CONFIDENCE_LABEL[f.confidence]}</span>
+                          {f.occurrences > 1 && <span className="group-tag">印证 {f.occurrences} 次</span>}
+                          {f.status === 'archived' && <span className="group-tag archived">已归档</span>}
+                        </div>
+                      </div>
+                      <div className="agent-memory-actions">
+                        <button
+                          type="button"
+                          className="agent-profile-btn small"
+                          onClick={() => {
+                            setEditingFactId(f.id);
+                            setFactDraft(f.fact);
+                          }}
+                        >
+                          编辑
+                        </button>
+                        <button
+                          type="button"
+                          className="agent-profile-btn small"
+                          onClick={() =>
+                            void handleFactPatch(f.id, {
+                              status: f.status === 'archived' ? 'active' : 'archived'
+                            })
+                          }
+                        >
+                          {f.status === 'archived' ? '恢复' : '归档'}
+                        </button>
+                        <button
+                          type="button"
+                          className="agent-profile-btn small"
+                          onClick={() => void handleFactDelete(f.id)}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <p className="agent-profile-muted memory-layer-desc">
+            L2 记忆事实：从多轮对话中提炼的稳定偏好与处境，可编辑、可归档；也可在下方直接维护档案字段。
+          </p>
+
+          {!editing ? (
         <>
           {profile.basicJson && (
             <dl className="agent-profile-dl">
@@ -286,47 +539,6 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
             </div>
           )}
 
-          {recentTimeline.length > 0 && (
-            <div className="agent-profile-section">
-              <strong>情绪时序</strong>
-              <ul className="agent-timeline-list">
-                {recentTimeline.map((e) => (
-                  <li key={e.month}>
-                    <span className="agent-timeline-month">{e.month}</span>
-                    {e.dominantEmotions?.length ? e.dominantEmotions.join('、') : '—'}
-                    {e.triggers?.length ? ` · 诱因：${e.triggers.join('、')}` : ''}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {latestMonthly?.summary && (
-            <div className="agent-profile-section">
-              <strong>近月心理特征</strong>
-              <p>{latestMonthly.summary}</p>
-            </div>
-          )}
-
-          {latestAnnual?.report && (
-            <div className="agent-profile-section">
-              <strong>{latestAnnual.year} 年度档案摘要</strong>
-              <p className="agent-annual-excerpt">{latestAnnual.report.slice(0, 200)}…</p>
-            </div>
-          )}
-
-          {profile.agentSystemPrompt && (
-            <div className="agent-profile-section agent-prompt-block">
-              <strong>专属 Agent 人设</strong>
-              <p>{profile.agentSystemPrompt}</p>
-            </div>
-          )}
-
-          {profile.firstDialogAt && (
-            <p className="agent-profile-muted">
-              首条咨询：{profile.firstDialogAt.slice(0, 10)}
-            </p>
-          )}
         </>
       ) : (
         <div className="agent-profile-form">
@@ -397,11 +609,20 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
           )}
         </div>
       )}
+        </div>
+      )}
 
       {message && <p className="agent-profile-success">{message}</p>}
       {error && profile && <p className="agent-profile-error">{error}</p>}
 
-      {memories.length > 0 && (
+      {tab === 'memories' && (
+        <div className="memory-tab-panel">
+          <p className="agent-profile-muted memory-layer-desc">
+            L1 对话记忆：逐条原始对话记录，可按标签筛选、锁定加权、归档或删除。
+          </p>
+          {memories.length === 0 ? (
+            <p className="agent-profile-muted">暂无对话记忆。</p>
+          ) : (
         <div className="agent-memory-list">
           <div className="agent-memory-head">
             <h4>对话记忆 · 标签归档</h4>
@@ -490,12 +711,21 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
               ))}
           </ul>
         </div>
+          )}
+        </div>
       )}
 
       <div className="agent-profile-actions">
         {!editing ? (
           <>
-            <button type="button" className="agent-profile-btn primary" onClick={() => setEditing(true)}>
+            <button
+              type="button"
+              className="agent-profile-btn primary"
+              onClick={() => {
+                setEditing(true);
+                setTab('facts');
+              }}
+            >
               编辑档案
             </button>
             <button

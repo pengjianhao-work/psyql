@@ -252,6 +252,23 @@ export function getDialogsForYear(
   }>;
 }
 
+export function getRecentDialogs(
+  userId: string,
+  limit: number
+): Array<{ dialogTime: string; userText: string; summary: string; psychJson: string | null }> {
+  return getDb()
+    .prepare(
+      `SELECT dialog_time as dialogTime, user_text as userText, summary, psych_json as psychJson
+       FROM dialogs WHERE user_id = ? ORDER BY id DESC LIMIT ?`
+    )
+    .all(userId, Math.max(1, Math.min(limit, 100))) as Array<{
+    dialogTime: string;
+    userText: string;
+    summary: string;
+    psychJson: string | null;
+  }>;
+}
+
 export function clearUserAgentData(userId: string): void {
   getDb().prepare('DELETE FROM user_agent_profile WHERE user_id = ?').run(userId);
   getDb().prepare('DELETE FROM user_dialog_vectors WHERE user_id = ?').run(userId);
