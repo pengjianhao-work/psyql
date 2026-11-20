@@ -3,6 +3,7 @@ import type { SearchResult } from '../knowledge/vectorDBService';
 import { callLlmGenerate, callLlmGenerateStream } from './llmClient';
 import type { ReActCounselContext, ReActCounselResult, ReActStep } from './reactCounselAgent';
 import type { ReactMode } from './agentPolicy';
+import { COUNSEL_REPLY_GUIDANCE } from './counselReplyPrompt';
 
 export interface PlannerPlan {
   useKnowledge: boolean;
@@ -84,6 +85,7 @@ function formatPrefetchContext(ctx: ReActCounselContext, plan: PlannerPlan): str
 
 function buildResponderSystem(ctx: ReActCounselContext): string {
   return `你是大学生心理健康陪伴 AI。不做医疗诊断。
+${COUNSEL_REPLY_GUIDANCE}
 ${ctx.replyGuidance || `温暖共情、约 280–480 字、两大块（共情+建议）。语气：${ctx.tone}`}
 ${ctx.agentContext ? `\n${ctx.agentContext}\n` : ''}`.trim();
 }

@@ -11,6 +11,7 @@ import { formatWikiForPrompt, searchWiki } from '../wiki/wikiService';
 import type { WikiHit } from '../wiki/wikiTypes';
 import { COUNSEL_TOOL_DEFS, TOOL_NAMES } from './counselTools';
 import { resolveCounselSkill } from '../skills/counselSkills';
+import { COUNSEL_REPLY_GUIDANCE } from './counselReplyPrompt';
 
 export interface ReActStep {
   step: number;
@@ -482,6 +483,7 @@ Action Input: （JSON）
 
 收到 Observation 后继续推理，直到调用 finish。
 最终 answer 须遵守：${CAMPUS_REPLY_REQUIREMENT}
+${COUNSEL_REPLY_GUIDANCE}
 ${ctx.replyGuidance ? `本轮语气与结构要求：${ctx.replyGuidance}` : '温暖共情、约 350–600 字、两大块（共情+建议）。'}${prefetchNote}
 
 【finish 的 answer 格式（必须遵守）】
