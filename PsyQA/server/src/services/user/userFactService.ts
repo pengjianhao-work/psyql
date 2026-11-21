@@ -1,5 +1,7 @@
-import { readJsonFileSync, writeJsonFileSync } from '../../utils/jsonFileStore';
+import fs from 'fs';
+import { readJsonFileSync } from '../../utils/jsonFileStore';
 import { resolveDataFile } from '../../config/paths';
+import { getDb, getMeta, setMeta } from '../../db/database';
 
 /**
  * L2 层记忆：从对话中蒸馏出的「事实/偏好/稳定模式」。
@@ -60,26 +62,55 @@ const FACT_CATEGORIES = new Set<UserFactCategory>([
   'context'
 ]);
 
-function factsFilePath(): string {
-  return resolveDataFile('user_facts.json');
+interface FactRow {
+  id: string;
+  user_id: string;
+  fact: string;
+  category: string;
+  confidence: string;
+  occurrences: number;
+  source_dialog_times: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
-function loadFactsFile(): UserFactFile {
-  return readJsonFileSync<UserFactFile>(factsFilePath(), { byUser: {} });
-}
-
-function saveFactsFile(data: UserFactFile): void {
-  writeJsonFileSync(factsFilePath(), data);
-}
-
-function ensureUserBucket(
-  file: UserFactFile,
-  userId: string
-): { facts: UserFact[]; lastDistillAt?: string; distilledCount?: number } {
-  if (!file.byUser[userId]) {
-    file.byUser[userId] = { facts: [] };
+function rowToFact(row: FactRow): UserFact {
+  let sourceDialogTimes: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(row.source_dialog_times);
+    if (Array.isArray(parsed)) sourceDialogTimes = parsed.filter((t): t is string => typeof t === 'string');
+  } catch {
+    sourceDialogTimes = [];
   }
-  return file.byUser[userId];
+  return {
+    id: row.id,
+    fact: row.fact,
+    category: (FACT_CATEGORIES.has(row.category as UserFactCategory) ? row.category : 'context') as UserFactCategory,
+    confidence: (['low', 'medium', 'high'].includes(row.confidence) ? row.confidence : 'medium') as UserFactConfidence,
+    occurrences: row.occurrences,
+    sourceDialogTimes,
+    status: row.status === 'archived' ? 'archived' : 'active',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+let jsonImportChecked = false;
+
+function ensureFactsJsonImported(): void {
+  if (jsonImportChecked) return;
+  jsonImportChecked = true;
+  if (getMeta('user_facts_json_imported') !== null) return;
+  const legacyPath = resolveDataFile('user_facts.json');
+  try {
+    if (fs.existsSync(legacyPath)) {
+      importUserFactsFromJson(legacyPath);
+    }
+    setMeta('user_facts_json_imported', new Date().toISOString());
+  } catch (err) {
+    console.warn('[user-facts] legacy JSON import failed:', err instanceof Error ? err.message : err);
+  }
 }
 
 export function normalizeFactText(text: string): string {
@@ -128,65 +159,83 @@ export function upsertUserFact(
     ? draft.confidence
     : 'medium';
 
-  const file = loadFactsFile();
-  const bucket = ensureUserBucket(file, userId);
+  ensureFactsJsonImported();
+  const db = getDb();
   const now = new Date().toISOString();
 
-  let best: UserFact | null = null;
-  let bestScore = 0;
-  for (const f of bucket.facts) {
-    if (f.status !== 'active' || f.category !== category) continue;
-    const score = factSimilarity(f.fact, factText);
-    if (score > bestScore) {
-      bestScore = score;
-      best = f;
-    }
-  }
+  return db.transaction((): UserFact | null => {
+    const rows = db
+      .prepare('SELECT * FROM user_facts WHERE user_id = ? AND status = ? AND category = ?')
+      .all(userId, 'active', category) as FactRow[];
 
-  if (best && bestScore >= 0.55) {
-    best.occurrences += 1;
-    best.updatedAt = now;
-    if (sourceDialogTime && !best.sourceDialogTimes.includes(sourceDialogTime)) {
-      best.sourceDialogTimes.push(sourceDialogTime);
-      if (best.sourceDialogTimes.length > 10) {
-        best.sourceDialogTimes = best.sourceDialogTimes.slice(-10);
+    let best: UserFact | null = null;
+    let bestScore = 0;
+    for (const row of rows) {
+      const f = rowToFact(row);
+      const score = factSimilarity(f.fact, factText);
+      if (score > bestScore) {
+        bestScore = score;
+        best = f;
       }
     }
-    const rank = { low: 0, medium: 1, high: 2 };
-    if (rank[confidence] > rank[best.confidence]) best.confidence = confidence;
-    saveFactsFile(file);
-    return best;
-  }
 
-  const fact: UserFact = {
-    id: nextFactId(),
-    fact: factText,
-    category,
-    confidence,
-    occurrences: 1,
-    sourceDialogTimes: sourceDialogTime ? [sourceDialogTime] : [],
-    status: 'active',
-    createdAt: now,
-    updatedAt: now
-  };
-  bucket.facts.push(fact);
-  if (bucket.facts.length > 200) {
-    bucket.facts = bucket.facts
-      .filter((f) => f.status === 'active')
-      .slice(-200);
-  }
-  saveFactsFile(file);
-  return fact;
+    if (best && bestScore >= 0.55) {
+      best.occurrences += 1;
+      best.updatedAt = now;
+      if (sourceDialogTime && !best.sourceDialogTimes.includes(sourceDialogTime)) {
+        best.sourceDialogTimes.push(sourceDialogTime);
+        if (best.sourceDialogTimes.length > 10) {
+          best.sourceDialogTimes = best.sourceDialogTimes.slice(-10);
+        }
+      }
+      const rank = { low: 0, medium: 1, high: 2 };
+      if (rank[confidence] > rank[best.confidence]) best.confidence = confidence;
+      db.prepare(
+        'UPDATE user_facts SET fact = ?, confidence = ?, occurrences = ?, source_dialog_times = ?, updated_at = ? WHERE id = ?'
+      ).run(best.fact, best.confidence, best.occurrences, JSON.stringify(best.sourceDialogTimes), now, best.id);
+      return best;
+    }
+
+    const fact: UserFact = {
+      id: nextFactId(),
+      fact: factText,
+      category,
+      confidence,
+      occurrences: 1,
+      sourceDialogTimes: sourceDialogTime ? [sourceDialogTime] : [],
+      status: 'active',
+      createdAt: now,
+      updatedAt: now
+    };
+    db.prepare(
+      'INSERT INTO user_facts(id, user_id, fact, category, confidence, occurrences, source_dialog_times, status, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(fact.id, userId, fact.fact, fact.category, fact.confidence, fact.occurrences, JSON.stringify(fact.sourceDialogTimes), fact.status, fact.createdAt, fact.updatedAt);
+
+    const total = (db.prepare('SELECT COUNT(*) AS c FROM user_facts WHERE user_id = ?').get(userId) as { c: number }).c;
+    if (total > 200) {
+      db.prepare(
+        `DELETE FROM user_facts WHERE user_id = ? AND id NOT IN (
+           SELECT id FROM user_facts WHERE user_id = ? AND status = 'active'
+           ORDER BY created_at DESC, id DESC LIMIT 200
+         )`
+      ).run(userId, userId);
+    }
+    return fact;
+  })();
 }
 
 export function listUserFacts(
   userId: string,
   opts: { includeArchived?: boolean } = {}
 ): UserFact[] {
-  const file = loadFactsFile();
-  const facts = file.byUser[userId]?.facts ?? [];
-  const filtered = opts.includeArchived ? facts : facts.filter((f) => f.status === 'active');
-  return filtered.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  ensureFactsJsonImported();
+  const db = getDb();
+  const rows = (
+    opts.includeArchived
+      ? db.prepare('SELECT * FROM user_facts WHERE user_id = ? ORDER BY updated_at DESC, id DESC').all(userId)
+      : db.prepare("SELECT * FROM user_facts WHERE user_id = ? AND status = 'active' ORDER BY updated_at DESC, id DESC").all(userId)
+  ) as FactRow[];
+  return rows.map(rowToFact);
 }
 
 export function updateUserFact(
@@ -194,10 +243,11 @@ export function updateUserFact(
   factId: string,
   patch: { fact?: string; status?: 'active' | 'archived' }
 ): UserFact | null {
-  const file = loadFactsFile();
-  const bucket = file.byUser[userId];
-  const target = bucket?.facts.find((f) => f.id === factId);
-  if (!bucket || !target) return null;
+  ensureFactsJsonImported();
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM user_facts WHERE id = ? AND user_id = ?').get(factId, userId) as FactRow | undefined;
+  if (!row) return null;
+  const target = rowToFact(row);
 
   if (patch.fact !== undefined) {
     const text = patch.fact.trim();
@@ -209,42 +259,93 @@ export function updateUserFact(
     target.status = patch.status;
   }
   target.updatedAt = new Date().toISOString();
-  saveFactsFile(file);
+  db.prepare('UPDATE user_facts SET fact = ?, status = ?, updated_at = ? WHERE id = ?').run(
+    target.fact,
+    target.status,
+    target.updatedAt,
+    target.id
+  );
   return target;
 }
 
 export function deleteUserFact(userId: string, factId: string): boolean {
-  const file = loadFactsFile();
-  const bucket = file.byUser[userId];
-  if (!bucket) return false;
-  const before = bucket.facts.length;
-  bucket.facts = bucket.facts.filter((f) => f.id !== factId);
-  if (bucket.facts.length === before) return false;
-  saveFactsFile(file);
-  return true;
+  ensureFactsJsonImported();
+  const result = getDb().prepare('DELETE FROM user_facts WHERE id = ? AND user_id = ?').run(factId, userId);
+  return result.changes > 0;
 }
 
 export function getFactDistillState(
   userId: string
 ): { lastDistillAt?: string; distilledCount: number; totalFacts: number } {
-  const file = loadFactsFile();
-  const bucket = file.byUser[userId];
+  ensureFactsJsonImported();
+  const db = getDb();
+  const state = db.prepare('SELECT * FROM user_fact_distill_state WHERE user_id = ?').get(userId) as
+    | { last_distill_at: string | null; distilled_count: number }
+    | undefined;
+  const totalFacts = (
+    db.prepare("SELECT COUNT(*) AS c FROM user_facts WHERE user_id = ? AND status = 'active'").get(userId) as { c: number }
+  ).c;
   return {
-    lastDistillAt: bucket?.lastDistillAt,
-    distilledCount: bucket?.distilledCount ?? 0,
-    totalFacts: bucket?.facts.filter((f) => f.status === 'active').length ?? 0
+    lastDistillAt: state?.last_distill_at ?? undefined,
+    distilledCount: state?.distilled_count ?? 0,
+    totalFacts
   };
 }
 
 export function recordFactDistillRun(userId: string, dialogCount: number): void {
-  const file = loadFactsFile();
-  const bucket = ensureUserBucket(file, userId);
-  bucket.lastDistillAt = new Date().toISOString();
-  bucket.distilledCount = Math.max(bucket.distilledCount ?? 0, dialogCount);
-  saveFactsFile(file);
+  ensureFactsJsonImported();
+  getDb()
+    .prepare(
+      `INSERT INTO user_fact_distill_state(user_id, last_distill_at, distilled_count) VALUES(?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         last_distill_at = excluded.last_distill_at,
+         distilled_count = MAX(user_fact_distill_state.distilled_count, excluded.distilled_count)`
+    )
+    .run(userId, new Date().toISOString(), dialogCount);
 }
 
-const FACT_CATEGORY_LABEL: Record<UserFactCategory, string> = {
+/** 一次性把旧 user_facts.json 迁进 SQLite；返回新插入的事实条数。 */
+export function importUserFactsFromJson(filePath: string): number {
+  ensureFactsJsonImported();
+  const file = readJsonFileSync<UserFactFile>(filePath, { byUser: {} });
+  const db = getDb();
+  let inserted = 0;
+  db.transaction(() => {
+    const insertFact = db.prepare(
+      `INSERT OR IGNORE INTO user_facts(id, user_id, fact, category, confidence, occurrences, source_dialog_times, status, created_at, updated_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const upsertState = db.prepare(
+      `INSERT INTO user_fact_distill_state(user_id, last_distill_at, distilled_count) VALUES(?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         last_distill_at = excluded.last_distill_at,
+         distilled_count = MAX(user_fact_distill_state.distilled_count, excluded.distilled_count)`
+    );
+    for (const [uid, bucket] of Object.entries(file.byUser)) {
+      for (const f of bucket.facts ?? []) {
+        const r = insertFact.run(
+          f.id,
+          uid,
+          f.fact,
+          FACT_CATEGORIES.has(f.category) ? f.category : 'context',
+          ['low', 'medium', 'high'].includes(f.confidence) ? f.confidence : 'medium',
+          f.occurrences ?? 1,
+          JSON.stringify(Array.isArray(f.sourceDialogTimes) ? f.sourceDialogTimes.slice(-10) : []),
+          f.status === 'archived' ? 'archived' : 'active',
+          f.createdAt,
+          f.updatedAt
+        );
+        inserted += r.changes;
+      }
+      if (bucket.lastDistillAt !== undefined || bucket.distilledCount !== undefined) {
+        upsertState.run(uid, bucket.lastDistillAt ?? null, bucket.distilledCount ?? 0);
+      }
+    }
+  })();
+  return inserted;
+}
+
+export const FACT_CATEGORY_LABEL: Record<UserFactCategory, string> = {
   emotion: '情绪模式',
   relationship: '人际关系',
   academic: '学业',
@@ -253,7 +354,7 @@ const FACT_CATEGORY_LABEL: Record<UserFactCategory, string> = {
   context: '处境背景'
 };
 
-const CONFIDENCE_LABEL: Record<UserFactConfidence, string> = {
+export const CONFIDENCE_LABEL: Record<UserFactConfidence, string> = {
   low: '初步',
   medium: '较稳定',
   high: '稳定'

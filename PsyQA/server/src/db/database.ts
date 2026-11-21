@@ -185,6 +185,26 @@ function initSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_wellness_tasks_user
       ON wellness_tasks(user_id, archived);
 
+    CREATE TABLE IF NOT EXISTS user_facts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      fact TEXT NOT NULL,
+      category TEXT NOT NULL,
+      confidence TEXT NOT NULL,
+      occurrences INTEGER NOT NULL DEFAULT 1,
+      source_dialog_times TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_facts_user ON user_facts(user_id, status);
+
+    CREATE TABLE IF NOT EXISTS user_fact_distill_state (
+      user_id TEXT PRIMARY KEY,
+      last_distill_at TEXT,
+      distilled_count INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS trend_terms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       term TEXT NOT NULL,
