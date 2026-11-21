@@ -610,12 +610,14 @@ const generateAIAnswerBody = async (
     });
     const placeholderReport = buildPlaceholderReport(psychSnapshot);
     const priorityAnswer = `
-⚠️ 我非常重视你现在的状态，你的安全是第一位的?
-【安全计划· 请按顺序完成?1. 环境安全：远离可能伤害自己或他人的物品或场景
-2. 当下冷静：离开冲突现场，深呼吸 10 ?3. 支持资源：联系辅导员/室友信任的同伴，并拨?${ruleRisk.hotline}
+⚠️ 我非常重视你现在的状态，你的安全是第一位的。
+【安全计划 · 请按顺序完成】
+1. 环境安全：远离可能伤害自己或他人的物品或场景
+2. 当下冷静：离开冲突现场，深呼吸 10 次
+3. 支持资源：联系辅导员/室友信任的同伴，并拨打${ruleRisk.hotline}
 4. 如有受伤或持续冲突：拨打 120 / 110
 
-你不是一个人。请先确保人身安全，再考虑沟通与和解读${ETHICS_FOOTER}
+你不是一个人。请先确保人身安全，再考虑沟通与和解。${ETHICS_FOOTER}
     `.trim();
     const summary = generateSummary(question, priorityAnswer, psychSnapshot);
     const dialogId = saveDialog(
@@ -884,7 +886,7 @@ const generateAIAnswerBody = async (
   const agentContext = buildAgentPromptContext(userId);
   // 个人支持偏好 → 回复风格指引（仅低风险普通对话；高风险走安全路径不使用）
   const replyGuidance =
-    risk.level === 'low'
+    risk.level === 'low' && ruleRisk.level === 'low' && intent.kind !== 'crisis'
       ? buildSupportReplyGuidance(getUserAgentProfile(userId)?.basicJson?.supportPreferences)
       : '';
   // 低风险对话不强制最小长度，允许按偏好指引自由长短
@@ -946,8 +948,9 @@ ${systemPrompt}
 ${agentContext ? `\n${agentContext}\n` : ''}
 ${modeDirective ? `\n${modeDirective}\n` : ''}
 ${COUNSEL_REPLY_GUIDANCE}
-${replyGuidance ? `【个人支持偏好】${replyGuidance}\n` : ''}
-【话术参考 · 开场】${intervention.openingPhrase}
+${replyGuidance
+    ? `【个人支持偏好 · 篇幅与语气以此为准】${replyGuidance}\n`
+    : `未设置个人支持偏好：篇幅与结构按下文【回答篇幅与结构】执行。\n【话术参考 · 开场】${intervention.openingPhrase}`}
 
 【短期会话记忆】
 ${recentDialogs
@@ -983,20 +986,21 @@ ${intentDirective}
 情绪置信度：${(emotion.confidence * 100).toFixed(0)}%（若偏低请谨慎推断）
 ${llmRationale ? `智能分析要点：${llmRationale}` : ''}
 
-【咨询干预框架】框架：${intervention.frameworkName}
-请按以下结构展开（每一段都要写完整句子，不要只写标题或关键词）：${intervention.structureHint}
+${replyGuidance
+    ? `【咨询干预框架 · 供参考】${intervention.frameworkName}\n仅在贴合当前需求时使用适合的部分，无须展示框架名称。`
+    : `【咨询干预框架】框架：${intervention.frameworkName}\n请按以下结构展开（每一段都要写完整句子，不要只写标题或关键词）：${intervention.structureHint}`}
 ${intervention.actionScripts?.length ? `
 【可直接使用的话术/微步骤参考】（挑 1 条贴合用户处境改写进建议，不要照抄、不要全列）
 ${intervention.actionScripts.map((s) => `· ${s}`).join('\n')}` : ''}
 ${recentRiskNote}
 ${answerVariationHint ? `\n${answerVariationHint}\n` : ''}
 ${empathyScaffold}
-${guidedAnswerShape || answerShape || `【回答篇幅与结构 · 必须遵守】
+${guidedAnswerShape || (replyGuidance ? '' : answerShape || `【回答篇幅与结构 · 必须遵守】
 - 全文约 **450–700 汉字**，分 **两大块**，不要第三块行动清单
 - **第一块（心理疏导，约 200–280 字）**：用 3–4 段回应用户原话，做到：① 命名情绪——优先使用用户没说出口的更准确情绪词，并说明为什么这样理解（如「听起来你不是懒，是被『必须优秀』的期待压住了」）；② 正常化（说明这种感受在类似处境很常见）；③ 去病耻（「这不是你的错/不是你不够好」类表达）；④ 可点到宿舍/人际/学业等具体情境，但不要诊断
 - **第二块（具体建议，约 180–280 字）**：写框架名「${intervention.frameworkName}」+ **3–5 条**具体建议（用「·」分行，每条 25–60 字）；其中 **1 条**可以是「可以直接发给对方/照做」的话术或微步骤（注明说给谁听/怎么做）；知识库最多一句「详见下方参考」
 - 最后单独一句结尾：${intervention.closingPhrase}
-- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何多步清单**`}
+- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何多步清单**`)}
 
 【长期向量记忆】
 ${personalMemoryText || '没有检索到更早的相关原话。不要编造过去。'}
@@ -1019,7 +1023,7 @@ ${webContext}` : ''}
 ${description ? `补充描述：${description}` : ''}
 
 【回答要求】
-- 以${tone}的语气，像辅导员面对面简短交流
+${replyGuidance ? '- 语气和篇幅按【个人支持偏好】，像辅导员面对面交流' : `- 以${tone}的语气，像辅导员面对面简短交流`}
 - 先共情疏导，再给建议；不做医疗诊断
 - 疏导部分注意：命名情绪、正常化感受、去病耻，不要只重复「我理解你的感受」
 - **禁止**以重复或复述用户原话作为开头（不要写「${question.slice(0, 30)}…」这类开场）
