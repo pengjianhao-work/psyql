@@ -82,7 +82,7 @@
 ## 6. 阶段计划与 KPI
 
 - **Phase 0**（本阶段）：CI 确认存在并可用；WIP 已 4 提交保护；本报告 ✅
-- **Phase 1**：运行时数据出仓（.gitignore/untrack）、CI 加强（分支/audit/docker）、Docker 拓扑对齐真实依赖
+- **Phase 1**：✅ 已完成（3 commits on `psych-loop/phase1-hardening`）：`/health` liveness/`/ready` 拆分（health.integration 3/3）；`accounts.json` 等运行时数据 untrack + .gitignore 根目录规则修复；漏洞 8→3（0 high/critical）；会话撤销（jti + revoked_sessions，TTL 7d→3d）；ask 限流 30/10min+300/day；schema 版本化迁移（v2）；db:backup/restore 脚本（演练 573.4MB 成功）；Dockerfile/compose 去运行时数据 + AUTH_SECRET 必填 + qdrant 默认启用 + 命名卷；CI 全分支触发 + audit 门禁 + 数据跟踪检查 + docker build job。剩余：Docker daemon 未运行故镜像未本地构建（CI job 覆盖）；Desktop 副本处置、历史重写、演示密码轮换待批准
 - **Phase 2**：会话 TTL/撤销、ask 限流+配额、密码策略、migration、/health 拆分、安全头、漏洞清零
 - **Phase 3**：向量存储收敛到 Qdrant、量化评估、冷启动 <5s、检索 p95 <300ms、缓存版本键
 - **Phase 4**：离线可复现评测、安全回归 fixture、前端关键用例
