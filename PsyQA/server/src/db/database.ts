@@ -272,6 +272,106 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX IF NOT EXISTS idx_revoked_sessions_exp
         ON revoked_sessions(expires_at);
     `
+  },
+  {
+    version: 3,
+    sql: `
+      CREATE TABLE IF NOT EXISTS wellbeing_checkins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        mood TEXT NOT NULL DEFAULT '',
+        stress INTEGER,
+        sleep_hours REAL,
+        energy INTEGER,
+        event_text TEXT NOT NULL DEFAULT '',
+        skipped INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_wellbeing_checkins_user
+        ON wellbeing_checkins(user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS support_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        week_of TEXT NOT NULL,
+        goal_text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        source TEXT NOT NULL DEFAULT 'manual',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_plans_user
+        ON support_plans(user_id, week_of);
+
+      CREATE TABLE IF NOT EXISTS plan_actions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plan_id INTEGER NOT NULL REFERENCES support_plans(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        action_text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        done_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_plan_actions_plan ON plan_actions(plan_id, day);
+      CREATE INDEX IF NOT EXISTS idx_plan_actions_user ON plan_actions(user_id, day);
+
+      CREATE TABLE IF NOT EXISTS practice_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        ref_id INTEGER,
+        outcome TEXT NOT NULL DEFAULT 'done',
+        logged_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_practice_logs_user
+        ON practice_logs(user_id, logged_at DESC);
+
+      CREATE TABLE IF NOT EXISTS reflections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        line1 TEXT NOT NULL DEFAULT '',
+        line2 TEXT NOT NULL DEFAULT '',
+        line3 TEXT NOT NULL DEFAULT '',
+        helped TEXT NOT NULL DEFAULT '',
+        not_helped TEXT NOT NULL DEFAULT '',
+        adjust_note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_reflections_user
+        ON reflections(user_id, scope, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS progress_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        period TEXT NOT NULL,
+        metrics_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(user_id, period)
+      );
+
+      CREATE TABLE IF NOT EXISTS safety_plans (
+        user_id TEXT PRIMARY KEY,
+        contacts_json TEXT NOT NULL DEFAULT '[]',
+        coping_json TEXT NOT NULL DEFAULT '[]',
+        warning_signs_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS resource_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        source_ref TEXT NOT NULL DEFAULT '',
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_resource_items_kind
+        ON resource_items(kind, active);
+    `
   }
 ];
 
