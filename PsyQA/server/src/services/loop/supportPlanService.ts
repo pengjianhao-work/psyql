@@ -132,6 +132,25 @@ export function updateActionStatus(userId: string, actionId: number, status: Act
   return mapAction(row);
 }
 
+/** 蒸馏信号用：最近完成的微行动（done/partial），不取 pending/skipped 的噪声 */
+export function listActionSignalRows(
+  userId: string,
+  limit: number
+): { actionText: string; status: ActionStatus; doneAt: string }[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT action_text, status, done_at FROM plan_actions
+       WHERE user_id = ? AND status IN ('done','partial') AND done_at IS NOT NULL
+       ORDER BY done_at DESC LIMIT ?`
+    )
+    .all(userId, limit) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    actionText: String(r.action_text),
+    status: r.status as ActionStatus,
+    doneAt: String(r.done_at)
+  }));
+}
+
 /** 调整计划：旧计划标 adjusted，新计划保留 source 记录调整来源 */
 export function adjustPlan(
   userId: string,

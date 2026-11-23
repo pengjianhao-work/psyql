@@ -17,6 +17,7 @@ import {
   upsertSafetyPlan,
   ReflectionScope
 } from '../services/loop/reflectionService';
+import { createResource, listResources, setResourceActive, ResourceKind } from '../services/loop/resourceService';
 
 const uid = (req: AuthRequest, res: Response): string | null => resolveStudentUserId(req, res, req.body?.userId);
 
@@ -135,4 +136,22 @@ export const putSafetyPlan = async (req: AuthRequest, res: Response): Promise<vo
       warningSigns: Array.isArray(b.warningSigns) ? b.warningSigns : []
     })
   });
+};
+
+export const getResources = async (req: AuthRequest, res: Response): Promise<void> => {
+  res.json({ resources: listResources(req.query.kind as ResourceKind | undefined) });
+};
+
+export const postResource = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const b = req.body ?? {};
+    res.json({ resource: createResource({ kind: b.kind, title: b.title, body: b.body, sourceRef: b.sourceRef }) });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+};
+
+export const patchResource = async (req: AuthRequest, res: Response): Promise<void> => {
+  const ok = setResourceActive(Number(req.params.id), req.body?.active === true);
+  res.status(ok ? 200 : 404).json({ ok });
 };

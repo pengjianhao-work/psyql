@@ -3,6 +3,9 @@ import { listTrainingSessions } from '../../db/trainingStore';
 import { listMoodCheckins } from '../user/moodCheckinService';
 import { listJournals } from '../user/journalService';
 import { listBottleSignalRows } from '../social/driftBottleService';
+import { listWellbeingCheckins } from '../loop/checkinService';
+import { listActionSignalRows } from '../loop/supportPlanService';
+import { listReflections } from '../loop/reflectionService';
 import type { TrainingType } from '../../types/training';
 
 /**
@@ -12,7 +15,15 @@ import type { TrainingType } from '../../types/training';
  * - 高危对话与规则层命中的日记标记 riskSensitive，默认不进入蒸馏输入
  */
 
-export type UserSignalType = 'dialog' | 'mood' | 'training' | 'journal' | 'bottle';
+export type UserSignalType =
+  | 'dialog'
+  | 'mood'
+  | 'training'
+  | 'journal'
+  | 'bottle'
+  | 'checkin'
+  | 'plan'
+  | 'reflection';
 
 export interface UserSignal {
   type: UserSignalType;
@@ -130,5 +141,31 @@ registerSignalCollector('bottle', (userId, limit) => {
     type: 'bottle' as const,
     occurredAt: b.createdAt,
     text: `漂流瓶：${b.body.slice(0, BOTTLE_TEXT_MAX)}`
+  }));
+});
+
+registerSignalCollector('checkin', (userId, limit) => {
+  return listWellbeingCheckins(userId, limit)
+    .filter((c) => !c.skipped)
+    .map((c) => ({
+      type: 'checkin' as const,
+      occurredAt: c.createdAt,
+      text: `状态签到：${[c.mood, c.stress != null ? `压力${c.stress}/5` : '', c.energy != null ? `能量${c.energy}/5` : '', c.sleepHours != null ? `睡${c.sleepHours}h` : '', c.eventText].filter(Boolean).join('，')}`
+    }));
+});
+
+registerSignalCollector('plan', (userId, limit) => {
+  return listActionSignalRows(userId, limit).map((a) => ({
+    type: 'plan' as const,
+    occurredAt: a.doneAt,
+    text: `${a.status === 'done' ? '完成' : '部分完成'}微行动：${a.actionText}`
+  }));
+});
+
+registerSignalCollector('reflection', (userId, limit) => {
+  return listReflections(userId, undefined, limit).map((r) => ({
+    type: 'reflection' as const,
+    occurredAt: r.createdAt,
+    text: `${r.scope === 'weekly' ? '周复盘' : '晚间复盘'}：${[...r.lines, r.helped && `有用：${r.helped}`, r.notHelped && `没用：${r.notHelped}`].filter(Boolean).join('；')}`
   }));
 });

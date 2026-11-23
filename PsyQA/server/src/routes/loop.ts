@@ -9,9 +9,12 @@ import {
   postReflection,
   getReflections,
   getMySafetyPlan,
-  putSafetyPlan
+  putSafetyPlan,
+  getResources,
+  postResource,
+  patchResource
 } from '../controllers/loopController';
-import { attachAuth, requireStudentAccess, assertSelfUserId } from '../middleware/authMiddleware';
+import { attachAuth, requireAuth, requireRole, requireStudentAccess, assertSelfUserId } from '../middleware/authMiddleware';
 
 export const loopRouter = Router();
 
@@ -28,3 +31,6 @@ loopRouter.post('/reflection', ...studentApi, postReflection);
 loopRouter.get('/reflections', ...studentApi, getReflections);
 loopRouter.get('/safety-plan', ...studentApi, getMySafetyPlan);
 loopRouter.put('/safety-plan', ...studentApi, putSafetyPlan);
+loopRouter.get('/resources', requireAuth, getResources);
+loopRouter.post('/resources', requireRole('counselor', 'admin'), postResource);
+loopRouter.patch('/resources/:id', requireRole('counselor', 'admin'), patchResource);
