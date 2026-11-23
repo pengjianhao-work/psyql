@@ -7,6 +7,7 @@ import {
   listStudentsForUser
 } from '../services/school/schoolService';
 import { getAlertById, listAlerts, updateAlert, AlertStatus } from '../services/school/schoolAlertService';
+import { buildSchoolWeather } from '../services/school/schoolWeatherService';
 import {
   listNotificationsForUser,
   markNotificationsRead
@@ -14,6 +15,12 @@ import {
 export const getSchoolDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
   const stats = await getDashboardForUser(req.authUser!);
   res.json(stats);
+};
+
+/** 教师/辅导员/管理员共用的情绪气象聚合视图（仅聚合数据，含 k-匿名抑制） */
+export const getSchoolWeather = async (req: AuthRequest, res: Response): Promise<void> => {
+  const weather = await buildSchoolWeather(req.authUser!);
+  res.json(weather);
 };
 
 export const getSchoolStudents = async (req: AuthRequest, res: Response): Promise<void> => {

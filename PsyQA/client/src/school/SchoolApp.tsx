@@ -15,9 +15,17 @@ interface SchoolAppProps {
   onLogout: () => void;
 }
 
+const ROLE_LABELS: Record<AuthUserPublic['role'], string> = {
+  admin: '管理员',
+  counselor: '辅导员',
+  teacher: '教师',
+  student: '学生'
+};
+
 const SchoolApp: React.FC<SchoolAppProps> = ({ sessionUser, onLogout }) => {
-  const roleLabel = sessionUser.role === 'admin' ? '管理员' : '辅导员';
+  const roleLabel = ROLE_LABELS[sessionUser.role] ?? sessionUser.role;
   const isAdmin = sessionUser.role === 'admin';
+  const isTeacher = sessionUser.role === 'teacher';
   const [pendingAlerts, setPendingAlerts] = useState(0);
   const [tier1Notices, setTier1Notices] = useState<SchoolNotificationItem[]>([]);
 
@@ -31,10 +39,12 @@ const SchoolApp: React.FC<SchoolAppProps> = ({ sessionUser, onLogout }) => {
     fetchSchoolDashboard()
       .then((d) => setPendingAlerts(d.pendingAlerts ?? 0))
       .catch(() => setPendingAlerts(0));
+    // 教师只有聚合视图权限，不拉取个体告警通知
+    if (isTeacher) return;
     loadNotices();
     const id = window.setInterval(loadNotices, 30_000);
     return () => window.clearInterval(id);
-  }, [loadNotices]);
+  }, [loadNotices, isTeacher]);
 
   const dismissNotice = (notice: SchoolNotificationItem) => {
     void markSchoolNotificationsRead([notice.id]).then(() => {
@@ -111,19 +121,23 @@ const SchoolApp: React.FC<SchoolAppProps> = ({ sessionUser, onLogout }) => {
 
             </NavLink>
 
-            <NavLink to="/school/alerts" className={({ isActive }) => (isActive ? 'active' : '')}>
+            {!isTeacher && (
+              <>
+                <NavLink to="/school/alerts" className={({ isActive }) => (isActive ? 'active' : '')}>
 
-              风险告警
+                  风险告警
 
-              {pendingAlerts > 0 && <span className="school-nav-badge">{pendingAlerts}</span>}
+                  {pendingAlerts > 0 && <span className="school-nav-badge">{pendingAlerts}</span>}
 
-            </NavLink>
+                </NavLink>
 
-            <NavLink to="/school/students" className={({ isActive }) => (isActive ? 'active' : '')}>
+                <NavLink to="/school/students" className={({ isActive }) => (isActive ? 'active' : '')}>
 
-              学生列表
+                  学生列表
 
-            </NavLink>
+                </NavLink>
+              </>
+            )}
 
             <NavLink to="/school/heatmap" className={({ isActive }) => (isActive ? 'active' : '')}>
 
@@ -131,11 +145,13 @@ const SchoolApp: React.FC<SchoolAppProps> = ({ sessionUser, onLogout }) => {
 
             </NavLink>
 
-            <NavLink to="/school/intervention-ledgers" className={({ isActive }) => (isActive ? 'active' : '')}>
+            {!isTeacher && (
+              <NavLink to="/school/intervention-ledgers" className={({ isActive }) => (isActive ? 'active' : '')}>
 
-              干预台账
+                干预台账
 
-            </NavLink>
+              </NavLink>
+            )}
 
             {isAdmin && (
 

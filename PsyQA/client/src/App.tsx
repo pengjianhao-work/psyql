@@ -2,6 +2,7 @@ import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import { AuthUserPublic, fetchCurrentUser, logoutRequest, setAuthToken } from './api';
+import { StaffOnlyRoute } from './school/StaffOnlyRoute';
 import './App.css';
 
 const StudentApp = React.lazy(() => import('./student/StudentApp'));
@@ -14,6 +15,8 @@ const SchoolAdminUsers = React.lazy(() => import('./school/SchoolAdminUsers'));
 const SchoolHeatmap = React.lazy(() => import('./school/SchoolHeatmap'));
 const SchoolInterventionLedgers = React.lazy(() => import('./school/SchoolInterventionLedgers'));
 const SchoolKnowledgeAdmin = React.lazy(() => import('./school/SchoolKnowledgeAdmin'));
+
+const SCHOOL_ROLES: Array<AuthUserPublic['role']> = ['counselor', 'admin', 'teacher'];
 
 export const GUEST_MODE_KEY = 'psyqa_guest_mode';
 
@@ -42,7 +45,7 @@ function AuthAwareRootRedirect() {
       try {
         const { user } = await fetchCurrentUser();
         if (cancelled) return;
-        if (user.role === 'counselor' || user.role === 'admin') {
+        if (SCHOOL_ROLES.includes(user.role)) {
           setTarget('/school/dashboard');
         } else {
           setTarget('/student');
@@ -83,7 +86,7 @@ function StudentRoute() {
       }
       try {
         const { user } = await fetchCurrentUser();
-        if (user.role === 'counselor' || user.role === 'admin') {
+        if (SCHOOL_ROLES.includes(user.role)) {
           navigate('/school/dashboard', { replace: true });
           return;
         }
@@ -136,7 +139,7 @@ function SchoolRoute() {
     const run = async () => {
       try {
         const { user } = await fetchCurrentUser();
-        if (user.role !== 'counselor' && user.role !== 'admin') {
+        if (!SCHOOL_ROLES.includes(user.role)) {
           navigate('/student', { replace: true });
           return;
         }
@@ -194,25 +197,31 @@ function App() {
             <Route
               path="alerts"
               element={
-                <Suspense fallback={<RouteFallback label="加载告警…" />}>
-                  <SchoolAlerts />
-                </Suspense>
+                <StaffOnlyRoute>
+                  <Suspense fallback={<RouteFallback label="加载告警…" />}>
+                    <SchoolAlerts />
+                  </Suspense>
+                </StaffOnlyRoute>
               }
             />
             <Route
               path="students"
               element={
-                <Suspense fallback={<RouteFallback label="加载学生列表…" />}>
-                  <SchoolStudents />
-                </Suspense>
+                <StaffOnlyRoute>
+                  <Suspense fallback={<RouteFallback label="加载学生列表…" />}>
+                    <SchoolStudents />
+                  </Suspense>
+                </StaffOnlyRoute>
               }
             />
             <Route
               path="students/:studentId"
               element={
-                <Suspense fallback={<RouteFallback label="加载档案…" />}>
-                  <SchoolStudentDetail />
-                </Suspense>
+                <StaffOnlyRoute>
+                  <Suspense fallback={<RouteFallback label="加载档案…" />}>
+                    <SchoolStudentDetail />
+                  </Suspense>
+                </StaffOnlyRoute>
               }
             />
             <Route
@@ -226,25 +235,31 @@ function App() {
             <Route
               path="intervention-ledgers"
               element={
-                <Suspense fallback={<RouteFallback label="加载台账…" />}>
-                  <SchoolInterventionLedgers />
-                </Suspense>
+                <StaffOnlyRoute>
+                  <Suspense fallback={<RouteFallback label="加载台账…" />}>
+                    <SchoolInterventionLedgers />
+                  </Suspense>
+                </StaffOnlyRoute>
               }
             />
             <Route
               path="admin/knowledge"
               element={
-                <Suspense fallback={<RouteFallback label="加载知识库…" />}>
-                  <SchoolKnowledgeAdmin />
-                </Suspense>
+                <StaffOnlyRoute>
+                  <Suspense fallback={<RouteFallback label="加载知识库…" />}>
+                    <SchoolKnowledgeAdmin />
+                  </Suspense>
+                </StaffOnlyRoute>
               }
             />
             <Route
               path="admin/users"
               element={
-                <Suspense fallback={<RouteFallback label="加载用户管理…" />}>
-                  <SchoolAdminUsers />
-                </Suspense>
+                <StaffOnlyRoute>
+                  <Suspense fallback={<RouteFallback label="加载用户管理…" />}>
+                    <SchoolAdminUsers />
+                  </Suspense>
+                </StaffOnlyRoute>
               }
             />
           </Route>

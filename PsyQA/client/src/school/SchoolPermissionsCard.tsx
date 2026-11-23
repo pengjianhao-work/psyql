@@ -13,6 +13,8 @@ export const SchoolPermissionsCard: React.FC = () => {
   const [colleges, setColleges] = useState<CollegeOption[]>([]);
 
   const isAdmin = sessionUser.role === 'admin';
+  const isTeacher = sessionUser.role === 'teacher';
+  const roleLabel = isAdmin ? '管理员' : isTeacher ? '教师' : '辅导员';
 
   useEffect(() => {
     fetchCollegeOptions()
@@ -38,7 +40,7 @@ export const SchoolPermissionsCard: React.FC = () => {
         aria-expanded={open}
       >
         <span>
-          {isAdmin ? '管理员' : '辅导员'}权限说明
+          {roleLabel}权限说明
           <small className="muted"> · {scopeText}</small>
         </span>
         <span aria-hidden="true">{open ? '▼' : '▶'}</span>
@@ -49,13 +51,15 @@ export const SchoolPermissionsCard: React.FC = () => {
           <p className="muted school-permissions-intro">
             {isAdmin
               ? '您可访问全校学生数据，并管理用户与导出报表。'
-              : '您仅可访问管辖院系内的学生与告警；对话原文需学生授权。'}
+              : isTeacher
+                ? '您仅可查看本院系的聚合数据（看板、情绪气象、热力图），无法定位到个人。'
+                : '您仅可访问管辖院系内的学生与告警；对话原文需学生授权。'}
           </p>
           <table className="school-permissions-table">
             <thead>
               <tr>
                 <th>能力</th>
-                <th>{isAdmin ? '管理员' : '您的权限'}</th>
+                <th>{isAdmin ? '管理员' : `您的权限（${roleLabel}）`}</th>
               </tr>
             </thead>
             <tbody>

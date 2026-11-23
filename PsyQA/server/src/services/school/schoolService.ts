@@ -64,7 +64,7 @@ function canAccessOrg(user: PublicAccount, orgId: string): boolean {
   return user.managedOrgIds.includes(orgId);
 }
 
-function canAccessStudent(user: PublicAccount, student: AccountRecord): boolean {
+export function canAccessStudent(user: PublicAccount, student: AccountRecord): boolean {
   if (!canAccessOrg(user, student.orgId || 'default')) return false;
   if (user.role === 'admin') return true;
   const classes = user.managedClassIds;

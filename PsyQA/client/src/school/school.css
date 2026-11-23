@@ -385,6 +385,110 @@
   color: #b91c1c;
 }
 
+/* 情绪气象（聚合视图，教师可见） */
+.school-weather-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.school-weather-head h3 {
+  margin: 0;
+}
+.school-weather-total {
+  margin: 0.5rem 0 1rem;
+  font-size: 0.9rem;
+}
+.school-weather-group {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+.school-weather-group.suppressed {
+  background: #f8faf9;
+}
+.school-weather-group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.school-weather-group-body {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.school-weather-empty {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
+.school-weather-moods {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  min-width: 220px;
+}
+.school-weather-moods li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+}
+.school-weather-mood {
+  width: 3.5rem;
+  flex: 0 0 auto;
+}
+.school-weather-track {
+  flex: 1;
+  height: 8px;
+  background: #edf2ef;
+  border-radius: 999px;
+  overflow: hidden;
+  display: block;
+}
+.school-weather-fill {
+  display: block;
+  height: 100%;
+  background: #40916c;
+  border-radius: 999px;
+}
+.school-weather-count {
+  width: 2rem;
+  text-align: right;
+  color: #64748b;
+}
+.school-weather-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.school-weather-trend-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.school-weather-trend-bar {
+  display: block;
+  width: 14px;
+  background: linear-gradient(180deg, #74c69d, #40916c);
+  border-radius: 3px 3px 0 0;
+}
+.school-weather-trend-day {
+  font-size: 0.65rem;
+  color: #64748b;
+}
+.school-weather-caption {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+}
+
 @media (max-width: 900px) {
   .school-body {
     flex-direction: column;
