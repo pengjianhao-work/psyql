@@ -70,3 +70,7 @@ scripts/_time_*
 
 # 遗留副本目录
 PsyQA (1)/
+
+# 数据库备份目录
+backups/
+**/backups/

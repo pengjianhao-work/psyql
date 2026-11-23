@@ -68,6 +68,8 @@
     "chroma:dedupe": "python ../scripts/chroma_dedupe.py",
     "eval:counsel": "python ../scripts/eval_counsel.py",
     "eval:ragas": "node ../scripts/run_eval_ragas.js",
+    "db:backup": "node scripts/backup-db.js",
+    "db:restore": "node scripts/restore-db.js",
     "eval:safety": "ts-node server/scripts/check-safety-routing.ts",
     "wiki:build": "ts-node server/scripts/build-llm-wiki.ts",
     "wiki:health": "python ../scripts/eval_wiki.py",

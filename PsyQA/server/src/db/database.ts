@@ -23,6 +23,7 @@ export function getDb(): Database.Database {
   db.pragma('busy_timeout = 8000');
   db.pragma('foreign_keys = ON');
   initSchema(db);
+  runMigrations(db);
   return db;
 }
 
@@ -254,15 +255,49 @@ function initSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_trend_terms_status_week
       ON trend_terms(status, week_key, heat DESC);
-
-    CREATE TABLE IF NOT EXISTS revoked_sessions (
-      jti TEXT PRIMARY KEY,
-      revoked_at TEXT NOT NULL DEFAULT (datetime('now')),
-      expires_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_revoked_sessions_exp
-      ON revoked_sessions(expires_at);
   `);
+}
+
+// 版本化迁移：v1 = 上方基线（全部 CREATE IF NOT EXISTS，幂等）。
+// 之后的 schema 变更只追加 MIGRATIONS 条目，不再直接改基线。
+const MIGRATIONS: { version: number; sql: string }[] = [
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE IF NOT EXISTS revoked_sessions (
+        jti TEXT PRIMARY KEY,
+        revoked_at TEXT NOT NULL DEFAULT (datetime('now')),
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_revoked_sessions_exp
+        ON revoked_sessions(expires_at);
+    `
+  }
+];
+
+export const CURRENT_SCHEMA_VERSION = 1 + MIGRATIONS.length;
+
+export function getSchemaVersion(): number {
+  const v = getMeta('schema_version');
+  return v ? Number(v) : 1;
+}
+
+function runMigrations(database: Database.Database): void {
+  const row = database
+    .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
+    .get() as { value: string } | undefined;
+  let current = row ? Number(row.value) : 1;
+  const setVersion = database.prepare(
+    "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)"
+  );
+  for (const m of MIGRATIONS) {
+    if (m.version <= current) continue;
+    database.transaction(() => {
+      database.exec(m.sql);
+      setVersion.run(String(m.version));
+    })();
+    current = m.version;
+  }
 }
 
 export function getMeta(key: string): string | null {
