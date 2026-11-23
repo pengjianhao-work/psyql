@@ -16,6 +16,16 @@ export type ProblemCategory =
   | 'trauma'              // 创伤经历
   | 'other';              // 其他
 
+/** 用户自定义的 Agent 形象卡（与服务端 userAgent.ts 保持一致） */
+export interface AgentPersona {
+  name?: string;
+  avatarKey?: string;
+  personality?: string;
+  toneStyle?: string;
+  catchphrase?: string;
+  speakingStyle?: string;
+}
+
 export interface EmotionAnalysis {
   emotion: EmotionType;
   confidence: number;
@@ -346,6 +356,51 @@ export interface QuestionResponse {
   reportPending?: boolean;
   /** 本轮回答引用的 Wiki 主题页 */
   wikiSource?: WikiSourceRef | null;
+}
+
+/** 私密日记条目（与服务端 journalService 的 JournalEntry 一致） */
+export interface JournalEntry {
+  id: number;
+  userId: string;
+  title: string;
+  body: string;
+  moodTag: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** 服务端规则层风险标记，仅用于内部信号过滤，界面不展示 */
+  riskSensitive?: boolean;
+}
+
+/** 捞到的漂流瓶（与服务端 driftBottleService 的匿名视图一致，不含 sender_id） */
+export interface PickedBottle {
+  body: string;
+  mood_tag: string | null;
+  created_at: string;
+}
+
+/** 捞瓶子结果：bottle 为 null 时带一条「来自海里的祝福」兜底文案 */
+export interface BottlePickResult {
+  ok: boolean;
+  bottle: PickedBottle | null;
+  seed?: { text: string };
+  reason?: 'rate_limited';
+}
+
+/** 扔瓶子结果：intercepted 时带照护话术与热线 */
+export interface BottleThrowResult {
+  ok: boolean;
+  intercepted?: boolean;
+  care?: { message: string; hotline: string };
+  reason?: 'rate_limited' | 'contact_info';
+}
+
+/** 「我扔过的瓶子」——只含已入池/被捞的，拦截瓶不回显 */
+export interface MyBottle {
+  id: number;
+  body: string;
+  moodTag: string | null;
+  status: 'pooled' | 'picked';
+  createdAt: string;
 }
 
 export interface GroupedHistoryItem {

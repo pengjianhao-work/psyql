@@ -10,7 +10,7 @@ interface MoodCheckinCardProps {
   userId: string;
 }
 
-const MOOD_OPTIONS = ['还不错', '一般', '有点累', '烦躁', '低落'];
+export const MOOD_OPTIONS = ['还不错', '一般', '有点累', '烦躁', '低落'];
 
 export const MoodCheckinCard: React.FC<MoodCheckinCardProps> = ({ userId }) => {
   const [mood, setMood] = useState<string | null>(null);

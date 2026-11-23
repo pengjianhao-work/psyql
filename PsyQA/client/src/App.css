@@ -2128,6 +2128,181 @@
   font-size: 12px;
 }
 
+.journal-panel {
+  padding: 4px 2px;
+  font-size: 13px;
+}
+
+.journal-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.journal-title-input,
+.journal-body-input,
+.journal-mood-select {
+  padding: 6px 8px;
+  border: 1px solid var(--psy-border, #e2e8f0);
+  border-radius: var(--psy-radius-md, 8px);
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--psy-surface, #fff);
+  color: var(--psy-text, #1e293b);
+}
+
+.journal-body-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+}
+
+.journal-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.journal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.journal-list li {
+  padding: 7px 0;
+  border-top: 1px dashed var(--psy-border, #e2e8f0);
+}
+
+.journal-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.journal-item-head .task-meta {
+  margin-left: auto;
+}
+
+.journal-date {
+  font-size: 11px;
+  color: var(--psy-text-muted, #64748b);
+}
+
+.journal-item-title {
+  margin: 3px 0 0;
+  font-weight: 600;
+}
+
+.journal-item-preview {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--psy-text-muted, #64748b);
+}
+
+.journal-empty {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--psy-text-muted, #64748b);
+}
+
+.bottle-panel {
+  padding: 4px 2px;
+  font-size: 13px;
+}
+
+.bottle-throw {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.bottle-body-input,
+.bottle-mood-select {
+  padding: 6px 8px;
+  border: 1px solid var(--psy-border, #e2e8f0);
+  border-radius: var(--psy-radius-md, 8px);
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--psy-surface, #fff);
+  color: var(--psy-text, #1e293b);
+}
+
+.bottle-body-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 52px;
+}
+
+.bottle-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bottle-card {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--psy-border-muted, rgba(99, 102, 241, 0.12));
+  border-radius: var(--psy-radius-md, 8px);
+  background: var(--psy-surface, #fff);
+}
+
+.bottle-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bottle-card-label {
+  font-size: 11px;
+  color: var(--psy-text-muted, #64748b);
+}
+
+.bottle-card-date {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--psy-text-muted, #64748b);
+}
+
+.bottle-card-body {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--psy-text, #1e293b);
+}
+
+.bottle-care {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: var(--psy-radius-md, 8px);
+  border: 1px solid rgba(244, 114, 182, 0.35);
+  background: linear-gradient(135deg, #fdf2f8 0%, #fff 100%);
+}
+
+.bottle-care-message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--psy-text, #1e293b);
+}
+
+.bottle-care-hotline {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--psy-accent, #ec4899);
+  font-weight: 600;
+}
+
+.bottle-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--psy-text-muted, #64748b);
+}
+
 .user-profile-card {
   background: linear-gradient(135deg, #f7faff 0%, #fff 100%);
   border: 1px solid var(--psy-border);
@@ -7091,4 +7266,179 @@ body:has(.student-room)::after {
 .wiki-reader-sources li span {
   font-size: 12px;
   color: var(--psy-text-muted, #64748b);
+}
+
+/* 形象卡 · 用户自定义 Agent 形象 */
+.persona-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  line-height: 1;
+  user-select: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.persona-swatch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #4a5568;
+}
+
+.persona-swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.persona-swatch {
+  border: 2px solid transparent;
+  background: transparent;
+  border-radius: 50%;
+  padding: 2px;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.persona-swatch:hover {
+  border-color: var(--psy-border-muted, rgba(99, 102, 241, 0.3));
+}
+
+.persona-swatch.active {
+  border-color: var(--psy-primary, #6366f1);
+}
+
+.persona-preview {
+  margin: 8px 0;
+  font-size: 12px;
+  color: #4a5568;
+}
+
+.persona-preview strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #2d3748;
+  font-size: 12px;
+}
+
+.persona-preview pre {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(107, 33, 168, 0.06);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ===== 分层导航与记录/漂流瓶页 ===== */
+.student-view-nav {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.student-view-tab {
+  border: 1px solid #c7d2fe;
+  background: linear-gradient(135deg, #fff, #f8faff);
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.1);
+}
+
+.student-view-tab:hover {
+  background: #eef2ff;
+  color: var(--psy-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.16);
+}
+
+.student-view-tab.active {
+  background: linear-gradient(135deg, var(--psy-primary), var(--psy-primary-dark));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+}
+
+.record-page,
+.bottle-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.record-page-side,
+.bottle-page-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bottle-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bottle-history-item {
+  padding: 10px 12px;
+  border: 1px solid var(--psy-border-muted);
+  border-radius: var(--psy-radius-sm);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.bottle-history-body {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--psy-text);
+  line-height: 1.55;
+}
+
+.bottle-history-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.bottle-history-date {
+  color: var(--psy-text-muted);
+}
+
+.bottle-history-status {
+  margin-left: auto;
+  color: var(--psy-text-muted);
+}
+
+.bottle-history-status.picked {
+  color: var(--psy-primary-dark);
+  font-weight: 500;
+}
+
+.bottle-history-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--psy-text-muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .record-page,
+  .bottle-page {
+    grid-template-columns: 1fr;
+  }
 }
