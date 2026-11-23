@@ -72,7 +72,14 @@ import {
   getTaskBoardHandler,
   postTaskBoardTask,
   postTaskBoardToggle,
-  deleteTaskBoardTask
+  deleteTaskBoardTask,
+  getJournals,
+  postJournal,
+  patchJournal,
+  postDeleteJournal,
+  postThrowBottle,
+  postPickBottle,
+  getMyBottles
 } from '../controllers/userToolsController';
 import {
   attachAuth,
@@ -136,6 +143,13 @@ questionRouter.get('/task-board', ...studentApi, getTaskBoardHandler);
 questionRouter.post('/task-board/tasks', ...studentApi, postTaskBoardTask);
 questionRouter.post('/task-board/toggle', ...studentApi, postTaskBoardToggle);
 questionRouter.post('/task-board/tasks/delete', ...studentApi, deleteTaskBoardTask);
+questionRouter.get('/journals', ...studentApi, getJournals);
+questionRouter.post('/journals', ...studentApi, postJournal);
+questionRouter.patch('/journal', ...studentApi, patchJournal);
+questionRouter.post('/journal/delete', ...studentApi, postDeleteJournal);
+questionRouter.post('/bottle/throw', ...studentApi, postThrowBottle);
+questionRouter.post('/bottle/pick', ...studentApi, postPickBottle);
+questionRouter.get('/bottle/mine', ...studentApi, getMyBottles);
 questionRouter.get('/wiki/:slug', ...studentApi, getPublishedWikiPage);
 
 questionRouter.get('/stats', requireAuth, requireRole('admin'), getSystemStats);

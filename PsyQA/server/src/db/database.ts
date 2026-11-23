@@ -205,6 +205,39 @@ function initSchema(database: Database.Database): void {
       distilled_count INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS user_journals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL,
+      mood_tag TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      risk_flagged INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_journals_user ON user_journals(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS drift_bottles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      mood_tag TEXT,
+      status TEXT NOT NULL DEFAULT 'pooled',
+      created_at TEXT NOT NULL,
+      picked_at TEXT,
+      picked_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_drift_bottles_pool ON drift_bottles(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_drift_bottles_sender ON drift_bottles(sender_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS bottle_picks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      bottle_id INTEGER,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_bottle_picks_user ON bottle_picks(user_id, created_at);
+
     CREATE TABLE IF NOT EXISTS trend_terms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       term TEXT NOT NULL,
