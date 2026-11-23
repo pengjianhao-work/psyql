@@ -22,6 +22,7 @@ import { getAskLoadMetrics } from './controllers/questionController';
 import { getReportQueueMetrics } from './services/common/reportQueue';
 import { getSeasonalRagBoost } from './services/knowledge/seasonalRagPolicy';
 import { env } from './config/env';
+import { getDb } from './db/database';
 import { logger } from './utils/logger';
 
 function mountApiRoutes(app: Express, base: string): void {
@@ -30,6 +31,74 @@ function mountApiRoutes(app: Express, base: string): void {
   app.use(`${base}/school`, schoolRouter);
   app.use(`${base}/training`, trainingRouter);
   app.use(`${base}/videos`, videoRouter);
+}
+
+async function collectRuntimeStatus(refresh: boolean) {
+  const useLlm = shouldUseOllamaLlm();
+  let llmMode: 'zhipu' | 'ollama' | 'fallback' | 'fast' = 'fast';
+  let llmProvider: 'zhipu' | 'ollama' | null = null;
+  let model: string | undefined;
+  let loraFineTuned = false;
+  let ollamaAvailable = false;
+
+  if (useLlm) {
+    try {
+      const status = await getLlmStatus(refresh);
+      llmMode = status.mode;
+      llmProvider = status.provider;
+      model = status.fineTuned ? `${status.model}+LoRA` : status.model;
+      loraFineTuned = status.fineTuned;
+      if (status.provider === 'ollama') {
+        ollamaAvailable = true;
+      } else {
+        ollamaAvailable = await isOllamaOnlyAvailable(refresh);
+      }
+    } catch {
+      llmMode = 'fallback';
+    }
+  }
+
+  const [chroma, qdrant, localBge, knowledge] = await Promise.all([
+    getChromaStatus(),
+    getQdrantStatus(),
+    localBgeReady(),
+    getKnowledgeEmbedStatus()
+  ]);
+  const load = getAskLoadMetrics();
+  const reportQueue = getReportQueueMetrics();
+  return {
+    status: 'ok',
+    llmMode,
+    llmProvider,
+    zhipuConfigured: isZhipuConfigured(),
+    llmAvailable: llmMode === 'zhipu' || llmMode === 'ollama',
+    ollamaAvailable,
+    model,
+    loraFineTuned,
+    loraModel: loraFineTuned ? model?.replace('+LoRA', '') : undefined,
+    chroma: {
+      ...chroma,
+      capacityHint: chroma.count != null ? `${chroma.count} vectors` : undefined
+    },
+    qdrant: {
+      ...qdrant,
+      capacityHint: qdrant.count != null ? `${qdrant.count} vectors` : undefined
+    },
+    localBge,
+    knowledge,
+    load,
+    reportQueue: {
+      pending: reportQueue.pending,
+      inFlight: reportQueue.inFlightKeys.length
+    },
+    seasonalRag: getSeasonalRagBoost(),
+    dualLlm: process.env.PSYQA_DUAL_LLM === '1',
+    build: BUILD_INFO,
+    fastAnswer: process.env.PSYQA_FAST_ANSWER === '1',
+    reactDemo: process.env.PSYQA_REACT_DEMO === '1',
+    agentMode: (process.env.PSYQA_AGENT_MODE || 'auto').trim().toLowerCase(),
+    env: env.nodeEnv
+  };
 }
 
 export function createApp(): Express {
@@ -104,74 +173,42 @@ export function createApp(): Express {
     res.json({ message: '心理港湾 - 温暖的心灵栖息地', version: '1.0.0' });
   });
 
+  // Liveness：只允许快路径。依赖探测走缓存并在 400ms 内给出结果，
+  // 超时返回最小存活信息——/health 绝不能因为下游不可达而阻塞。
   app.get('/health', async (_req, res) => {
-    const useLlm = shouldUseOllamaLlm();
-    let llmMode: 'zhipu' | 'ollama' | 'fallback' | 'fast' = 'fast';
-    let llmProvider: 'zhipu' | 'ollama' | null = null;
-    let model: string | undefined;
-    let loraFineTuned = false;
-    let ollamaAvailable = false;
-
-    if (useLlm) {
-      try {
-        const status = await getLlmStatus(true);
-        llmMode = status.mode;
-        llmProvider = status.provider;
-        model = status.fineTuned ? `${status.model}+LoRA` : status.model;
-        loraFineTuned = status.fineTuned;
-        if (status.provider === 'ollama') {
-          ollamaAvailable = true;
-        } else {
-          ollamaAvailable = await isOllamaOnlyAvailable(true);
-        }
-      } catch {
-        llmMode = 'fallback';
+    const deps = await Promise.race([
+      collectRuntimeStatus(false),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 400))
+    ]);
+    res.json(
+      deps ?? {
+        status: 'ok',
+        llmMode: 'fallback',
+        llmProvider: null,
+        build: BUILD_INFO,
+        env: env.nodeEnv
       }
-    }
-
-    const chroma = await getChromaStatus();
-    const qdrant = await getQdrantStatus();
-    const localBge = await localBgeReady();
-    const knowledge = await getKnowledgeEmbedStatus();
-    const load = getAskLoadMetrics();
-    const reportQueue = getReportQueueMetrics();
-    res.json({
-      status: 'ok',
-      llmMode,
-      llmProvider,
-      zhipuConfigured: isZhipuConfigured(),
-      llmAvailable: llmMode === 'zhipu' || llmMode === 'ollama',
-      ollamaAvailable,
-      model,
-      loraFineTuned,
-      loraModel: loraFineTuned ? model?.replace('+LoRA', '') : undefined,
-      chroma: {
-        ...chroma,
-        capacityHint: chroma.count != null ? `${chroma.count} vectors` : undefined
-      },
-      qdrant: {
-        ...qdrant,
-        capacityHint: qdrant.count != null ? `${qdrant.count} vectors` : undefined
-      },
-      localBge,
-      knowledge,
-      load,
-      reportQueue: {
-        pending: reportQueue.pending,
-        inFlight: reportQueue.inFlightKeys.length
-      },
-      seasonalRag: getSeasonalRagBoost(),
-      dualLlm: process.env.PSYQA_DUAL_LLM === '1',
-      build: BUILD_INFO,
-      fastAnswer: process.env.PSYQA_FAST_ANSWER === '1',
-      reactDemo: process.env.PSYQA_REACT_DEMO === '1',
-      agentMode: (process.env.PSYQA_AGENT_MODE || 'auto').trim().toLowerCase(),
-      env: env.nodeEnv
-    });
+    );
   });
 
-  app.get('/ready', (_req, res) => {
-    res.json({ ready: true });
+  // Readiness：硬依赖（SQLite）探活 + 软依赖快照。LLM/Qdrant 等软依赖
+  // 缺失时应用按设计降级运行，不构成 not-ready；?deep=1 时强制刷新并全量等待。
+  app.get('/ready', async (req, res) => {
+    try {
+      getDb().prepare('SELECT 1').get();
+    } catch {
+      res.status(503).json({ ready: false, reason: 'database unavailable' });
+      return;
+    }
+    if (req.query.deep === '1') {
+      res.json({ ready: true, ...(await collectRuntimeStatus(true)) });
+      return;
+    }
+    const deps = await Promise.race([
+      collectRuntimeStatus(false),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))
+    ]);
+    res.json({ ready: true, ...(deps ?? { status: 'ok' }) });
   });
 
   const clientBuildPath = path.join(__dirname, '..', '..', 'client', 'build');
