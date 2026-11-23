@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Message, KnowledgeItem, SimilarQuestion, EmotionType } from '../types';
+import { AgentPersona, Message, KnowledgeItem, SimilarQuestion, EmotionType } from '../types';
 import { formatBotMessage, splitBotContent } from '../utils/formatMessage';
 import { parseKeywordTags, dedupeSimilarQuestions } from '../utils/refDisplay';
+import { PersonaAvatar } from './PersonaAvatar';
 import { VideoCard } from './VideoCard';
 
 interface ChatMessageProps {
@@ -10,6 +11,8 @@ interface ChatMessageProps {
   onSimilarQuestionClick?: (question: string) => void;
   onOpenWiki?: (slug: string, title: string) => void;
   onRetry?: (question: string) => void;
+  /** 用户自定义形象卡：设置后 bot 头像换成形象头像 */
+  persona?: AgentPersona;
 }
 
 const emotionIcons: Record<EmotionType, string> = {
@@ -81,7 +84,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   knowledgeSources,
   onSimilarQuestionClick,
   onOpenWiki,
-  onRetry
+  onRetry,
+  persona
 }) => {
   const [thinkOpen, setThinkOpen] = useState(Boolean(message.reactTrace?.length) && !message.content);
   const [copied, setCopied] = useState(false);
@@ -152,6 +156,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           <div className="avatar user-avatar" aria-hidden="true">
             👤
           </div>
+        ) : persona ? (
+          <PersonaAvatar
+            avatarKey={persona.avatarKey}
+            size={40}
+            title={persona.name || '陪伴者'}
+          />
         ) : (
           <div
             className="avatar bot-avatar"

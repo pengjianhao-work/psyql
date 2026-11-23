@@ -1,6 +1,6 @@
 import { callLlmGenerate, shouldUseLlm } from '../llm/llmClient';
 import { extractJsonObject } from '../llm/ollamaClient';
-import { getRecentDialogs } from '../../db/userAgentStore';
+import { collectUserSignals, UserSignal } from '../signals/userSignalService';
 import {
   upsertUserFact,
   getFactDistillState,
@@ -10,10 +10,10 @@ import {
 } from './userFactService';
 
 /**
- * L2 记忆蒸馏：把最近若干轮对话交给 LLM，提炼「关于用户的稳定事实」。
+ * L2 记忆蒸馏：把最近若干条用户信号交给 LLM，提炼「关于用户的稳定事实」。
  * - 异步 fire-and-forget，不阻塞回答主链路
- * - 去抖：距上次蒸馏累计新增 ≥4 条对话才跑
- * - 安全：risk 为 high/critical 的对话不进入蒸馏输入；输出禁止诊断/危机细节
+ * - 去抖：距上次蒸馏累计新增 ≥4 条对话信号才跑
+ * - 安全：riskSensitive 的信号不进入蒸馏输入；输出禁止诊断/危机细节
  */
 
 const MIN_NEW_DIALOGS = 4;
@@ -29,25 +29,10 @@ const VALID_CATEGORIES = new Set<UserFactCategory>([
 
 const inFlight = new Set<string>();
 
-function isHighRiskDialog(psychJson: string | null): boolean {
-  if (!psychJson) return false;
-  try {
-    const parsed = JSON.parse(psychJson) as { risk?: string; riskLevel?: string };
-    const risk = parsed.risk ?? parsed.riskLevel ?? '';
-    return risk === 'high' || risk === 'critical';
-  } catch {
-    return false;
-  }
-}
+function buildDistillPrompt(signals: UserSignal[]): string {
+  const lines = signals.map((s, i) => `${i + 1}. [${s.occurredAt}] ${s.text}`);
 
-function buildDistillPrompt(dialogs: Array<{ dialogTime: string; userText: string; summary: string }>): string {
-  const lines = dialogs.map((d, i) => {
-    const user = d.userText.replace(/\s+/g, ' ').slice(0, 120);
-    const summary = (d.summary || '').replace(/\s+/g, ' ').slice(0, 80);
-    return `${i + 1}. [${d.dialogTime}] 用户说：${user}${summary ? `｜摘要：${summary}` : ''}`;
-  });
-
-  return `你是心理支持产品的记忆整理助手。下面是同一位用户最近的对话片段。
+  return `你是心理支持产品的记忆整理助手。下面是同一位用户最近的对话片段与行为记录。
 请提炼「关于这个用户的稳定事实、偏好、处境背景」，输出且只输出 JSON：
 {"facts":[{"fact":"...","category":"emotion|relationship|academic|habit|preference|context","confidence":"low|medium|high"}]}
 
@@ -59,7 +44,7 @@ function buildDistillPrompt(dialogs: Array<{ dialogTime: string; userText: strin
 - 禁止诊断、禁止心理疾病标签、禁止记录自伤/危机细节、禁止编造
 - 没有值得提炼的内容时输出 {"facts":[]}
 
-对话片段：
+用户记录：
 ${lines.join('\n')}`;
 }
 
@@ -93,14 +78,10 @@ function parseFactDrafts(raw: string | null): Array<{
 export async function runFactDistillation(userId: string): Promise<number> {
   if (!userId || userId === 'default_user' || !shouldUseLlm()) return 0;
 
-  const dialogs = getRecentDialogs(userId, LOOKBACK_DIALOGS)
-    .filter((d) => d.userText && d.userText.trim().length >= 10)
-    .filter((d) => !isHighRiskDialog(d.psychJson));
-  if (dialogs.length < 3) return 0;
+  const signals = collectUserSignals(userId, { limit: LOOKBACK_DIALOGS });
+  if (signals.length < 3) return 0;
 
-  const prompt = buildDistillPrompt(
-    dialogs.map((d) => ({ dialogTime: d.dialogTime, userText: d.userText, summary: d.summary ?? '' }))
-  );
+  const prompt = buildDistillPrompt(signals);
   const raw = await callLlmGenerate(prompt, {
     provider: 'auto',
     temperature: 0.2,
@@ -108,18 +89,19 @@ export async function runFactDistillation(userId: string): Promise<number> {
     timeoutMs: 60000
   });
   const drafts = parseFactDrafts(raw);
+  const dialogSignalCount = signals.filter((s) => s.type === 'dialog').length;
   if (!drafts.length) {
-    recordFactDistillRun(userId, dialogs.length);
+    recordFactDistillRun(userId, dialogSignalCount);
     return 0;
   }
 
-  const latestDialogTime = dialogs[0]?.dialogTime;
+  const latestDialogTime = signals.find((s) => s.type === 'dialog')?.occurredAt;
   let touched = 0;
   for (const draft of drafts) {
     const fact = upsertUserFact(userId, draft, latestDialogTime);
     if (fact) touched += 1;
   }
-  recordFactDistillRun(userId, dialogs.length);
+  recordFactDistillRun(userId, dialogSignalCount);
   return touched;
 }
 
@@ -131,7 +113,11 @@ export function scheduleFactDistillation(userId: string): void {
   if (!userId || userId === 'default_user' || inFlight.has(userId)) return;
 
   const state = getFactDistillState(userId);
-  const recentCount = Math.min(getRecentDialogs(userId, 100).length, 100);
+  const recentCount = collectUserSignals(userId, {
+    limit: 100,
+    types: ['dialog'],
+    excludeRiskSensitive: true
+  }).length;
   const newSinceLast = recentCount - state.distilledCount;
   if (newSinceLast < MIN_NEW_DIALOGS && state.lastDistillAt) return;
   if (recentCount < 3) return;

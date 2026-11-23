@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { CounselMode, Message } from '../types';
+import { AgentPersona, CounselMode, Message } from '../types';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { PersonaAvatar, personaHasContent } from './PersonaAvatar';
 
 const MODE_OPTIONS: Array<{ id: CounselMode; label: string; hint: string }> = [
   { id: 'companion', label: '陪伴倾诉', hint: '默认模式：先共情，再给建议' },
@@ -40,6 +41,8 @@ interface ChatContainerProps {
   onOpenWiki?: (slug: string, title: string) => void;
   counselMode?: CounselMode;
   onCounselModeChange?: (mode: CounselMode) => void;
+  /** 用户自定义形象卡：有内容时替换默认头像与「心理港湾」标题 */
+  persona?: AgentPersona;
 }
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({
@@ -71,7 +74,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   onOpenVideoCenter,
   onOpenWiki,
   counselMode = 'companion',
-  onCounselModeChange
+  onCounselModeChange,
+  persona
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -85,6 +89,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   const showQuickPrompts = showWelcome && promptCards.length > 0;
   const inputDisabled = isLoading || initializing || inputLocked;
   const showStop = isGenerating && onStopGenerate;
+  const hasPersona = personaHasContent(persona);
 
   useEffect(() => {
     if (stickToBottomRef.current) {
@@ -113,11 +118,15 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     <div className={`chat-container${lateHour ? ' chat-late' : ''}`}>
       <div className="chat-header">
         <div className="header-content">
-          <span className="chat-brand-mark" aria-hidden="true">
-            港
-          </span>
+          {hasPersona ? (
+            <PersonaAvatar avatarKey={persona?.avatarKey} size={40} title={persona?.name || '陪伴者'} />
+          ) : (
+            <span className="chat-brand-mark" aria-hidden="true">
+              港
+            </span>
+          )}
           <div className="chat-brand-text">
-            <h2>心理港湾</h2>
+            <h2>{persona?.name?.trim() || '心理港湾'}</h2>
             <p>慢慢说就好</p>
           </div>
         </div>
@@ -222,15 +231,24 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             onSimilarQuestionClick={onSimilarQuestionClick}
             onOpenWiki={onOpenWiki}
             onRetry={onRetry}
+            persona={hasPersona ? persona : undefined}
           />
         ))}
 
         {isLoading && (
           <div className="message-wrapper bot chat-loading-row" aria-live="polite" aria-busy="true">
             <div className="message-avatar">
-              <div className="avatar bot-avatar chat-loading-avatar" aria-hidden="true">
-                🧠
-              </div>
+              {hasPersona ? (
+                <PersonaAvatar
+                  avatarKey={persona?.avatarKey}
+                  size={40}
+                  className="chat-loading-avatar"
+                />
+              ) : (
+                <div className="avatar bot-avatar chat-loading-avatar" aria-hidden="true">
+                  🧠
+                </div>
+              )}
             </div>
             <div className="message-content-wrapper">
               <div className="message-bubble bot chat-loading-bubble">

@@ -3,6 +3,16 @@ export type AgentPhase = 'collect' | 'shape' | 'mature';
 
 import type { SupportAnswers } from '../services/user/supportPreferences';
 
+/** 用户自定义的 Agent 形象卡：只影响语气外观，安全优先级不变 */
+export interface AgentPersona {
+  name?: string;
+  avatarKey?: string;
+  personality?: string;
+  toneStyle?: string;
+  catchphrase?: string;
+  speakingStyle?: string;
+}
+
 export interface UserStaticProfile {
   supportPreferences?: SupportAnswers;
   age?: number | string;
@@ -10,6 +20,7 @@ export interface UserStaticProfile {
   familyBackground?: string;
   majorLifeEvents?: string[];
   notes?: string;
+  persona?: AgentPersona;
 }
 
 export interface EmotionTimelineEntry {

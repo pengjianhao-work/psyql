@@ -20,6 +20,8 @@ import {
   deleteMemoryFact,
   distillMemoryFacts
 } from '../api';
+import type { AgentPersona } from '../types';
+import { PERSONA_AVATAR_OPTIONS, PersonaAvatar } from './PersonaAvatar';
 import { RagWeightBar } from './RagWeightBar';
 
 const PHASE_LABEL: Record<AgentProfilePayload['phase'], string> = {
@@ -71,19 +73,22 @@ const FACT_CONFIDENCE_LABEL: Record<UserFact['confidence'], string> = {
   high: '稳定'
 };
 
-type MemoryTab = 'portrait' | 'facts' | 'memories';
+type MemoryTab = 'portrait' | 'facts' | 'memories' | 'persona';
 
 const TAB_LABEL: Record<MemoryTab, string> = {
   portrait: 'L3 心理画像',
   facts: 'L2 记忆事实',
-  memories: 'L1 对话记忆'
+  memories: 'L1 对话记忆',
+  persona: '形象设定'
 };
 
 interface AgentProfileCardProps {
   userId: string;
+  /** 保存成功后回调，供外层同步聊天页形象 */
+  onProfileUpdate?: (profile: AgentProfilePayload) => void;
 }
 
-export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) => {
+export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId, onProfileUpdate }) => {
   const [profile, setProfile] = useState<AgentProfilePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -110,6 +115,13 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
   const [effectiveApproaches, setEffectiveApproaches] = useState('');
   const [agentPrompt, setAgentPrompt] = useState('');
 
+  const [personaName, setPersonaName] = useState('');
+  const [personaAvatarKey, setPersonaAvatarKey] = useState('');
+  const [personaPersonality, setPersonaPersonality] = useState('');
+  const [personaTone, setPersonaTone] = useState('');
+  const [personaCatchphrase, setPersonaCatchphrase] = useState('');
+  const [personaStyle, setPersonaStyle] = useState('');
+
   const fillForm = useCallback((data: AgentProfilePayload) => {
     const b = data.basicJson;
     setBasicAge(b?.age !== undefined ? String(b.age) : '');
@@ -121,6 +133,13 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
     setAvoidPhrases(joinList(data.interventionJson?.avoidPhrases));
     setEffectiveApproaches(joinList(data.interventionJson?.effectiveApproaches));
     setAgentPrompt(data.agentSystemPrompt ?? '');
+    const p = data.basicJson?.persona;
+    setPersonaName(p?.name ?? '');
+    setPersonaAvatarKey(p?.avatarKey ?? '');
+    setPersonaPersonality(p?.personality ?? '');
+    setPersonaTone(p?.toneStyle ?? '');
+    setPersonaCatchphrase(p?.catchphrase ?? '');
+    setPersonaStyle(p?.speakingStyle ?? '');
   }, []);
 
   const load = useCallback(async () => {
@@ -210,10 +229,57 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
           ? { agentSystemPrompt: agentPrompt.trim() }
           : {})
       });
-      setProfile({ ...result.profile, phase: result.phase, ragWeights: result.ragWeights });
-      fillForm({ ...result.profile, phase: result.phase, ragWeights: result.ragWeights });
+      const nextProfile = { ...result.profile, phase: result.phase, ragWeights: result.ragWeights };
+      setProfile(nextProfile);
+      fillForm(nextProfile);
+      onProfileUpdate?.(nextProfile);
       setEditing(false);
       setMessage('专属档案已保存');
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const buildPersonaDraft = (): AgentPersona => ({
+    name: personaName.trim() || undefined,
+    avatarKey: personaAvatarKey || undefined,
+    personality: personaPersonality.trim() || undefined,
+    toneStyle: personaTone.trim() || undefined,
+    catchphrase: personaCatchphrase.trim() || undefined,
+    speakingStyle: personaStyle.trim() || undefined
+  });
+
+  /** 与服务端 formatPersonaForPrompt 同步的预览文案 */
+  const personaPreview = (): string => {
+    const draft = buildPersonaDraft();
+    const fields: string[] = [];
+    if (draft.name) fields.push(`- 名字：${draft.name}`);
+    if (draft.personality) fields.push(`- 性格：${draft.personality}`);
+    if (draft.toneStyle) fields.push(`- 语气：${draft.toneStyle}`);
+    if (draft.catchphrase) {
+      fields.push(`- 口头禅：${draft.catchphrase}（偶尔自然使用，不要每句都带）`);
+    }
+    if (draft.speakingStyle) fields.push(`- 说话习惯：${draft.speakingStyle}`);
+    if (!fields.length) return '';
+    return `【TA 给你的形象设定】\n${fields.join('　')}\n无论设定如何，你始终是温暖、稳重的陪伴者；危机时以安全为先。`;
+  };
+
+  const handlePersonaSave = async () => {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await patchAgentProfile({
+        userId,
+        basic: { persona: buildPersonaDraft() }
+      });
+      const nextProfile = { ...result.profile, phase: result.phase, ragWeights: result.ragWeights };
+      setProfile(nextProfile);
+      fillForm(nextProfile);
+      onProfileUpdate?.(nextProfile);
+      setMessage('形象设定已保存');
     } catch (e) {
       setError(getErrorMessage(e));
     } finally {
@@ -715,6 +781,115 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
         </div>
       )}
 
+      {tab === 'persona' && (
+        <div className="memory-tab-panel">
+          <p className="agent-profile-muted memory-layer-desc">
+            形象设定：给陪伴你的 Agent 一个名字和样子。它只影响聊天里的称呼与语气，安全规则不变。
+          </p>
+          <div className="agent-profile-form">
+            <div className="persona-swatch-row">
+              <span className="persona-swatch-label">头像</span>
+              <div className="persona-swatch-grid" role="radiogroup" aria-label="选择头像">
+                {PERSONA_AVATAR_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={personaAvatarKey === opt.key}
+                    className={`persona-swatch${personaAvatarKey === opt.key ? ' active' : ''}`}
+                    onClick={() =>
+                      setPersonaAvatarKey(personaAvatarKey === opt.key ? '' : opt.key)
+                    }
+                    title={opt.label}
+                  >
+                    <PersonaAvatar avatarKey={opt.key} size={34} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label>
+              名字（不超过 12 字）
+              <input
+                type="text"
+                value={personaName}
+                maxLength={12}
+                onChange={(e) => setPersonaName(e.target.value)}
+                placeholder="比如：小港、阿暖"
+              />
+            </label>
+            <label>
+              性格（不超过 30 字）
+              <input
+                type="text"
+                value={personaPersonality}
+                maxLength={30}
+                onChange={(e) => setPersonaPersonality(e.target.value)}
+                placeholder="比如：温和慢热、有点幽默"
+              />
+            </label>
+            <label>
+              语气（不超过 20 字）
+              <input
+                type="text"
+                value={personaTone}
+                maxLength={20}
+                onChange={(e) => setPersonaTone(e.target.value)}
+                placeholder="比如：轻声细语、像朋友聊天"
+              />
+            </label>
+            <label>
+              口头禅（不超过 20 字）
+              <input
+                type="text"
+                value={personaCatchphrase}
+                maxLength={20}
+                onChange={(e) => setPersonaCatchphrase(e.target.value)}
+                placeholder="比如：慢慢来，我在听"
+              />
+            </label>
+            <label>
+              说话习惯（不超过 40 字）
+              <input
+                type="text"
+                value={personaStyle}
+                maxLength={40}
+                onChange={(e) => setPersonaStyle(e.target.value)}
+                placeholder="比如：多用短句，少讲道理"
+              />
+            </label>
+          </div>
+          {personaPreview() ? (
+            <div className="persona-preview">
+              <strong>它会这样被介绍给模型</strong>
+              <pre>{personaPreview()}</pre>
+            </div>
+          ) : (
+            <p className="agent-profile-muted">
+              还没有填内容。设定后，聊天页会显示这里的头像和名字。
+            </p>
+          )}
+          <div className="agent-profile-actions">
+            <button
+              type="button"
+              className="agent-profile-btn primary"
+              onClick={() => void handlePersonaSave()}
+              disabled={saving}
+            >
+              {saving ? '保存中…' : '保存形象'}
+            </button>
+            <button
+              type="button"
+              className="agent-profile-btn"
+              onClick={() => fillForm(profile)}
+              disabled={saving}
+            >
+              还原
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab !== 'persona' && (
       <div className="agent-profile-actions">
         {!editing ? (
           <>
@@ -762,6 +937,7 @@ export const AgentProfileCard: React.FC<AgentProfileCardProps> = ({ userId }) =>
           </>
         )}
       </div>
+      )}
     </div>
   );
 };

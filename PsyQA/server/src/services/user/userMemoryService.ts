@@ -36,6 +36,7 @@ import { embedMultiLocal } from '../knowledge/localBgeClient';
 import { cacheGetOrSet } from '../../utils/memoryCache';
 import { getLockedMemoryBoost, isMemoryArchived } from './memoryTagService';
 import { formatUserFactsForPrompt } from './userFactService';
+import { formatPersonaForPrompt } from './personaService';
 import {
   PHASE_LABELS,
   computeTimelineUserWeight,
@@ -459,6 +460,10 @@ export function buildAgentPromptContext(userId: string): string {
 
   const factsBlock = formatUserFactsForPrompt(userId);
   if (factsBlock) parts.push(factsBlock);
+
+  // 用户自定义形象卡：块内自带安全锁定行，crisis/high 路径也允许注入
+  const personaBlock = formatPersonaForPrompt(profile.basicJson?.persona);
+  if (personaBlock) parts.push(personaBlock);
 
   if (profile.agentSystemPrompt?.trim()) {
     parts.push(`【专属Agent人设】\n${profile.agentSystemPrompt.trim()}`);
