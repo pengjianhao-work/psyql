@@ -254,6 +254,14 @@ function initSchema(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_trend_terms_status_week
       ON trend_terms(status, week_key, heat DESC);
+
+    CREATE TABLE IF NOT EXISTS revoked_sessions (
+      jti TEXT PRIMARY KEY,
+      revoked_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_revoked_sessions_exp
+      ON revoked_sessions(expires_at);
   `);
 }
 

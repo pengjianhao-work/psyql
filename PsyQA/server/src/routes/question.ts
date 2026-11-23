@@ -88,10 +88,17 @@ import {
   requireStudentAccess,
   assertSelfUserId
 } from '../middleware/authMiddleware';
+import { createRateLimiter } from '../middleware/rateLimit';
 
 const questionRouter = Router();
 
 questionRouter.use(attachAuth);
+
+// ask 限流：按用户（未登录回退 IP）——短窗 30 次/10 分钟 + 每日 300 次配额
+const askBucketKey = (req: Parameters<typeof requireStudentAccess>[0]): string =>
+  `ask:${(req as { authUser?: { id?: string } }).authUser?.id || req.ip || 'unknown'}`;
+const askBurstLimit = createRateLimiter(30, 10 * 60 * 1000, askBucketKey);
+const askDailyQuota = createRateLimiter(300, 24 * 60 * 60 * 1000, askBucketKey);
 
 questionRouter.get('/', getQuestions);
 questionRouter.get('/categories', getAllCategories);
@@ -100,8 +107,8 @@ const studentApi = [requireStudentAccess, assertSelfUserId] as const;
 
 questionRouter.post('/analyze', ...studentApi, postAnalyzePsych);
 questionRouter.post('/self-rating', ...studentApi, postSelfRating);
-questionRouter.post('/ask', ...studentApi, askQuestion);
-questionRouter.post('/ask/stream', ...studentApi, askQuestionStream);
+questionRouter.post('/ask', ...studentApi, askBurstLimit, askDailyQuota, askQuestion);
+questionRouter.post('/ask/stream', ...studentApi, askBurstLimit, askDailyQuota, askQuestionStream);
 questionRouter.get('/insights/status', ...studentApi, getInsightsStatus);
 questionRouter.get('/progress', ...studentApi, getUserProgress);
 questionRouter.get('/progress/text', ...studentApi, getUserProgressText);

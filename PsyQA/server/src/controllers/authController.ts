@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { createSessionToken, verifySessionToken } from '../services/user/sessionService';
+import { createSessionToken, revokeSessionToken, verifySessionToken } from '../services/user/sessionService';
 import {
   getUserById,
   registerAccount,
@@ -46,7 +46,8 @@ export const postLogin = async (req: Request, res: Response): Promise<void> => {
   res.json({ token, user: result.user });
 };
 
-export const postLogout = async (_req: Request, res: Response): Promise<void> => {
+export const postLogout = async (req: Request, res: Response): Promise<void> => {
+  revokeSessionToken(getTokenFromRequest(req));
   clearAuthCookie(res);
   res.json({ ok: true });
 };
