@@ -24,8 +24,8 @@ COPY package*.json ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/client/build ./client/build
-COPY --from=build /app/server/data ./server/data
-COPY --from=build /app/vector_db ./vector_db
+# 运行时数据（SQLite/账号/向量库）不进镜像，由卷或环境注入
+RUN mkdir -p /app/server/data /app/vector_db
 
 EXPOSE 3001
 
