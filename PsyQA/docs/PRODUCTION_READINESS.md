@@ -68,14 +68,16 @@
 
 | ID | 风险 | 等级 | 处理阶段 |
 |---|---|---|---|
-| R1 | `/health` 同步探测外部服务 → liveness 阻塞、健康检查失真 | 高 | Phase 2（拆 /health 与 /ready，依赖探测异步+短超时） |
+| R1 | `/health` 同步探测外部服务 → liveness 阻塞、健康检查失真 | ~~高~~ ✅ | **已修复（phase-1a）**：`/health`=缓存探测+400ms 预算；`/ready`=SQLite 探活+快照，`?deep=1` 全量；health.integration 3/3 通过（11.8s，原 15s 超时） |
 | R2 | 启动路径 `load()` 全量同步 SQLite + 稀疏重建，阻塞事件循环 | 高 | Phase 3（Qdrant 模式跳过 legacy 加载） |
-| R3 | `accounts.json` 在仓内（含哈希）+ README 演示密码 | 高 | Phase 1（untrack + 密钥/账号出仓） |
-| R4 | 会话 7d 无撤销、ask 无配额、密码≥6 | 高 | Phase 2 |
+| R3 | `accounts.json` 在仓内（含哈希）+ README 演示密码 | 中 | **部分修复（phase-1a）**：`server/data/accounts.json` + `src/data` 副本已 untrack（文件保留在磁盘）；历史中的哈希需批准历史重写后清除；README 密码待轮换方案 |
+| R4 | 会话 7d 无撤销、ask 无配额、密码≥6 | 高 | Phase 1b/2 |
 | R5 | `.git` 17.6GB（历史大对象/LFS） | 中 | Phase 1 出方案；**历史重写需人类批准** |
 | R6 | Desktop 陈旧副本可能再次被误编辑，产生分叉 | 中 | 等人类决定是否归档/删除 |
 | R7 | SiliconFlow/外部 LLM 单点不可达 → 问答降级 | 中 | Phase 2 超时/熔断 + Phase 4 离线评测 |
-| R8 | 依赖漏洞 1 critical + 5 high | 高 | Phase 1 `npm audit fix` + CI 门禁 |
+| R8 | 依赖漏洞 1 critical + 5 high | ~~高~~ ✅→低 | **已修复（phase-1a）**：`npm audit fix` 后剩 3 个 moderate（qs DoS），0 high/critical；CI 门禁待加 |
+
+> **已验证缺陷修复记录（phase-1a）**：`.gitignore` 的 `server/data/*.json` 规则相对仓库根目录书写，而数据实际在 `PsyQA/server/data/`——规则从未生效（运行时 JSON 一直以 `??` 出现）。已改为 `**/server/data/*.json` 并补 `**/server/src/data/`、`training_data/`、`_tmp_*` 脚本规则。
 
 ## 6. 阶段计划与 KPI
 
