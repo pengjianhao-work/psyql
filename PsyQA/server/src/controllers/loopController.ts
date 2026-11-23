@@ -18,6 +18,7 @@ import {
   ReflectionScope
 } from '../services/loop/reflectionService';
 import { createResource, listResources, setResourceActive, ResourceKind } from '../services/loop/resourceService';
+import { runLoopTurn } from '../services/loop/loopRuntime';
 
 const uid = (req: AuthRequest, res: Response): string | null => resolveStudentUserId(req, res, req.body?.userId);
 
@@ -154,4 +155,11 @@ export const postResource = async (req: AuthRequest, res: Response): Promise<voi
 export const patchResource = async (req: AuthRequest, res: Response): Promise<void> => {
   const ok = setResourceActive(Number(req.params.id), req.body?.active === true);
   res.status(ok ? 200 : 404).json({ ok });
+};
+
+export const postCompanion = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = uid(req, res);
+  if (!userId) return;
+  const text = String(req.body?.text ?? '').slice(0, 2000);
+  res.json(runLoopTurn(userId, text));
 };

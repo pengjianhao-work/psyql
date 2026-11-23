@@ -76,9 +76,18 @@
 - `safety_plans`（id, user_id, contacts_json, coping_json, warning_signs_json, updated_at）
 - `resource_items`（id, kind[skill|selfhelp|campus], title, body, source_ref, active）
 
-## 4. Agent 工具面（Phase 3）
+## 4. Agent 工具面（Phase 3，已落地 `services/loop/`）
 
 统一 runtime 按模式路由，工具：`search_psych_knowledge`（带引用 id）、`get_recent_signals`（复用 `collectUserSignals`）、`create_support_plan`/`adjust_plan`、`log_micro_action`/`log_reflection`、`suggest_practice`、`safety_check`、`update_memory`（**仅用户确认项**）。约束：最大步数+超时+成本上限；先理解再建议；一次只问一个关键问题。
+
+**已实现**（`psych-loop/phase2-domain-model` 分支）：
+
+- `loopAgentTools.ts`：9 个工具的确定性执行器 `executeLoopTool(userId, name, input, ctx)`。`ctx.riskLevel` 为 high/critical 时除 `safety_check` 外全部 `blocked`——高风险不可能进入计划/练习/记忆写入；`update_memory` 必须 `confirmed:true` 才写 `user_facts`（confidence=high）；`log_micro_action` 既标记计划内行动（服务内做归属校验）也写自由练习 `practice_logs`。
+- `loopRuntime.ts`：`runLoopTurn` 有界执行器。`safety_check` 恒为第一步且不可跳过；high/critical 返回固定安全模板（热线来自 `assessRisk().hotline` + 用户自写 `safety_plan` 的联系人/应对项），不深入创伤细节；普通路径按时间预算（3s）顺序跑 signals→plan→practice，`LOOP_MAX_STEPS=5`。
+- `POST /api/loop/companion`：student-only + 自助断言，body `{text}` → `LoopTurnResult`。
+- 决策：暂**不**把 loop 工具注入 ReAct 的 `COUNSEL_TOOL_DEFS`——那会改 system prompt，而 `eval:ragas` 依赖的 SiliconFlow 当前不可达；待评测恢复再考虑合并。
+
+**验证**：`loopAgentTools.test.ts` 6 例（危机阻断、确认门禁、越权拒绝、practice_logs 落库、runLoopTurn 双路径）；`eval:safety` 7/7 路由正确；`tsc` 干净。
 
 ## 5. 隐私与伦理边界
 

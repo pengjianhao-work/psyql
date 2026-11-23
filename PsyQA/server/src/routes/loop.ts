@@ -12,7 +12,8 @@ import {
   putSafetyPlan,
   getResources,
   postResource,
-  patchResource
+  patchResource,
+  postCompanion
 } from '../controllers/loopController';
 import { attachAuth, requireAuth, requireRole, requireStudentAccess, assertSelfUserId } from '../middleware/authMiddleware';
 
@@ -34,3 +35,4 @@ loopRouter.put('/safety-plan', ...studentApi, putSafetyPlan);
 loopRouter.get('/resources', requireAuth, getResources);
 loopRouter.post('/resources', requireRole('counselor', 'admin'), postResource);
 loopRouter.patch('/resources/:id', requireRole('counselor', 'admin'), patchResource);
+loopRouter.post('/companion', ...studentApi, postCompanion);
