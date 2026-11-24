@@ -7442,3 +7442,47 @@ body:has(.student-room)::after {
     grid-template-columns: 1fr;
   }
 }
+
+/* 闭环工作区 */
+.loop-today { display: flex; flex-direction: column; gap: 14px; }
+.loop-next-step { color: var(--psy-text-muted); margin: 0; }
+.loop-checkin-form, .loop-plan-form, .loop-companion, .loop-reflection {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.loop-checkin-form label { color: var(--psy-text-muted); font-size: 13px; }
+.loop-checkin-form input[type="text"], .loop-checkin-form input:not([type]),
+.loop-plan-form input, .loop-companion input, .loop-reflection input {
+  padding: 10px 12px; border: 1px solid var(--psy-border-muted); border-radius: var(--psy-radius-sm);
+  font-size: 14px; color: var(--psy-text); background: var(--psy-surface-solid);
+}
+.loop-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.loop-btn-row button, .loop-checkin-form button, .loop-plan-form button,
+.loop-companion button, .loop-reflection button {
+  padding: 8px 14px; border: 1px solid var(--psy-border-muted); border-radius: var(--psy-radius-sm);
+  background: var(--psy-surface-solid); color: var(--psy-text); cursor: pointer; font-size: 13px;
+}
+.loop-btn-row button:hover:not(:disabled), .loop-companion button:hover:not(:disabled) {
+  border-color: var(--psy-primary); color: var(--psy-primary-dark);
+}
+.loop-btn-row button:disabled, .submit-btn:disabled { opacity: 0.5; cursor: default; }
+.loop-checkin-done, .loop-muted { color: var(--psy-text-muted); font-size: 13px; margin: 0; }
+.loop-plan h4 { margin: 0 0 8px; font-size: 14px; color: var(--psy-text); }
+.loop-action-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid var(--psy-border-muted); font-size: 14px;
+}
+.loop-action-row > span:first-child { flex: 1; }
+.loop-action-status { color: var(--psy-text-muted); font-size: 12px; white-space: nowrap; }
+.loop-reply {
+  padding: 12px 14px; border-radius: var(--psy-radius-sm);
+  background: rgba(99, 102, 241, 0.07); font-size: 14px; line-height: 1.7;
+}
+.loop-reply p { margin: 0 0 6px; }
+.loop-reply p:last-child { margin-bottom: 0; }
+.loop-reply-safety {
+  background: rgba(236, 72, 153, 0.10);
+  border: 1px solid rgba(236, 72, 153, 0.35);
+}
+.loop-week-text { font-size: 14px; line-height: 1.8; margin: 0; }
+.loop-practice-list { margin: 0; padding-left: 18px; font-size: 14px; }
+.loop-practice-list li { margin-bottom: 10px; }

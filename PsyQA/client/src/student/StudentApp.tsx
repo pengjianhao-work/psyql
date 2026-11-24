@@ -51,6 +51,7 @@ import { CrisisSupportBanner } from '../components/CrisisSupportBanner';
 import { ExportMenu, ExportFormat } from '../components/ExportMenu';
 import { MoodCheckinCard } from '../components/MoodCheckinCard';
 import { TaskBoardPanel } from '../components/TaskBoardPanel';
+import { LoopWorkspace } from './LoopWorkspace';
 import { JournalPanel } from '../components/JournalPanel';
 import { DriftBottlePanel } from '../components/DriftBottlePanel';
 import { BottleHistoryPanel } from '../components/BottleHistoryPanel';
@@ -138,7 +139,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     setSupportByUser((previous) => ({ ...previous, [userId]: answers }));
   }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-const [mainView, setMainView] = useState<'chat' | 'record' | 'bottle'>('chat');
+const [mainView, setMainView] = useState<'chat' | 'loop' | 'record' | 'bottle'>('chat');
   const [videoDrawerOpen, setVideoDrawerOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [ethicsLoginOpen, setEthicsLoginOpen] = useState(false);
@@ -1192,6 +1193,7 @@ const [mainView, setMainView] = useState<'chat' | 'record' | 'bottle'>('chat');
             {(
               [
                 { key: 'chat', label: '对话' },
+                { key: 'loop', label: '闭环' },
                 { key: 'record', label: '记录' },
                 { key: 'bottle', label: '漂流瓶' }
               ] as const
@@ -1321,6 +1323,8 @@ const [mainView, setMainView] = useState<'chat' | 'record' | 'bottle'>('chat');
           )}
           </>
           )}
+
+          {mainView === 'loop' && currentUserId && <LoopWorkspace userId={currentUserId} />}
 
           {mainView === 'record' && currentUserId && (
             <div className="record-page">

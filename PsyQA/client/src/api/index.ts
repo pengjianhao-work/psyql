@@ -112,7 +112,7 @@ function shouldTryDirectBackend(error: unknown): boolean {
 }
 
 /** 开发环境：代理失败时自动直连 3001（与 /health 回退一致） */
-function attachBackendFallback(client: ReturnType<typeof axios.create>, apiPrefix: string): void {
+export function attachBackendFallback(client: ReturnType<typeof axios.create>, apiPrefix: string): void {
   client.interceptors.response.use(
     (response) => response,
     async (error) => {
