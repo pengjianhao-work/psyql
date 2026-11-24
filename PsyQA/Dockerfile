@@ -1,5 +1,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
+# better-sqlite3 无 musl 预编译包，alpine 下必须源码构建
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY client/package*.json ./client/
 RUN npm ci --omit=dev && cd client && npm ci --omit=dev
