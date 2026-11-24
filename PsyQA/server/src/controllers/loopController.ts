@@ -19,6 +19,7 @@ import {
 } from '../services/loop/reflectionService';
 import { createResource, listResources, setResourceActive, ResourceKind } from '../services/loop/resourceService';
 import { runLoopTurn } from '../services/loop/loopRuntime';
+import { getTodayState, getWeeklySummary } from '../services/loop/loopOrchestrator';
 
 const uid = (req: AuthRequest, res: Response): string | null => resolveStudentUserId(req, res, req.body?.userId);
 
@@ -162,4 +163,19 @@ export const postCompanion = async (req: AuthRequest, res: Response): Promise<vo
   if (!userId) return;
   const text = String(req.body?.text ?? '').slice(0, 2000);
   res.json(runLoopTurn(userId, text));
+};
+
+export const getToday = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = resolveStudentUserId(req, res, req.query.userId as string | undefined);
+  if (!userId) return;
+  res.json(getTodayState(userId));
+};
+
+export const getWeekSummary = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = resolveStudentUserId(req, res, req.query.userId as string | undefined);
+  if (!userId) return;
+  const weekOf = typeof req.query.weekOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.weekOf)
+    ? req.query.weekOf
+    : undefined;
+  res.json(getWeeklySummary(userId, weekOf));
 };

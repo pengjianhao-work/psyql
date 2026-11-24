@@ -1,4 +1,4 @@
-import { getDb } from '../../db/database';
+﻿import { getDb } from '../../db/database';
 
 export type ReflectionScope = 'evening' | 'weekly';
 
@@ -50,10 +50,10 @@ export function addReflection(
 export function listReflections(userId: string, scope?: ReflectionScope, limit = 20): Reflection[] {
   const rows = (scope
     ? getDb()
-        .prepare('SELECT * FROM reflections WHERE user_id = ? AND scope = ? ORDER BY created_at DESC LIMIT ?')
+        .prepare('SELECT * FROM reflections WHERE user_id = ? AND scope = ? ORDER BY created_at DESC, id DESC LIMIT ?')
         .all(userId, scope, limit)
     : getDb()
-        .prepare('SELECT * FROM reflections WHERE user_id = ? ORDER BY created_at DESC LIMIT ?')
+        .prepare('SELECT * FROM reflections WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
         .all(userId, limit)) as Array<Record<string, unknown>>;
   return rows.map((r) => ({
     id: r.id as number,

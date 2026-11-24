@@ -13,7 +13,9 @@ import {
   getResources,
   postResource,
   patchResource,
-  postCompanion
+  postCompanion,
+  getToday,
+  getWeekSummary
 } from '../controllers/loopController';
 import { attachAuth, requireAuth, requireRole, requireStudentAccess, assertSelfUserId } from '../middleware/authMiddleware';
 
@@ -36,3 +38,5 @@ loopRouter.get('/resources', requireAuth, getResources);
 loopRouter.post('/resources', requireRole('counselor', 'admin'), postResource);
 loopRouter.patch('/resources/:id', requireRole('counselor', 'admin'), patchResource);
 loopRouter.post('/companion', ...studentApi, postCompanion);
+loopRouter.get('/today', ...studentApi, getToday);
+loopRouter.get('/summary', ...studentApi, getWeekSummary);

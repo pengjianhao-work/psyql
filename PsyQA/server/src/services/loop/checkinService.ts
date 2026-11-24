@@ -66,7 +66,7 @@ export function listWellbeingCheckins(userId: string, limit = 14): WellbeingChec
   const rows = getDb()
     .prepare(
       `SELECT id, mood, stress, sleep_hours, energy, event_text, skipped, created_at
-       FROM wellbeing_checkins WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`
+       FROM wellbeing_checkins WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`
     )
     .all(userId, limit) as Array<Record<string, unknown>>;
   return rows.map((r) => ({

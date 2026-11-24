@@ -1,4 +1,4 @@
-import { getDb } from '../../db/database';
+﻿import { getDb } from '../../db/database';
 
 export type PlanStatus = 'active' | 'adjusted' | 'completed' | 'archived';
 export type ActionStatus = 'pending' | 'done' | 'partial' | 'skipped';
@@ -100,7 +100,7 @@ export function createSupportPlan(
 
 export function getActivePlan(userId: string): SupportPlan | null {
   const row = getDb()
-    .prepare("SELECT * FROM support_plans WHERE user_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1")
+    .prepare("SELECT * FROM support_plans WHERE user_id = ? AND status = 'active' ORDER BY updated_at DESC, id DESC LIMIT 1")
     .get(userId) as Record<string, unknown> | undefined;
   return row ? mapPlan(row) : null;
 }
@@ -114,7 +114,7 @@ export function getPlanById(userId: string, planId: number): SupportPlan | null 
 
 export function listPlans(userId: string, limit = 8): SupportPlan[] {
   const rows = getDb()
-    .prepare('SELECT * FROM support_plans WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?')
+    .prepare('SELECT * FROM support_plans WHERE user_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?')
     .all(userId, limit) as Array<Record<string, unknown>>;
   return rows.map(mapPlan);
 }
@@ -141,7 +141,7 @@ export function listActionSignalRows(
     .prepare(
       `SELECT action_text, status, done_at FROM plan_actions
        WHERE user_id = ? AND status IN ('done','partial') AND done_at IS NOT NULL
-       ORDER BY done_at DESC LIMIT ?`
+       ORDER BY done_at DESC, id DESC LIMIT ?`
     )
     .all(userId, limit) as Array<Record<string, unknown>>;
   return rows.map((r) => ({
