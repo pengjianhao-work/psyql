@@ -4,6 +4,8 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY client/package*.json ./client/
+# client/.npmrc 含 legacy-peer-deps（react-scripts@5 对 typescript@5 的 peer 冲突），必须随 COPY 进镜像
+COPY client/.npmrc ./client/
 RUN npm ci --omit=dev && cd client && npm ci --omit=dev
 
 FROM node:20-alpine AS build
@@ -11,6 +13,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY client/package*.json ./client/
+COPY client/.npmrc ./client/
 RUN npm ci && cd client && npm ci
 COPY . .
 RUN npm run build
