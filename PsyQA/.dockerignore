@@ -7,3 +7,14 @@ npm-debug.log
 .env
 dist
 client/build
+server/data
+vector_db
+qdrant_data
+chroma_data
+training_data
+logs
+backups
+user_history.json
+*.db
+*.db-shm
+*.db-wal

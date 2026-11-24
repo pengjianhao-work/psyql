@@ -18,6 +18,10 @@ import {
   parseSupportAnswers,
   supportQuestions
 } from '../services/user/supportPreferences';
+import {
+  PersonaValidationError,
+  validatePersona
+} from '../services/user/personaService';
 
 export function getSupportPreferences(req: AuthRequest, res: Response): void {
   const userId = resolveStudentUserId(req, res, req.query.userId);
@@ -82,6 +86,24 @@ export function patchUserAgentProfileHandler(req: AuthRequest, res: Response): v
   const patch: Parameters<typeof updateUserAgentProfile>[1] = {};
 
   if (body.basic !== undefined) {
+    // 形象卡先过服务端校验再入库；persona: null 表示清空
+    const rawPersona = (body.basic as { persona?: unknown }).persona;
+    if (rawPersona !== undefined) {
+      try {
+        body.basic = {
+          ...body.basic,
+          persona: rawPersona === null ? undefined : validatePersona(rawPersona)
+        };
+      } catch (err) {
+        res.status(400).json({
+          error:
+            err instanceof PersonaValidationError
+              ? err.message
+              : '形象设定格式无效'
+        });
+        return;
+      }
+    }
     patch.basicJson = { ...(current.basicJson ?? {}), ...body.basic };
   }
 

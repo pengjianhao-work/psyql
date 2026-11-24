@@ -23,6 +23,7 @@ export function getDb(): Database.Database {
   db.pragma('busy_timeout = 8000');
   db.pragma('foreign_keys = ON');
   initSchema(db);
+  runMigrations(db);
   return db;
 }
 
@@ -173,6 +174,71 @@ function initSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_mood_checkins_user
       ON mood_checkins(user_id, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS wellness_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'custom',
+      done_dates TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      archived INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_wellness_tasks_user
+      ON wellness_tasks(user_id, archived);
+
+    CREATE TABLE IF NOT EXISTS user_facts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      fact TEXT NOT NULL,
+      category TEXT NOT NULL,
+      confidence TEXT NOT NULL,
+      occurrences INTEGER NOT NULL DEFAULT 1,
+      source_dialog_times TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_facts_user ON user_facts(user_id, status);
+
+    CREATE TABLE IF NOT EXISTS user_fact_distill_state (
+      user_id TEXT PRIMARY KEY,
+      last_distill_at TEXT,
+      distilled_count INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS user_journals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL,
+      mood_tag TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      risk_flagged INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_journals_user ON user_journals(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS drift_bottles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      mood_tag TEXT,
+      status TEXT NOT NULL DEFAULT 'pooled',
+      created_at TEXT NOT NULL,
+      picked_at TEXT,
+      picked_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_drift_bottles_pool ON drift_bottles(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_drift_bottles_sender ON drift_bottles(sender_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS bottle_picks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      bottle_id INTEGER,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_bottle_picks_user ON bottle_picks(user_id, created_at);
+
     CREATE TABLE IF NOT EXISTS trend_terms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       term TEXT NOT NULL,
@@ -190,6 +256,148 @@ function initSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_trend_terms_status_week
       ON trend_terms(status, week_key, heat DESC);
   `);
+}
+
+// 版本化迁移：v1 = 上方基线（全部 CREATE IF NOT EXISTS，幂等）。
+// 之后的 schema 变更只追加 MIGRATIONS 条目，不再直接改基线。
+const MIGRATIONS: { version: number; sql: string }[] = [
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE IF NOT EXISTS revoked_sessions (
+        jti TEXT PRIMARY KEY,
+        revoked_at TEXT NOT NULL DEFAULT (datetime('now')),
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_revoked_sessions_exp
+        ON revoked_sessions(expires_at);
+    `
+  },
+  {
+    version: 3,
+    sql: `
+      CREATE TABLE IF NOT EXISTS wellbeing_checkins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        mood TEXT NOT NULL DEFAULT '',
+        stress INTEGER,
+        sleep_hours REAL,
+        energy INTEGER,
+        event_text TEXT NOT NULL DEFAULT '',
+        skipped INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_wellbeing_checkins_user
+        ON wellbeing_checkins(user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS support_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        week_of TEXT NOT NULL,
+        goal_text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        source TEXT NOT NULL DEFAULT 'manual',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_plans_user
+        ON support_plans(user_id, week_of);
+
+      CREATE TABLE IF NOT EXISTS plan_actions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plan_id INTEGER NOT NULL REFERENCES support_plans(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        action_text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        done_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_plan_actions_plan ON plan_actions(plan_id, day);
+      CREATE INDEX IF NOT EXISTS idx_plan_actions_user ON plan_actions(user_id, day);
+
+      CREATE TABLE IF NOT EXISTS practice_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        ref_id INTEGER,
+        outcome TEXT NOT NULL DEFAULT 'done',
+        logged_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_practice_logs_user
+        ON practice_logs(user_id, logged_at DESC);
+
+      CREATE TABLE IF NOT EXISTS reflections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        line1 TEXT NOT NULL DEFAULT '',
+        line2 TEXT NOT NULL DEFAULT '',
+        line3 TEXT NOT NULL DEFAULT '',
+        helped TEXT NOT NULL DEFAULT '',
+        not_helped TEXT NOT NULL DEFAULT '',
+        adjust_note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_reflections_user
+        ON reflections(user_id, scope, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS progress_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        period TEXT NOT NULL,
+        metrics_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(user_id, period)
+      );
+
+      CREATE TABLE IF NOT EXISTS safety_plans (
+        user_id TEXT PRIMARY KEY,
+        contacts_json TEXT NOT NULL DEFAULT '[]',
+        coping_json TEXT NOT NULL DEFAULT '[]',
+        warning_signs_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS resource_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        source_ref TEXT NOT NULL DEFAULT '',
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_resource_items_kind
+        ON resource_items(kind, active);
+    `
+  }
+];
+
+export const CURRENT_SCHEMA_VERSION = 1 + MIGRATIONS.length;
+
+export function getSchemaVersion(): number {
+  const v = getMeta('schema_version');
+  return v ? Number(v) : 1;
+}
+
+function runMigrations(database: Database.Database): void {
+  const row = database
+    .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
+    .get() as { value: string } | undefined;
+  let current = row ? Number(row.value) : 1;
+  const setVersion = database.prepare(
+    "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)"
+  );
+  for (const m of MIGRATIONS) {
+    if (m.version <= current) continue;
+    database.transaction(() => {
+      database.exec(m.sql);
+      setVersion.run(String(m.version));
+    })();
+    current = m.version;
+  }
 }
 
 export function getMeta(key: string): string | null {

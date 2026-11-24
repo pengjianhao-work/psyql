@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Message, KnowledgeItem, SimilarQuestion, EmotionType } from '../types';
+import { AgentPersona, Message, KnowledgeItem, SimilarQuestion, EmotionType } from '../types';
 import { formatBotMessage, splitBotContent } from '../utils/formatMessage';
 import { parseKeywordTags, dedupeSimilarQuestions } from '../utils/refDisplay';
+import { PersonaAvatar } from './PersonaAvatar';
 import { VideoCard } from './VideoCard';
 
 interface ChatMessageProps {
   message: Message;
   knowledgeSources?: KnowledgeItem[];
   onSimilarQuestionClick?: (question: string) => void;
+  onOpenWiki?: (slug: string, title: string) => void;
   onRetry?: (question: string) => void;
+  /** 用户自定义形象卡：设置后 bot 头像换成形象头像 */
+  persona?: AgentPersona;
 }
 
 const emotionIcons: Record<EmotionType, string> = {
@@ -79,7 +83,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   knowledgeSources,
   onSimilarQuestionClick,
-  onRetry
+  onOpenWiki,
+  onRetry,
+  persona
 }) => {
   const [thinkOpen, setThinkOpen] = useState(Boolean(message.reactTrace?.length) && !message.content);
   const [copied, setCopied] = useState(false);
@@ -150,6 +156,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           <div className="avatar user-avatar" aria-hidden="true">
             👤
           </div>
+        ) : persona ? (
+          <PersonaAvatar
+            avatarKey={persona.avatarKey}
+            size={40}
+            title={persona.name || '陪伴者'}
+          />
         ) : (
           <div
             className="avatar bot-avatar"
@@ -253,6 +265,34 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </section>
         )}
 
+        {!streaming && isBot && message.wikiSource && (
+          <button
+            type="button"
+            className="wiki-source-card"
+            onClick={() => onOpenWiki?.(message.wikiSource!.slug, message.wikiSource!.title)}
+          >
+            <span className="wiki-source-icon" aria-hidden="true">📖</span>
+            <span className="wiki-source-text">
+              <strong>{message.wikiSource.title}</strong>
+              <em>{message.wikiSource.summary}</em>
+            </span>
+            <span className="wiki-source-cta">读全文 →</span>
+          </button>
+        )}
+
+        {!streaming && isBot && knowledgeList.length > 0 && (
+          <details className="knowledge-refs">
+            <summary>参考资料 · {knowledgeList.length} 条</summary>
+            <ul>
+              {knowledgeList.map((item, idx) => (
+                <li key={idx}>
+                  <strong>{item.question}</strong>
+                  <span>{item.answer.slice(0, 120)}{item.answer.length > 120 ? '…' : ''}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {isBot && message.generationHint && GENERATION_HINT_LABEL[message.generationHint] && (
           <p
             className={`generation-hint-tag${message.generationHint === 'fast_kb' ? ' generation-hint-fast' : ''}`}

@@ -1,5 +1,6 @@
 import { getUserHistoryFromDb } from '../../db/historyStore';
 import { listMoodCheckins } from './moodCheckinService';
+import { CONFIDENCE_LABEL, FACT_CATEGORY_LABEL, listUserFacts } from './userFactService';
 
 export interface UserDataExport {
   userId: string;
@@ -14,6 +15,15 @@ export interface UserDataExport {
   }>;
   summaries: Array<{ time: string; summary: string }>;
   moodCheckins: Array<{ mood: string; note: string | null; createdAt: string }>;
+  memoryFacts: Array<{
+    fact: string;
+    category: string;
+    confidence: string;
+    occurrences: number;
+    status: 'active' | 'archived';
+    createdAt: string;
+    updatedAt: string;
+  }>;
 }
 
 export function buildUserDataExport(userId: string): UserDataExport {
@@ -34,6 +44,15 @@ export function buildUserDataExport(userId: string): UserDataExport {
       mood: c.mood,
       note: c.note,
       createdAt: c.createdAt
+    })),
+    memoryFacts: listUserFacts(userId, { includeArchived: true }).map((f) => ({
+      fact: f.fact,
+      category: f.category,
+      confidence: f.confidence,
+      occurrences: f.occurrences,
+      status: f.status,
+      createdAt: f.createdAt,
+      updatedAt: f.updatedAt
     }))
   };
 }
@@ -54,6 +73,17 @@ export function exportToMarkdown(data: UserDataExport): string {
     lines.push('## 情绪打卡', '');
     for (const c of data.moodCheckins) {
       lines.push(`- ${c.createdAt}：${c.mood}${c.note ? `（${c.note}）` : ''}`);
+    }
+    lines.push('');
+  }
+  if (data.memoryFacts.length) {
+    lines.push('## 记忆事实（L2）', '');
+    for (const f of data.memoryFacts) {
+      const categoryLabel = FACT_CATEGORY_LABEL[f.category as keyof typeof FACT_CATEGORY_LABEL] ?? f.category;
+      const confidenceLabel = CONFIDENCE_LABEL[f.confidence as keyof typeof CONFIDENCE_LABEL] ?? f.confidence;
+      lines.push(
+        `- [${categoryLabel}] ${f.fact}（${confidenceLabel}，印证 ${f.occurrences} 次${f.status === 'archived' ? '，已归档' : ''}）`
+      );
     }
     lines.push('');
   }

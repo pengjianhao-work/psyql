@@ -46,7 +46,7 @@ export function listMoodCheckins(userId: string, limit = 30): MoodCheckin[] {
 }
 
 /** 心情词 → 效价：打卡卡片的固定选项 + 常见同义词，未知词按中性 0 处理。 */
-const MOOD_VALENCE: Record<string, number> = {
+export const MOOD_VALENCE: Record<string, number> = {
   还不错: 2, 开心: 2, 好: 2, 愉快: 2,
   一般: 1, 还行: 1, 平静: 1, 没事: 1,
   有点累: 0, 累: 0, 疲惫: 0, 中性: 0,

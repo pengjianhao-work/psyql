@@ -10,7 +10,8 @@ import {
   clearUserHistoryData,
   getSystemStats,
   getGroupedHistory,
-  getInsightsStatus
+  getInsightsStatus,
+  getPublishedWikiPage
 } from '../controllers/questionController';
 import { postAnalyzePsych } from '../controllers/analyzeController';
 import { postSelfRating } from '../controllers/ratingController';
@@ -56,6 +57,10 @@ import {
   getMemoryTags,
   patchMemoryTag,
   postMemoryBatchArchive,
+  getMemoryFacts,
+  patchMemoryFact,
+  deleteMemoryFact,
+  postDistillMemoryFacts,
   getSeasonalRag,
   getImplicitNeeds,
   postBatchResolveTranscript
@@ -63,7 +68,18 @@ import {
 import {
   exportUserData,
   getMoodCheckins,
-  postMoodCheckin
+  postMoodCheckin,
+  getTaskBoardHandler,
+  postTaskBoardTask,
+  postTaskBoardToggle,
+  deleteTaskBoardTask,
+  getJournals,
+  postJournal,
+  patchJournal,
+  postDeleteJournal,
+  postThrowBottle,
+  postPickBottle,
+  getMyBottles
 } from '../controllers/userToolsController';
 import {
   attachAuth,
@@ -72,10 +88,17 @@ import {
   requireStudentAccess,
   assertSelfUserId
 } from '../middleware/authMiddleware';
+import { createRateLimiter } from '../middleware/rateLimit';
 
 const questionRouter = Router();
 
 questionRouter.use(attachAuth);
+
+// ask 限流：按用户（未登录回退 IP）——短窗 30 次/10 分钟 + 每日 300 次配额
+const askBucketKey = (req: Parameters<typeof requireStudentAccess>[0]): string =>
+  `ask:${(req as { authUser?: { id?: string } }).authUser?.id || req.ip || 'unknown'}`;
+const askBurstLimit = createRateLimiter(30, 10 * 60 * 1000, askBucketKey);
+const askDailyQuota = createRateLimiter(300, 24 * 60 * 60 * 1000, askBucketKey);
 
 questionRouter.get('/', getQuestions);
 questionRouter.get('/categories', getAllCategories);
@@ -84,8 +107,8 @@ const studentApi = [requireStudentAccess, assertSelfUserId] as const;
 
 questionRouter.post('/analyze', ...studentApi, postAnalyzePsych);
 questionRouter.post('/self-rating', ...studentApi, postSelfRating);
-questionRouter.post('/ask', ...studentApi, askQuestion);
-questionRouter.post('/ask/stream', ...studentApi, askQuestionStream);
+questionRouter.post('/ask', ...studentApi, askBurstLimit, askDailyQuota, askQuestion);
+questionRouter.post('/ask/stream', ...studentApi, askBurstLimit, askDailyQuota, askQuestionStream);
 questionRouter.get('/insights/status', ...studentApi, getInsightsStatus);
 questionRouter.get('/progress', ...studentApi, getUserProgress);
 questionRouter.get('/progress/text', ...studentApi, getUserProgressText);
@@ -114,11 +137,27 @@ questionRouter.post('/cbt-complete', ...studentApi, postCbtComplete);
 questionRouter.get('/memory-tags', ...studentApi, getMemoryTags);
 questionRouter.patch('/memory-tag', ...studentApi, patchMemoryTag);
 questionRouter.post('/memory-batch-archive', ...studentApi, postMemoryBatchArchive);
+questionRouter.get('/memory-facts', ...studentApi, getMemoryFacts);
+questionRouter.patch('/memory-fact', ...studentApi, patchMemoryFact);
+questionRouter.post('/memory-fact/delete', ...studentApi, deleteMemoryFact);
+questionRouter.post('/memory-facts/distill', ...studentApi, postDistillMemoryFacts);
 questionRouter.get('/implicit-needs', ...studentApi, getImplicitNeeds);
 questionRouter.get('/seasonal-rag', getSeasonalRag);
 questionRouter.get('/export', ...studentApi, exportUserData);
 questionRouter.post('/mood-checkin', ...studentApi, postMoodCheckin);
 questionRouter.get('/mood-checkins', ...studentApi, getMoodCheckins);
+questionRouter.get('/task-board', ...studentApi, getTaskBoardHandler);
+questionRouter.post('/task-board/tasks', ...studentApi, postTaskBoardTask);
+questionRouter.post('/task-board/toggle', ...studentApi, postTaskBoardToggle);
+questionRouter.post('/task-board/tasks/delete', ...studentApi, deleteTaskBoardTask);
+questionRouter.get('/journals', ...studentApi, getJournals);
+questionRouter.post('/journals', ...studentApi, postJournal);
+questionRouter.patch('/journal', ...studentApi, patchJournal);
+questionRouter.post('/journal/delete', ...studentApi, postDeleteJournal);
+questionRouter.post('/bottle/throw', ...studentApi, postThrowBottle);
+questionRouter.post('/bottle/pick', ...studentApi, postPickBottle);
+questionRouter.get('/bottle/mine', ...studentApi, getMyBottles);
+questionRouter.get('/wiki/:slug', ...studentApi, getPublishedWikiPage);
 
 questionRouter.get('/stats', requireAuth, requireRole('admin'), getSystemStats);
 questionRouter.get('/admin/agent-profile', requireAuth, requireRole('admin'), getUserAgentProfileAdmin);

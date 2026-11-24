@@ -21522,6 +21522,44 @@
           "supportive"
         ]
       }
+    },
+    {
+      "question": "室友都拿到 offer 了，我还没想好考研还是找工作，怕选错怎么办？",
+      "answer": "适用毕业选择和同辈比较。成年初显期常涉及身份探索和生活变动，体验因人和文化而异。可区分方向未定和进度压力。Arnett等（2014），PMID 26361316。",
+      "tags": {
+        "problems": [
+          "career_future"
+        ],
+        "emotions": [
+          "anxious",
+          "confused"
+        ],
+        "interventionTypes": []
+      }
+    },
+    {
+      "question": "期末和房租一起压得我喘不过气，学业、经济和家庭压力都堆在一起怎么办？",
+      "answer": "适用学业、经济等压力叠加。跨国新生调查发现，多领域压力与心理障碍存在统计关联，不能推断个人病因。可先问哪件最紧迫。Karyotaki等（2020），PMID 32849042。",
+      "tags": {
+        "problems": [],
+        "emotions": [
+          "anxious"
+        ],
+        "interventionTypes": []
+      }
+    },
+    {
+      "question": "爸妈想让我考研，可我不知道自己想要什么，也不知道自己适合什么",
+      "answer": "适用家庭期待和个人意愿冲突。纵向综述发现，身份探索相关指标与情绪症状的关系并不一致。可梳理个人期待、他人期待和现实限制。Potterton等（2022），PMID 34783954。",
+      "tags": {
+        "problems": [
+          "career_future"
+        ],
+        "emotions": [
+          "confused"
+        ],
+        "interventionTypes": []
+      }
     }
   ]
 }

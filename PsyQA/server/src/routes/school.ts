@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import { attachAuth, requireAuth, requireRole, requirePermission } from '../middleware/authMiddleware';
 import {
   getSchoolAlerts,
@@ -6,6 +6,8 @@ import {
   getSchoolNotifications,
   getSchoolStudentDetail,
   getSchoolStudents,
+  getSchoolWeather,
+  getSchoolLoopWeather,
   patchSchoolAlert,
   postMarkSchoolNotificationsRead
 } from '../controllers/schoolController';
@@ -27,23 +29,31 @@ const schoolRouter = Router();
 
 schoolRouter.use(attachAuth);
 schoolRouter.use(requireAuth);
-schoolRouter.use(requireRole('counselor', 'admin'));
+// 顶层放行教师角色；个体级数据由各路由 staffOnly 再拦截
+schoolRouter.use(requireRole('teacher', 'counselor', 'admin'));
 
+const staffOnly = requireRole('counselor', 'admin');
+
+// 教师可见：聚合视图（看板 / 情绪气象 / 热力图）
 schoolRouter.get('/dashboard', getSchoolDashboard);
-schoolRouter.get('/students', getSchoolStudents);
-schoolRouter.get('/students/:studentId', getSchoolStudentDetail);
-schoolRouter.get('/alerts', getSchoolAlerts);
-schoolRouter.patch('/alerts/:alertId', patchSchoolAlert);
-schoolRouter.get('/notifications', getSchoolNotifications);
-schoolRouter.post('/notifications/read', postMarkSchoolNotificationsRead);
-schoolRouter.post('/transcript-requests', postCounselorTranscriptRequest);
-schoolRouter.post('/transcript-requests/batch', postBatchTranscriptRequest);
-schoolRouter.get('/transcript-requests', getCounselorTranscriptRequests);
+schoolRouter.get('/weather', getSchoolWeather);
+schoolRouter.get('/loop-weather', getSchoolLoopWeather);
 schoolRouter.get('/heatmap', getSchoolHeatmap);
-schoolRouter.get('/intervention-ledgers', getInterventionLedgers);
-schoolRouter.patch('/intervention-ledgers/:id', patchInterventionLedger);
-schoolRouter.post('/knowledge-reviews', postKnowledgeReview);
-schoolRouter.get('/knowledge-reviews', getKnowledgeReviews);
+
+// 仅辅导员与管理员：学生个体数据、告警、通知、原文申请、台账与知识审核
+schoolRouter.get('/students', staffOnly, getSchoolStudents);
+schoolRouter.get('/students/:studentId', staffOnly, getSchoolStudentDetail);
+schoolRouter.get('/alerts', staffOnly, getSchoolAlerts);
+schoolRouter.patch('/alerts/:alertId', staffOnly, patchSchoolAlert);
+schoolRouter.get('/notifications', staffOnly, getSchoolNotifications);
+schoolRouter.post('/notifications/read', staffOnly, postMarkSchoolNotificationsRead);
+schoolRouter.post('/transcript-requests', staffOnly, postCounselorTranscriptRequest);
+schoolRouter.post('/transcript-requests/batch', staffOnly, postBatchTranscriptRequest);
+schoolRouter.get('/transcript-requests', staffOnly, getCounselorTranscriptRequests);
+schoolRouter.get('/intervention-ledgers', staffOnly, getInterventionLedgers);
+schoolRouter.patch('/intervention-ledgers/:id', staffOnly, patchInterventionLedger);
+schoolRouter.post('/knowledge-reviews', staffOnly, postKnowledgeReview);
+schoolRouter.get('/knowledge-reviews', staffOnly, getKnowledgeReviews);
 schoolRouter.use('/admin', requireRole('admin'), requirePermission('school:manage'), schoolAdminRouter);
 
 export { schoolRouter };

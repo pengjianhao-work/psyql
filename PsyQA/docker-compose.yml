@@ -8,24 +8,28 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - AUTH_SECRET=${AUTH_SECRET:-change-me-in-production-min-16-chars}
-      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3001}
+      # 必填：不设不安全默认值；未提供时 compose 直接报错
+      - AUTH_SECRET=${AUTH_SECRET:?必须设置 AUTH_SECRET（至少 16 字符）}
+      - CORS_ORIGIN=${CORS_ORIGIN:?生产必须显式设置 CORS_ORIGIN}
       - OLLAMA_API_URL=http://ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen:7b}
       - PSYQA_CHROMA_ENABLED=${PSYQA_CHROMA_ENABLED:-0}
       - CHROMA_URL=http://chroma:8000
-      - PSYQA_QDRANT_ENABLED=${PSYQA_QDRANT_ENABLED:-0}
+      - PSYQA_QDRANT_ENABLED=${PSYQA_QDRANT_ENABLED:-1}
       - QDRANT_URL=http://qdrant:6333
       - QDRANT_COLLECTION=psyqa_knowledge
       - QDRANT_VECTOR_SIZE=1024
+      # bge-m3 / bge-reranker 为本机 Python 服务，容器外运行，经宿主机访问
+      - LOCAL_BGE_URL=${LOCAL_BGE_URL:-http://host.docker.internal:8091}
+      - LOCAL_RERANK_URL=${LOCAL_RERANK_URL:-http://host.docker.internal:8092}
       - PSYQA_SERVE_CLIENT=1
       - TRUST_PROXY=1
     volumes:
-      - ./server/user_history.json:/app/server/user_history.json
-      - ./server/data:/app/server/data
-      - ./vector_db:/app/vector_db
+      - psyqa_data:/app/server/data
     depends_on:
       ollama:
+        condition: service_started
+      qdrant:
         condition: service_started
     restart: unless-stopped
     healthcheck:
@@ -70,4 +74,6 @@ volumes:
   chroma_data:
     driver: local
   qdrant_data:
+    driver: local
+  psyqa_data:
     driver: local

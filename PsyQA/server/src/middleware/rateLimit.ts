@@ -7,9 +7,13 @@ interface Bucket {
 
 const buckets = new Map<string, Bucket>();
 
-export function createRateLimiter(maxAttempts: number, windowMs: number) {
+export function createRateLimiter(
+  maxAttempts: number,
+  windowMs: number,
+  keyFn?: (req: Request) => string
+) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const key = `${req.ip || 'unknown'}:${req.path}`;
+    const key = keyFn ? keyFn(req) : `${req.ip || 'unknown'}:${req.path}`;
     const now = Date.now();
     let bucket = buckets.get(key);
     if (!bucket || bucket.resetAt <= now) {

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { GroupedHistoryItem, QuestionResponse, UserProgress, VideoItem } from '../types';
+import { AgentPersona, BottlePickResult, BottleThrowResult, GroupedHistoryItem, JournalEntry, MyBottle, PickedBottle, QuestionResponse, UserProgress, VideoItem } from '../types';
 
 const API_BASE_URL = '/api/questions';
 const API_TIMEOUT = 30000;
@@ -112,7 +112,7 @@ function shouldTryDirectBackend(error: unknown): boolean {
 }
 
 /** 开发环境：代理失败时自动直连 3001（与 /health 回退一致） */
-function attachBackendFallback(client: ReturnType<typeof axios.create>, apiPrefix: string): void {
+export function attachBackendFallback(client: ReturnType<typeof axios.create>, apiPrefix: string): void {
   client.interceptors.response.use(
     (response) => response,
     async (error) => {
@@ -162,7 +162,7 @@ export async function fetchRuntimeHealth(): Promise<RuntimeHealth> {
   }
 }
 
-export type UserRole = 'student' | 'counselor' | 'admin';
+export type UserRole = 'student' | 'counselor' | 'admin' | 'teacher';
 
 export type StudentGender = 'male' | 'female' | 'other' | 'prefer_not_say';
 
@@ -351,13 +351,21 @@ export async function fetchCollegeOptions(): Promise<{ colleges: CollegeOption[]
 export const askQuestion = async (
   question: string,
   description?: string,
-  userId?: string
+  userId?: string,
+  mode?: import('../types').CounselMode
 ): Promise<QuestionResponse & { portraitPending?: boolean }> => {
-  const body: { question: string; description?: string; userId?: string } = { question, description };
+  const body: { question: string; description?: string; userId?: string; mode?: import('../types').CounselMode } = { question, description };
   if (userId) body.userId = userId;
+  if (mode) body.mode = mode;
   const response = await api.post('/ask', body, { timeout: ASK_TIMEOUT });
   return response.data;
 };
+
+/** 学生端 Wiki 主题页详情（仅已发布页） */
+export async function fetchPublishedWikiPage(slug: string): Promise<import('../types').WikiPageDetail> {
+  const { data } = await api.get(`/wiki/${encodeURIComponent(slug)}`);
+  return data;
+}
 
 /** SSE 流式咨询（智谱/Ollama 逐字输出 + ReAct 步骤） */
 export async function askQuestionStream(
@@ -372,7 +380,7 @@ export async function askQuestionStream(
     onDone: (payload: QuestionResponse & { portraitPending?: boolean }) => void;
     onError: (message: string, code?: string) => void;
   },
-  options?: { signal?: AbortSignal; conversationId?: string }
+  options?: { signal?: AbortSignal; conversationId?: string; mode?: import('../types').CounselMode }
 ): Promise<{ aborted: boolean }> {
   const token = getAuthToken();
   let res: Response;
@@ -390,7 +398,8 @@ export async function askQuestionStream(
         question,
         description,
         ...(userId ? { userId } : {}),
-        ...(options?.conversationId ? { conversationId: options.conversationId } : {})
+        ...(options?.conversationId ? { conversationId: options.conversationId } : {}),
+        ...(options?.mode ? { mode: options.mode } : {})
       })
     });
   } catch (err) {
@@ -690,6 +699,7 @@ export interface UserStaticProfile {
   familyBackground?: string;
   majorLifeEvents?: string[];
   notes?: string;
+  persona?: AgentPersona;
 }
 
 export interface InterventionProfile {
@@ -1057,6 +1067,42 @@ export async function fetchSchoolDashboard(): Promise<SchoolDashboardStats> {
   return data;
 }
 
+export interface SchoolWeatherTrendPoint {
+  day: string;
+  count: number;
+  avgMoodScore?: number;
+}
+
+export interface SchoolWeatherGroup {
+  groupKey: string;
+  label: string;
+  activeUsers: number;
+  kOk: boolean;
+  moodDistribution: Record<string, number>;
+  trend7d: SchoolWeatherTrendPoint[];
+  alerts: { pending: number; total30d: number };
+}
+
+export interface SchoolWeather {
+  scope: string;
+  generatedAt: string;
+  groups: SchoolWeatherGroup[];
+  mergedSmallGroups?: SchoolWeatherGroup;
+  total: {
+    activeUsers: number;
+    checkins7d: number;
+    checkins30d: number;
+    alertsPending: number;
+    alerts30d: number;
+  };
+}
+
+/** 情绪气象：仅院系级聚合数据（k-匿名抑制小样本院系） */
+export async function fetchSchoolWeather(): Promise<SchoolWeather> {
+  const { data } = await schoolApi.get('/weather');
+  return data;
+}
+
 export async function fetchSchoolStudents(): Promise<{ students: SchoolStudentItem[] }> {
   const { data } = await schoolApi.get('/students');
   return data;
@@ -1316,6 +1362,56 @@ export async function patchMemoryTag(
   await api.patch('/memory-tag', { userId, dialogTime, ...patch });
 }
 
+export type UserFactCategory =
+  | 'emotion'
+  | 'relationship'
+  | 'academic'
+  | 'habit'
+  | 'preference'
+  | 'context';
+
+export interface UserFact {
+  id: string;
+  fact: string;
+  category: UserFactCategory;
+  confidence: 'low' | 'medium' | 'high';
+  occurrences: number;
+  sourceDialogTimes: string[];
+  status: 'active' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemoryFactsResponse {
+  facts: UserFact[];
+  distill: { lastDistillAt?: string; distilledCount: number; totalFacts: number };
+}
+
+export async function getMemoryFacts(userId: string, includeArchived = false): Promise<MemoryFactsResponse> {
+  const { data } = await api.get('/memory-facts', {
+    params: { userId, includeArchived: includeArchived ? 1 : undefined }
+  });
+  return data;
+}
+
+export async function patchMemoryFact(
+  userId: string,
+  factId: string,
+  patch: { fact?: string; status?: 'active' | 'archived' }
+): Promise<{ fact: UserFact }> {
+  const { data } = await api.patch('/memory-fact', { userId, factId, ...patch });
+  return data;
+}
+
+export async function deleteMemoryFact(userId: string, factId: string): Promise<void> {
+  await api.post('/memory-fact/delete', { userId, factId });
+}
+
+export async function distillMemoryFacts(userId: string): Promise<{ touched: number; facts: UserFact[] }> {
+  const { data } = await api.post('/memory-facts/distill', { userId });
+  return data;
+}
+
 export interface HeatmapCell {
   orgId: string;
   className: string;
@@ -1422,6 +1518,105 @@ export async function submitMoodCheckin(
 export async function fetchMoodCheckins(userId: string, limit = 10): Promise<{ checkins: MoodCheckin[] }> {
   const { data } = await api.get('/mood-checkins', { params: { userId, limit } });
   return data;
+}
+
+export type WellnessTaskKind = 'mood' | 'training' | 'custom';
+
+export interface WellnessTask {
+  id: number;
+  title: string;
+  kind: WellnessTaskKind;
+  kindLabel?: string;
+  doneDates: string[];
+  createdAt: string;
+}
+
+export interface TaskBoardPayload {
+  tasks: WellnessTask[];
+  stats: {
+    today: string;
+    doneToday: number;
+    totalActive: number;
+    streakDays: number;
+    week: Array<{ date: string; done: boolean }>;
+  };
+}
+
+export async function fetchTaskBoard(userId: string): Promise<TaskBoardPayload> {
+  const { data } = await api.get('/task-board', { params: { userId } });
+  return data;
+}
+
+export async function addTaskBoardTask(
+  userId: string,
+  title: string,
+  kind: WellnessTaskKind = 'custom'
+): Promise<{ task: WellnessTask }> {
+  const { data } = await api.post('/task-board/tasks', { userId, title, kind });
+  return data;
+}
+
+export async function toggleTaskBoardTask(userId: string, taskId: number): Promise<{ task: WellnessTask }> {
+  const { data } = await api.post('/task-board/toggle', { userId, taskId });
+  return data;
+}
+
+export async function deleteTaskBoardTask(userId: string, taskId: number): Promise<void> {
+  await api.post('/task-board/tasks/delete', { userId, taskId });
+}
+
+export type { JournalEntry };
+
+export interface JournalPatch {
+  title?: string;
+  body?: string;
+  moodTag?: string | null;
+}
+
+export async function fetchJournals(userId: string, limit = 50): Promise<{ journals: JournalEntry[] }> {
+  const { data } = await api.get('/journals', { params: { userId, limit } });
+  return data;
+}
+
+export async function createJournal(
+  userId: string,
+  input: { title?: string; body: string; moodTag?: string | null }
+): Promise<{ journal: JournalEntry }> {
+  const { data } = await api.post('/journals', { userId, ...input });
+  return data;
+}
+
+export async function updateJournal(
+  userId: string,
+  journalId: number,
+  patch: JournalPatch
+): Promise<{ journal: JournalEntry }> {
+  const { data } = await api.patch('/journal', { userId, journalId, ...patch });
+  return data;
+}
+
+export async function deleteJournal(userId: string, journalId: number): Promise<void> {
+  await api.post('/journal/delete', { userId, journalId });
+}
+
+export type { BottlePickResult, BottleThrowResult, MyBottle, PickedBottle };
+
+export async function throwBottle(
+  userId: string,
+  input: { body: string; moodTag?: string | null }
+): Promise<BottleThrowResult> {
+  const { data } = await api.post('/bottle/throw', { userId, ...input });
+  return data;
+}
+
+export async function pickBottle(userId: string): Promise<BottlePickResult> {
+  const { data } = await api.post('/bottle/pick', { userId });
+  return data;
+}
+
+export async function fetchMyBottles(userId: string): Promise<MyBottle[]> {
+  const { data } = await api.get('/bottle/mine', { params: { userId } });
+  return data.bottles ?? [];
 }
 
 export async function downloadUserDataExport(userId: string, format: 'json' | 'md'): Promise<void> {

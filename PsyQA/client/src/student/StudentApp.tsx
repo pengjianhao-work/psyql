@@ -1,7 +1,7 @@
 import { SupportPreferencesCard } from '../components/SupportPreferencesCard';
 import type { SupportAnswers } from '../api';
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { Message, QuestionResponse } from '../types';
+import { AgentPersona, CounselMode, Message, QuestionResponse } from '../types';
 import {
   askQuestion,
   askQuestionStream,
@@ -17,6 +17,7 @@ import {
   pollInsightsUntilReady,
   getUserProfile,
   UserProfilePayload,
+  getAgentProfile,
   AuthUserPublic,
   fetchStudentTranscriptRequests,
   batchResolveTranscript,
@@ -39,6 +40,7 @@ import { AgentProfileCard } from '../components/AgentProfileCard';
 import { StudentProfileCard } from '../components/StudentProfileCard';
 import { PrivacyEthicsModal, ethicsStorageKey, reportEthicsSessionKey } from '../components/PrivacyEthicsModal';
 import { VideoCenterDrawer } from '../components/VideoCenterDrawer';
+import { WikiReaderModal } from '../components/WikiReaderModal';
 import {
   formatStudentIdentityLine,
   getStudentProfileCompleteness
@@ -48,6 +50,11 @@ import { GuestModeBanner } from '../components/GuestModeBanner';
 import { CrisisSupportBanner } from '../components/CrisisSupportBanner';
 import { ExportMenu, ExportFormat } from '../components/ExportMenu';
 import { MoodCheckinCard } from '../components/MoodCheckinCard';
+import { TaskBoardPanel } from '../components/TaskBoardPanel';
+import { LoopWorkspace } from './LoopWorkspace';
+import { JournalPanel } from '../components/JournalPanel';
+import { DriftBottlePanel } from '../components/DriftBottlePanel';
+import { BottleHistoryPanel } from '../components/BottleHistoryPanel';
 import { ToastStack } from '../components/Toast';
 import { RuntimeStatusBar } from '../components/RuntimeStatusBar';
 import { BackendOfflineBanner } from '../components/BackendOfflineBanner';
@@ -126,11 +133,13 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   const [showSessionFeedback, setShowSessionFeedback] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfilePayload | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [agentPersona, setAgentPersona] = useState<AgentPersona | undefined>(undefined);
   const [supportByUser, setSupportByUser] = useState<Record<string, SupportAnswers>>({});
   const updateSupportAnswers = useCallback((userId: string, answers: SupportAnswers) => {
     setSupportByUser((previous) => ({ ...previous, [userId]: answers }));
   }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+const [mainView, setMainView] = useState<'chat' | 'loop' | 'record' | 'bottle'>('chat');
   const [videoDrawerOpen, setVideoDrawerOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [ethicsLoginOpen, setEthicsLoginOpen] = useState(false);
@@ -139,6 +148,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [insightsRefreshing, setInsightsRefreshing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [counselMode, setCounselMode] = useState<CounselMode>('companion');
+  const [wikiReader, setWikiReader] = useState<{ slug: string; title: string } | null>(null);
   const [trendCareOpen, setTrendCareOpen] = useState(false);
   const [trendCareReason, setTrendCareReason] = useState('');
   const sendLockRef = useRef(false);
@@ -309,6 +320,25 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     }
     void loadUserProfileFromServer(currentUserId);
   }, [currentUserId, loadUserProfileFromServer]);
+
+  // 形象卡：只取 persona 字段，失败时静默回落到默认头像与「心理港湾」
+  useEffect(() => {
+    if (!currentUserId) {
+      setAgentPersona(undefined);
+      return;
+    }
+    let cancelled = false;
+    void getAgentProfile(currentUserId)
+      .then((data) => {
+        if (!cancelled) setAgentPersona(data.basicJson?.persona);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentPersona(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId]);
 
   const handleValidateBeforeSend = useCallback(
     (question: string) => {
@@ -502,7 +532,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           const label = code ? labels[code] || code : '';
           pushToast(label ? `${label}：${msg}` : msg, 'warning');
         }
-      }, { signal: streamAbortRef.current.signal, conversationId: conversationIdRef.current });
+      }, { signal: streamAbortRef.current.signal, conversationId: conversationIdRef.current, mode: counselMode });
 
       if (aborted) {
         return;
@@ -510,7 +540,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
 
       if (!response) {
         setMessages((prev) => prev.filter((m) => m.id !== botId));
-        response = await askQuestion(question, description, currentUserId);
+        response = await askQuestion(question, description, currentUserId, counselMode);
         // 流式已产生的内容已被移除，改由下方非流式分支完整写入回复
         streamOk = false;
       } else if (!streamOk) {
@@ -521,6 +551,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                   ...m,
                   content: response!.answer,
                   knowledgeSources: response!.knowledgeSources,
+                  wikiSource: response!.wikiSource ?? null,
                   similarQuestions: response!.similarQuestions,
                   emotion: response!.emotion,
                   risk: response!.risk,
@@ -547,6 +578,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                   ...m,
                   content: response!.answer,
                   knowledgeSources: response!.knowledgeSources,
+                  wikiSource: response!.wikiSource ?? null,
                   similarQuestions: response!.similarQuestions,
                   emotion: response!.emotion,
                   risk: response!.risk,
@@ -759,7 +791,8 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     runtimeHealth,
     refreshProgressAndHistory,
     refreshConversations,
-    setConversationId
+    setConversationId,
+    counselMode
   ]);
 
   const handleSimilarQuestionClick = (question: string) => {
@@ -1113,7 +1146,10 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
             <SupportPreferencesCard key={currentUserId} userId={currentUserId} onAnswers={updateSupportAnswers} />
           )}
           {currentUserId && (isAccountStudent || consultCount > 0) && (
-            <AgentProfileCard userId={currentUserId} />
+            <AgentProfileCard
+              userId={currentUserId}
+              onProfileUpdate={(p) => setAgentPersona(p.basicJson?.persona)}
+            />
           )}
           {showSelfRating && currentUserId && (
             <SelfRatingPanel
@@ -1153,6 +1189,28 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
         </aside>
 
         <div className="main-panel main-panel-chat-first">
+          <nav className="student-view-nav" aria-label="主功能区">
+            {(
+              [
+                { key: 'chat', label: '对话' },
+                { key: 'loop', label: '闭环' },
+                { key: 'record', label: '记录' },
+                { key: 'bottle', label: '漂流瓶' }
+              ] as const
+            ).map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                className={`student-view-tab${mainView === v.key ? ' active' : ''}`}
+                onClick={() => setMainView(v.key)}
+              >
+                {v.label}
+              </button>
+            ))}
+          </nav>
+
+          {mainView === 'chat' && (
+          <>
           {(consultCount > 0 || latestReport) && (
             <div className="student-status-bar-wrap">
               <StudentStatusBar
@@ -1213,8 +1271,12 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 />
               }
               quickPrompts={filteredQuickPrompts}
+              counselMode={counselMode}
+              onCounselModeChange={setCounselMode}
+              onOpenWiki={(slug, title) => setWikiReader({ slug, title })}
               hideCompanions={Boolean(crisisLevel)}
               onOpenVideoCenter={() => setVideoDrawerOpen(true)}
+              persona={agentPersona}
             />
           </div>
           <div className="insights-toolbar">
@@ -1233,17 +1295,12 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 setInsightsOpen(true);
               }}
             >
-              {insightsOpen ? '收起节律与画像 ▲' : '情绪节律与画像 ▼'}
+              {insightsOpen ? '收起画像 ▲' : '咨询画像 ▼'}
               {(portraitPending || reportPending) && ' · 生成中'}
             </button>
           </div>
           {insightsOpen && (
           <div className="insights-grid">
-            <div className="insights-col insights-col-rhythm">
-              <InsightsPanelShell title="智能情绪节律日历" className="insights-col-rhythm">
-                <EmotionRhythmCalendar userId={currentUserId} />
-              </InsightsPanelShell>
-            </div>
             {reportEthicsOk && latestReport?.portrait && (
               <div className="insights-col insights-col-portrait">
                 <InsightsPanelShell title="本次咨询画像" className="insights-col-portrait">
@@ -1262,14 +1319,47 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
                 </InsightsPanelShell>
               </div>
             )}
-            {currentUserId && (
-              <div className="insights-col insights-col-mood">
-                <InsightsPanelShell title="情绪打卡" className="insights-col-mood">
-                  <MoodCheckinCard userId={currentUserId} />
+          </div>
+          )}
+          </>
+          )}
+
+          {mainView === 'loop' && currentUserId && <LoopWorkspace userId={currentUserId} />}
+
+          {mainView === 'record' && currentUserId && (
+            <div className="record-page">
+              <div className="record-page-main">
+                <InsightsPanelShell title="智能情绪节律日历" className="record-main-card">
+                  <EmotionRhythmCalendar userId={currentUserId} />
                 </InsightsPanelShell>
               </div>
-            )}
-          </div>
+              <div className="record-page-side">
+                <InsightsPanelShell title="情绪打卡">
+                  <MoodCheckinCard userId={currentUserId} />
+                </InsightsPanelShell>
+                <InsightsPanelShell title="每日打卡看板">
+                  <TaskBoardPanel userId={currentUserId} />
+                </InsightsPanelShell>
+                <InsightsPanelShell title="私密日记">
+                  <JournalPanel userId={currentUserId} />
+                </InsightsPanelShell>
+              </div>
+            </div>
+          )}
+
+          {mainView === 'bottle' && currentUserId && (
+            <div className="bottle-page">
+              <div className="bottle-page-main">
+                <InsightsPanelShell title="漂流瓶">
+                  <DriftBottlePanel userId={currentUserId} />
+                </InsightsPanelShell>
+              </div>
+              <div className="bottle-page-side">
+                <InsightsPanelShell title="我扔过的瓶子">
+                  <BottleHistoryPanel userId={currentUserId} />
+                </InsightsPanelShell>
+              </div>
+            </div>
           )}
         </div>
       </main>
@@ -1286,6 +1376,10 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           setTrendCareOpen(false);
           pushToast('可在「个人资料」中查看辅导员联系方式，或前往学校心理中心预约', 'info');
         }}
+      />
+      <WikiReaderModal
+        page={wikiReader}
+        onClose={() => setWikiReader(null)}
       />
       <ToastStack messages={toasts} onDismiss={dismissToast} />
     </div>

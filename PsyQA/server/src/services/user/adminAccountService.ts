@@ -77,7 +77,7 @@ export async function createUserByAdmin(payload: {
   if (payload.password.length < 6) {
     return { ok: false, error: '密码至少 6 位' };
   }
-  if (!['student', 'counselor', 'admin'].includes(payload.role)) {
+  if (!['student', 'counselor', 'admin', 'teacher'].includes(payload.role)) {
     return { ok: false, error: '无效的角色' };
   }
 
@@ -96,11 +96,18 @@ export async function createUserByAdmin(payload: {
     username: u,
     passwordHash: await hashPassword(payload.password),
     displayName: (payload.displayName || u).trim().slice(0, 32),
-    avatar: payload.role === 'counselor' ? '🧑‍🏫' : payload.role === 'admin' ? '🛡️' : '🎓',
+    avatar:
+      payload.role === 'counselor'
+        ? '🧑‍🏫'
+        : payload.role === 'admin'
+          ? '🛡️'
+          : payload.role === 'teacher'
+            ? '👩‍🏫'
+            : '🎓',
     role: payload.role,
     orgId,
     managedOrgIds:
-      payload.role === 'counselor' || payload.role === 'admin'
+      payload.role === 'counselor' || payload.role === 'admin' || payload.role === 'teacher'
         ? payload.managedOrgIds?.length
           ? payload.managedOrgIds
           : [orgId]
@@ -134,14 +141,14 @@ export async function updateUserByAdmin(
   const record = data.users[idx];
 
   if (updates.role !== undefined) {
-    if (!['student', 'counselor', 'admin'].includes(updates.role)) {
+    if (!['student', 'counselor', 'admin', 'teacher'].includes(updates.role)) {
       return { ok: false, error: '无效的角色' };
     }
     if (targetId === adminId && updates.role !== 'admin') {
       return { ok: false, error: '不能修改自己的管理员角色' };
     }
     record.role = updates.role;
-    if (updates.role === 'counselor' || updates.role === 'admin') {
+    if (updates.role === 'counselor' || updates.role === 'admin' || updates.role === 'teacher') {
       record.managedOrgIds = updates.managedOrgIds?.length
         ? updates.managedOrgIds
         : record.managedOrgIds?.length
@@ -152,7 +159,10 @@ export async function updateUserByAdmin(
     }
   }
 
-  if (updates.managedOrgIds !== undefined && (record.role === 'counselor' || record.role === 'admin')) {
+  if (
+    updates.managedOrgIds !== undefined &&
+    (record.role === 'counselor' || record.role === 'admin' || record.role === 'teacher')
+  ) {
     record.managedOrgIds = updates.managedOrgIds;
   }
 

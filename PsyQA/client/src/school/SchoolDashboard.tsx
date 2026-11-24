@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { downloadSchoolReport, downloadSchoolMonthlyLedger, fetchSchoolDashboard, getErrorMessage, SchoolDashboardStats } from '../api';
 import { DonutChart, paletteColor } from '../components/charts';
 import { SchoolPermissionsCard } from './SchoolPermissionsCard';
+import { SchoolWeatherSection } from './SchoolWeatherSection';
 import { useSchoolSession } from './useSchoolSession';
 import { stressLevelClass } from './schoolLabels';
 
@@ -83,6 +84,7 @@ function RankBarList({
 const SchoolDashboard: React.FC = () => {
   const { sessionUser } = useSchoolSession();
   const isAdmin = sessionUser.role === 'admin';
+  const isTeacher = sessionUser.role === 'teacher';
   const [stats, setStats] = useState<SchoolDashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -228,11 +230,19 @@ const SchoolDashboard: React.FC = () => {
           <strong>{stats.highRiskCount}</strong>
           <span className="school-stat-hint">高/危急等级</span>
         </div>
-        <Link to="/school/alerts" className="school-stat-card alert school-stat-link">
-          <span className="label">待处理告警</span>
-          <strong>{stats.pendingAlerts}</strong>
-          <span className="school-stat-hint">点击查看 →</span>
-        </Link>
+        {isTeacher ? (
+          <div className="school-stat-card alert">
+            <span className="label">待处理告警</span>
+            <strong>{stats.pendingAlerts}</strong>
+            <span className="school-stat-hint">聚合计数</span>
+          </div>
+        ) : (
+          <Link to="/school/alerts" className="school-stat-card alert school-stat-link">
+            <span className="label">待处理告警</span>
+            <strong>{stats.pendingAlerts}</strong>
+            <span className="school-stat-hint">点击查看 →</span>
+          </Link>
+        )}
         <div className={`school-stat-card stress ${stressLevelClass(stats.avgStress)}`}>
           <span className="label">平均压力指数</span>
           <strong>{stats.avgStress}</strong>
@@ -242,17 +252,19 @@ const SchoolDashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="school-quick-links">
-        <Link to="/school/alerts" className="school-quick-link">
-          风险告警工作台
-          {stats.pendingAlerts > 0 && (
-            <span className="school-nav-badge">{stats.pendingAlerts}</span>
-          )}
-        </Link>
-        <Link to="/school/students" className="school-quick-link">
-          脱敏学生列表
-        </Link>
-      </div>
+      {!isTeacher && (
+        <div className="school-quick-links">
+          <Link to="/school/alerts" className="school-quick-link">
+            风险告警工作台
+            {stats.pendingAlerts > 0 && (
+              <span className="school-nav-badge">{stats.pendingAlerts}</span>
+            )}
+          </Link>
+          <Link to="/school/students" className="school-quick-link">
+            脱敏学生列表
+          </Link>
+        </div>
+      )}
 
       <div className="school-two-col">
         <div className="school-card">
@@ -294,6 +306,8 @@ const SchoolDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <SchoolWeatherSection />
     </div>
   );
 };

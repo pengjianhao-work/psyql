@@ -5,7 +5,6 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
   pull_request:
     branches: [main, master]
 
@@ -77,3 +76,22 @@ jobs:
           # Those warnings already exist in the client. Typecheck still runs.
           DISABLE_ESLINT_PLUGIN: true
           GENERATE_SOURCEMAP: false
+
+      - name: Dependency audit (fail on high/critical)
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm audit --omit=dev --audit-level=high --prefix client
+
+      - name: Runtime data not tracked
+        run: |
+          ! git ls-files | grep -E '(^|/)server/data/(accounts|memory_meta|school_alerts)\.json$|user_history\.json$|\.(db|db-shm|db-wal)$|(^|/)qdrant_data/|(^|/)chroma_data/'
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Docker build
+        run: docker build -t psyqa:ci ./PsyQA

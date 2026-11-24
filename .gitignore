@@ -24,8 +24,9 @@ client/build/
 chroma_data/
 qdrant_data/
 tools/qdrant/
-server/data/*.json
-!server/data/.gitkeep
+**/server/data/*.json
+!**/server/data/.gitkeep
+**/server/src/data/
 
 # 运行时聊天与交互记录
 **/user_history.json
@@ -59,3 +60,17 @@ __pycache__/
 # 临时/重复源码副本
 App(1).tsx
 StudentApp(1).tsx
+
+# 训练数据与评测产物（本机数据集，不进仓）
+training_data/
+
+# 一次性探查/评测脚本
+scripts/_tmp_*
+scripts/_time_*
+
+# 遗留副本目录
+PsyQA (1)/
+
+# 数据库备份目录
+backups/
+**/backups/

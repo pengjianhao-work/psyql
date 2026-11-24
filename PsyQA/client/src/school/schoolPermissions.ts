@@ -5,6 +5,8 @@ export type SchoolCapability = {
   label: string;
   counselor: boolean | 'scope' | 'conditional';
   admin: boolean | 'all';
+  /** 教师仅有聚合视图：未列出的能力一律视为不允许 */
+  teacher?: boolean | 'scope';
   note?: string;
 };
 
@@ -14,7 +16,15 @@ export const SCHOOL_CAPABILITIES: SchoolCapability[] = [
     id: 'dashboard',
     label: '数据看板（咨询量、风险、情绪分布等）',
     counselor: 'scope',
-    admin: 'all'
+    admin: 'all',
+    teacher: 'scope'
+  },
+  {
+    id: 'weather',
+    label: '情绪气象（院系心情聚合，k-匿名小样本抑制）',
+    counselor: 'scope',
+    admin: 'all',
+    teacher: 'scope'
   },
   {
     id: 'alerts',
@@ -73,7 +83,8 @@ export function formatCapabilityValue(
   cap: SchoolCapability,
   role: UserRole
 ): string {
-  const v = role === 'admin' ? cap.admin : cap.counselor;
+  const v =
+    role === 'admin' ? cap.admin : role === 'teacher' ? (cap.teacher ?? false) : cap.counselor;
   if (v === true || v === 'all') return '允许';
   if (v === false) return '不允许';
   if (v === 'scope') return '仅管辖范围';

@@ -15,7 +15,7 @@ const LoginPage: React.FC = () => {
       try {
         const { user } = await fetchCurrentUser();
         if (!cancelled) {
-          if (user.role === 'counselor' || user.role === 'admin') {
+          if (user.role === 'counselor' || user.role === 'admin' || user.role === 'teacher') {
             navigate('/school', { replace: true });
           } else {
             navigate('/student', { replace: true });
@@ -34,7 +34,7 @@ const LoginPage: React.FC = () => {
 
   const redirectByRole = (user: AuthUserPublic) => {
     sessionStorage.removeItem(GUEST_MODE_KEY);
-    if (user.role === 'counselor' || user.role === 'admin') {
+    if (user.role === 'counselor' || user.role === 'admin' || user.role === 'teacher') {
       navigate('/school', { replace: true });
     } else {
       navigate('/student', { replace: true });

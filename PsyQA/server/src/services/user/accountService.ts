@@ -8,7 +8,7 @@ import { readAllAccountsFromDb, writeAllAccountsToDb } from '../../db/accountSto
 
 const scryptAsync = promisify(crypto.scrypt);
 
-export type UserRole = 'student' | 'counselor' | 'admin';
+export type UserRole = 'student' | 'counselor' | 'admin' | 'teacher';
 
 export interface AccountRecord {
   id: string;
@@ -124,6 +124,10 @@ export function getPermissionsForRole(role: UserRole): Permission[] {
   }
   if (role === 'counselor') {
     return ['school:read', 'school:write', 'school:dashboard', 'school:alerts:read', 'school:students:masked'];
+  }
+  if (role === 'teacher') {
+    // 教师仅有聚合视图权限：看板、情绪气象与热力图，不接触个体数据
+    return ['school:read', 'school:dashboard', 'school:weather'];
   }
   return ['student:self', 'consult:own', 'report:own', 'trend:own'];
 }

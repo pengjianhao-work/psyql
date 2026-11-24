@@ -79,6 +79,9 @@ import {
   type WebResult
 } from '../search/webSearchService';
 import { resolveCounselSkill, shouldPrefetchWeb, isSafetyContext } from '../skills/counselSkills';
+import { COUNSEL_REPLY_GUIDANCE } from '../llm/counselReplyPrompt';
+import { getUserAgentProfile } from '../../db/userAgentStore';
+import { buildSupportReplyGuidance } from '../user/supportPreferences';
 import { env } from '../../config/env';
 
 export interface CombinedAnswer {
@@ -122,6 +125,8 @@ export interface CombinedAnswer {
   }>;
   /** 当前季节 RAG 策略标签 */
   seasonalRagLabel?: string;
+  /** 本轮回答注入的 Wiki 主题页（供前端"延伸阅读"溯源，安全路径为 null） */
+  wikiSource?: { slug: string; title: string; summary: string } | null;
 }
 
 interface ModelConfig {
@@ -551,13 +556,28 @@ export type AnswerStreamCallbacks = {
   onStreamReset?: () => void;
 };
 
+/** 前端可选的对话模式；crisis/high/critical 安全路径一律忽略，只走安全回答 */
+export type CounselMode = 'companion' | 'guided' | 'insight' | 'reading';
+
+export const COUNSEL_MODES: readonly CounselMode[] = ['companion', 'guided', 'insight', 'reading'];
+
+const MODE_DIRECTIVES: Partial<Record<CounselMode, string>> = {
+  guided: `【当前模式 · 疏导练习】
+像一位耐心的引导者：一次只推进一步，用开放式提问帮用户自己看见感受；少下结论、少给清单，多陪伴。仍要先接住情绪再引导，不要变成审问。`,
+  insight: `【当前模式 · 自我认知】
+帮用户看清情绪、想法与处境之间的关系；可以温和指出反复出现的模式（如「你可能在……的时候……」），但不用诊断词、不贴标签、不替用户下结论。`,
+  reading: `【当前模式 · 知识阅读】
+以清晰的知识讲解为主：结构化、要点化，可引用【参考知识】提炼的内容；仍然避免诊断口吻和医疗建议，结尾保留一句支持性的话。`
+};
+
 const generateAIAnswerBody = async (
   question: string,
   description: string | undefined,
   similarQuestions: SimilarQuestion[],
   userId: string = 'default_user',
   stream?: AnswerStreamCallbacks,
-  conversationId?: string
+  conversationId?: string,
+  mode: CounselMode = 'companion'
 ): Promise<CombinedAnswer> => {
   const startTime = Date.now();
   const loadTestFast = process.env.PSYQA_LOAD_TEST === '1';
@@ -590,12 +610,14 @@ const generateAIAnswerBody = async (
     });
     const placeholderReport = buildPlaceholderReport(psychSnapshot);
     const priorityAnswer = `
-⚠️ 我非常重视你现在的状态，你的安全是第一位的?
-【安全计划· 请按顺序完成?1. 环境安全：远离可能伤害自己或他人的物品或场景
-2. 当下冷静：离开冲突现场，深呼吸 10 ?3. 支持资源：联系辅导员/室友信任的同伴，并拨?${ruleRisk.hotline}
+⚠️ 我非常重视你现在的状态，你的安全是第一位的。
+【安全计划 · 请按顺序完成】
+1. 环境安全：远离可能伤害自己或他人的物品或场景
+2. 当下冷静：离开冲突现场，深呼吸 10 次
+3. 支持资源：联系辅导员/室友信任的同伴，并拨打${ruleRisk.hotline}
 4. 如有受伤或持续冲突：拨打 120 / 110
 
-你不是一个人。请先确保人身安全，再考虑沟通与和解读${ETHICS_FOOTER}
+你不是一个人。请先确保人身安全，再考虑沟通与和解。${ETHICS_FOOTER}
     `.trim();
     const summary = generateSummary(question, priorityAnswer, psychSnapshot);
     const dialogId = saveDialog(
@@ -862,6 +884,13 @@ const generateAIAnswerBody = async (
       : '';
 
   const agentContext = buildAgentPromptContext(userId);
+  // 个人支持偏好 → 回复风格指引（仅低风险普通对话；高风险走安全路径不使用）
+  const replyGuidance =
+    risk.level === 'low' && ruleRisk.level === 'low' && intent.kind !== 'crisis'
+      ? buildSupportReplyGuidance(getUserAgentProfile(userId)?.basicJson?.supportPreferences)
+      : '';
+  // 低风险对话不强制最小长度，允许按偏好指引自由长短
+  const minAnswerChars = risk.level === 'low' ? 1 : MIN_ANSWER_CHARS;
   const answerShape =
     intent.kind === 'venting'
       ? `【回答篇幅与结构 · 以倾诉为准】
@@ -895,6 +924,18 @@ const generateAIAnswerBody = async (
    - 用模板化安慰糊弄过去（−）
 `;
 
+  // 模式只影响普通路径的语气与结构；安全路径（crisis/high）忽略模式（critical 已在上方提前返回）
+  const isSafetyPath = intent.kind === 'crisis' || ruleRisk.level === 'high';
+  const modeDirective = isSafetyPath ? '' : MODE_DIRECTIVES[mode] ?? '';
+  const guidedAnswerShape =
+    mode === 'guided' && !isSafetyPath && intent.kind !== 'followup'
+      ? `【回答篇幅与结构 · 疏导练习模式】
+- 先用 1–2 段接住情绪（约 100–180 字），点出用户没说出口的感受
+- 然后只问 1 个最关键的引导性开放式问题，帮助用户自己往下想；不要一次给完整建议清单
+- 若对方明显需要立刻可做的事，结尾可补 1 条最小动作（不超过 1 条）
+- 最后一句：${intervention.closingPhrase}`
+      : '';
+
   const askRepeat = trackQuestionRepeat(userId, question);
   const answerVariationHint = buildAnswerVariationHint(askRepeat);
   const genTemperature = Math.min(
@@ -905,8 +946,11 @@ const generateAIAnswerBody = async (
   const prompt = `
 ${systemPrompt}
 ${agentContext ? `\n${agentContext}\n` : ''}
-
-【话术参考 · 开场】${intervention.openingPhrase}
+${modeDirective ? `\n${modeDirective}\n` : ''}
+${COUNSEL_REPLY_GUIDANCE}
+${replyGuidance
+    ? `【个人支持偏好 · 篇幅与语气以此为准】${replyGuidance}\n`
+    : `未设置个人支持偏好：篇幅与结构按下文【回答篇幅与结构】执行。\n【话术参考 · 开场】${intervention.openingPhrase}`}
 
 【短期会话记忆】
 ${recentDialogs
@@ -942,20 +986,21 @@ ${intentDirective}
 情绪置信度：${(emotion.confidence * 100).toFixed(0)}%（若偏低请谨慎推断）
 ${llmRationale ? `智能分析要点：${llmRationale}` : ''}
 
-【咨询干预框架】框架：${intervention.frameworkName}
-请按以下结构展开（每一段都要写完整句子，不要只写标题或关键词）：${intervention.structureHint}
+${replyGuidance
+    ? `【咨询干预框架 · 供参考】${intervention.frameworkName}\n仅在贴合当前需求时使用适合的部分，无须展示框架名称。`
+    : `【咨询干预框架】框架：${intervention.frameworkName}\n请按以下结构展开（每一段都要写完整句子，不要只写标题或关键词）：${intervention.structureHint}`}
 ${intervention.actionScripts?.length ? `
 【可直接使用的话术/微步骤参考】（挑 1 条贴合用户处境改写进建议，不要照抄、不要全列）
 ${intervention.actionScripts.map((s) => `· ${s}`).join('\n')}` : ''}
 ${recentRiskNote}
 ${answerVariationHint ? `\n${answerVariationHint}\n` : ''}
 ${empathyScaffold}
-${answerShape || `【回答篇幅与结构 · 必须遵守】
+${guidedAnswerShape || (replyGuidance ? '' : answerShape || `【回答篇幅与结构 · 必须遵守】
 - 全文约 **450–700 汉字**，分 **两大块**，不要第三块行动清单
 - **第一块（心理疏导，约 200–280 字）**：用 3–4 段回应用户原话，做到：① 命名情绪——优先使用用户没说出口的更准确情绪词，并说明为什么这样理解（如「听起来你不是懒，是被『必须优秀』的期待压住了」）；② 正常化（说明这种感受在类似处境很常见）；③ 去病耻（「这不是你的错/不是你不够好」类表达）；④ 可点到宿舍/人际/学业等具体情境，但不要诊断
 - **第二块（具体建议，约 180–280 字）**：写框架名「${intervention.frameworkName}」+ **3–5 条**具体建议（用「·」分行，每条 25–60 字）；其中 **1 条**可以是「可以直接发给对方/照做」的话术或微步骤（注明说给谁听/怎么做）；知识库最多一句「详见下方参考」
 - 最后单独一句结尾：${intervention.closingPhrase}
-- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何多步清单**`}
+- **禁止**：「我们可以这样理解当下」长段论述、「专业参考/参考建议」标题、粘贴知识库原文、**「今天就能开始的 3 个小步骤」或任何多步清单**`)}
 
 【长期向量记忆】
 ${personalMemoryText || '没有检索到更早的相关原话。不要编造过去。'}
@@ -978,7 +1023,7 @@ ${webContext}` : ''}
 ${description ? `补充描述：${description}` : ''}
 
 【回答要求】
-- 以${tone}的语气，像辅导员面对面简短交流
+${replyGuidance ? '- 语气和篇幅按【个人支持偏好】，像辅导员面对面交流' : `- 以${tone}的语气，像辅导员面对面简短交流`}
 - 先共情疏导，再给建议；不做医疗诊断
 - 疏导部分注意：命名情绪、正常化感受、去病耻，不要只重复「我理解你的感受」
 - **禁止**以重复或复述用户原话作为开头（不要写「${question.slice(0, 30)}…」这类开场）
@@ -1002,8 +1047,8 @@ ${description ? `补充描述：${description}` : ''}
   let reactTrace: ReActStep[] | undefined;
 
   const cachedAnswer =
-    shouldUseAnswerCache(risk.level, askRepeat) ? getCachedAnswer(cacheKey) : null;
-  if (cachedAnswer && cachedAnswer.length >= MIN_ANSWER_CHARS) {
+    !replyGuidance && shouldUseAnswerCache(risk.level, askRepeat) ? getCachedAnswer(cacheKey) : null;
+  if (cachedAnswer && cachedAnswer.length >= minAnswerChars) {
     const cleanedCache = sanitizeCounselAnswer(cachedAnswer);
     if (isValidCounselAnswer(cleanedCache)) {
       console.log('使用缓存答案');
@@ -1041,6 +1086,7 @@ ${description ? `补充描述：${description}` : ''}
             durableMemory,
             continuePrevious: intent.kind === 'followup',
             agentContext,
+            replyGuidance: replyGuidance || undefined,
             tone,
             llmRationale,
             prefetchedKnowledge: rerankedKnowledge,
@@ -1063,7 +1109,7 @@ ${description ? `补充描述：${description}` : ''}
           agentResult.reactMode === 'full' ||
           agentResult.reactMode === 'planner' ||
           agentResult.reactMode === 'tot';
-        if (agentResult.success && agentResult.answer.length >= MIN_ANSWER_CHARS) {
+        if (agentResult.success && agentResult.answer.length >= minAnswerChars) {
           const cleaned = sanitizeCounselAnswer(agentResult.answer);
           llmAnswer = isValidCounselAnswer(cleaned) ? cleaned : '';
         }
@@ -1104,13 +1150,12 @@ ${description ? `补充描述：${description}` : ''}
 
     if (llmAnswer) {
       answerLlmUsed = true;
-      answer = ensureAnswerLength(
-        stripUserQuestionEcho(normalizeAnswerStructure(llmAnswer), question),
-        question,
-        intervention,
-        description
-      );
-      if (answer.length >= MIN_ANSWER_CHARS && shouldUseAnswerCache(risk.level, askRepeat)) {
+      const normalizedAnswer = stripUserQuestionEcho(normalizeAnswerStructure(llmAnswer), question);
+      answer =
+        replyGuidance && normalizedAnswer.trim()
+          ? normalizedAnswer
+          : ensureAnswerLength(normalizedAnswer, question, intervention, description);
+      if (!replyGuidance && answer.length >= minAnswerChars && shouldUseAnswerCache(risk.level, askRepeat)) {
         setCachedAnswer(cacheKey, answer);
       }
     } else if (rerankedKnowledge.length > 0) {
@@ -1268,6 +1313,9 @@ ${answer}
       confidence: h.confidence
     })),
     seasonalRagLabel: seasonal.label,
+    wikiSource: wikiHits.length
+      ? { slug: wikiHits[0].slug, title: wikiHits[0].title, summary: wikiHits[0].summary }
+      : null,
     report: placeholderReport,
     reportPending: true,
     statModel,

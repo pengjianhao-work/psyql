@@ -15,6 +15,7 @@ import { useSchoolSession } from './useSchoolSession';
 const ROLE_LABELS: Record<UserRole, string> = {
   student: '学生',
   counselor: '辅导员',
+  teacher: '教师',
   admin: '管理员'
 };
 
@@ -157,6 +158,7 @@ const SchoolAdminUsers: React.FC = () => {
             <select value={formRole} onChange={(e) => setFormRole(e.target.value as UserRole)}>
               <option value="student">学生</option>
               <option value="counselor">辅导员</option>
+              <option value="teacher">教师</option>
               <option value="admin">管理员</option>
             </select>
           </label>

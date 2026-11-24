@@ -11,6 +11,13 @@ import {
   batchArchiveMemories,
   MemoryTopicTag
 } from '../services/user/memoryTagService';
+import {
+  listUserFacts,
+  updateUserFact,
+  deleteUserFact,
+  getFactDistillState
+} from '../services/user/userFactService';
+import { runFactDistillation } from '../services/user/factDistillService';
 import { buildSchoolHeatmap } from '../services/school/schoolHeatmapService';
 import {
   listInterventionLedgers,
@@ -75,6 +82,61 @@ export function postMemoryBatchArchive(req: AuthRequest, res: Response): void {
   const archived = req.body?.archived !== false;
   const count = batchArchiveMemories(userId, dialogTimes, archived);
   res.json({ message: `已${archived ? '归档' : '取消归档'} ${count} 条`, count });
+}
+
+export function getMemoryFacts(req: AuthRequest, res: Response): void {
+  const userId = resolveStudentUserId(req, res, req.query.userId);
+  if (!userId) return;
+  const includeArchived = String(req.query.includeArchived || '') === '1';
+  res.json({
+    facts: listUserFacts(userId, { includeArchived }),
+    distill: getFactDistillState(userId)
+  });
+}
+
+export function patchMemoryFact(req: AuthRequest, res: Response): void {
+  const userId = resolveStudentUserId(req, res, req.body?.userId);
+  if (!userId) return;
+  const factId = String(req.body?.factId || '');
+  if (!factId) {
+    res.status(400).json({ error: '缺少 factId' });
+    return;
+  }
+  const status = req.body?.status === 'archived' || req.body?.status === 'active'
+    ? (req.body.status as 'active' | 'archived')
+    : undefined;
+  const fact = updateUserFact(userId, factId, {
+    fact: req.body?.fact !== undefined ? String(req.body.fact) : undefined,
+    status
+  });
+  if (!fact) {
+    res.status(404).json({ error: '事实不存在' });
+    return;
+  }
+  res.json({ fact });
+}
+
+export function deleteMemoryFact(req: AuthRequest, res: Response): void {
+  const userId = resolveStudentUserId(req, res, req.body?.userId);
+  if (!userId) return;
+  const factId = String(req.body?.factId || '');
+  if (!factId) {
+    res.status(400).json({ error: '缺少 factId' });
+    return;
+  }
+  const ok = deleteUserFact(userId, factId);
+  if (!ok) {
+    res.status(404).json({ error: '事实不存在' });
+    return;
+  }
+  res.json({ message: '已删除' });
+}
+
+export async function postDistillMemoryFacts(req: AuthRequest, res: Response): Promise<void> {
+  const userId = resolveStudentUserId(req, res, req.body?.userId);
+  if (!userId) return;
+  const touched = await runFactDistillation(userId);
+  res.json({ touched, facts: listUserFacts(userId) });
 }
 
 export function getSeasonalRag(req: AuthRequest, res: Response): void {
