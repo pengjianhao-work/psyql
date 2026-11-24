@@ -1,4 +1,4 @@
-import { Response } from 'express';
+﻿import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
 import {
   getDashboardForUser,
@@ -8,6 +8,7 @@ import {
 } from '../services/school/schoolService';
 import { getAlertById, listAlerts, updateAlert, AlertStatus } from '../services/school/schoolAlertService';
 import { buildSchoolWeather } from '../services/school/schoolWeatherService';
+import { buildSchoolLoopWeather } from '../services/school/schoolLoopWeatherService';
 import {
   listNotificationsForUser,
   markNotificationsRead
@@ -21,6 +22,12 @@ export const getSchoolDashboard = async (req: AuthRequest, res: Response): Promi
 export const getSchoolWeather = async (req: AuthRequest, res: Response): Promise<void> => {
   const weather = await buildSchoolWeather(req.authUser!);
   res.json(weather);
+};
+
+/** 教师/辅导员/管理员共用的闭环使用聚合视图（仅聚合计数，含 k-匿名抑制） */
+export const getSchoolLoopWeather = async (req: AuthRequest, res: Response): Promise<void> => {
+  const loopWeather = await buildSchoolLoopWeather(req.authUser!);
+  res.json(loopWeather);
 };
 
 export const getSchoolStudents = async (req: AuthRequest, res: Response): Promise<void> => {

@@ -113,8 +113,8 @@
 | P2 | 心理域模型+知识库 ✅ | §3 新表 + resource_items + 信号接入蒸馏 |
 | P3 | Agent 与安全 ✅ | §4 工具层 + runLoopTurn 安全门禁 + 回归 20/20 |
 | P4 | 闭环编排 ✅ | /loop/today + /loop/summary + progress_snapshots + 计划收口 |
-| P5 | 工作区 UI | 三栏布局、拆 StudentApp、移动+无障碍 |
-| P6 | 教师端与评测 | 聚合看板增强、离线评测、试点报告 |
+| P5 | 工作区 UI（进行中） | ✅「闭环」tab + LoopWorkspace；移动/无障碍/E2E 待补 |
+| P6 | 教师端与评测 ✅ | /school/loop-weather（k<5 抑制）+ `npm run eval:loop` 离线回归 |
 | P7 | 生产化与试点 | 安全/性能/可观测/冒烟/runbook |
 
 ## 8. KPI

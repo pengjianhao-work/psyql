@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import { attachAuth, requireAuth, requireRole, requirePermission } from '../middleware/authMiddleware';
 import {
   getSchoolAlerts,
@@ -7,6 +7,7 @@ import {
   getSchoolStudentDetail,
   getSchoolStudents,
   getSchoolWeather,
+  getSchoolLoopWeather,
   patchSchoolAlert,
   postMarkSchoolNotificationsRead
 } from '../controllers/schoolController';
@@ -36,6 +37,7 @@ const staffOnly = requireRole('counselor', 'admin');
 // 教师可见：聚合视图（看板 / 情绪气象 / 热力图）
 schoolRouter.get('/dashboard', getSchoolDashboard);
 schoolRouter.get('/weather', getSchoolWeather);
+schoolRouter.get('/loop-weather', getSchoolLoopWeather);
 schoolRouter.get('/heatmap', getSchoolHeatmap);
 
 // 仅辅导员与管理员：学生个体数据、告警、通知、原文申请、台账与知识审核
