@@ -110,9 +110,9 @@
 |---|---|---|
 | P0 | 决策+基线+WIP | 本文档、PRODUCTION_READINESS、CI 绿 |
 | P1 | 平台加固 | 数据出仓、会话/限流/migration/备份、Docker 对齐、漏洞清零 |
-| P2 | 心理域模型+知识库 | §3 新表 + resource_items + 引用链 |
-| P3 | Agent 与安全 | §4 工具面 + 6 模式路由 + 安全回归 |
-| P4 | 闭环编排 | 签到→计划→行动→复盘→周总结→调整全链路 |
+| P2 | 心理域模型+知识库 ✅ | §3 新表 + resource_items + 信号接入蒸馏 |
+| P3 | Agent 与安全 ✅ | §4 工具层 + runLoopTurn 安全门禁 + 回归 20/20 |
+| P4 | 闭环编排 ✅ | /loop/today + /loop/summary + progress_snapshots + 计划收口 |
 | P5 | 工作区 UI | 三栏布局、拆 StudentApp、移动+无障碍 |
 | P6 | 教师端与评测 | 聚合看板增强、离线评测、试点报告 |
 | P7 | 生产化与试点 | 安全/性能/可观测/冒烟/runbook |
