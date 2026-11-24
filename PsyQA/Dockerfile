@@ -8,6 +8,7 @@ RUN npm ci --omit=dev && cd client && npm ci --omit=dev
 
 FROM node:20-alpine AS build
 WORKDIR /app
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY client/package*.json ./client/
 RUN npm ci && cd client && npm ci
