@@ -33,6 +33,8 @@ server/data/*.json
 
 # 训练下载缓存（脚本会重新写入 training_data/.hf_cache）
 **/.hf_cache/
+# 训练评测运行时产物
+training_data/eval_counsel_report.json
 
 # 本地向量引擎运行时（历史里曾提交 qdrant 数据目录与二进制）
 qdrant_data/

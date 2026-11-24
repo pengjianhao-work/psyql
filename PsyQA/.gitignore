@@ -20,7 +20,6 @@ server/data/load_test_progress.json
 server/data/test_accounts_credentials.json
 server/data/accounts.json
 server/data/intervention_ledgers.json
-training_data/eval_counsel_report.json
 
 # 聊天与交互记录（运行时生成，勿提交）
 user_history.json
