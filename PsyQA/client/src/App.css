@@ -5670,10 +5670,46 @@
   font-size: 0.75rem;
   cursor: default;
 }
+button.emotion-rhythm-day {
+  position: relative; padding: 0; border: 1px solid transparent;
+  font-family: inherit;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+button.emotion-rhythm-day:not(:disabled) { cursor: pointer; }
+button.emotion-rhythm-day:not(:disabled):hover { transform: translateY(-1px); box-shadow: var(--psy-shadow-sm); }
+button.emotion-rhythm-day:disabled { opacity: 0.5; cursor: not-allowed; }
+button.emotion-rhythm-day:focus-visible { outline: 2px solid var(--psy-primary); outline-offset: 1px; }
+button.emotion-rhythm-day.selected { border-color: var(--psy-primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.22); }
+button.emotion-rhythm-day.has-diary::after {
+  content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
+  width: 5px; height: 5px; border-radius: 50%; background: var(--psy-primary);
+}
 .mood-green { background: #c8e6c9; color: #1b5e20; }
 .mood-yellow { background: #fff9c4; color: #f57f17; }
 .mood-red { background: #ffcdd2; color: #b71c1c; }
 .mood-none { background: #f5f5f5; color: #bbb; }
+.emotion-rhythm-diary {
+  margin: 0.75rem 0; padding: 0.75rem;
+  border: 1px solid var(--psy-border-muted); border-radius: var(--psy-radius-md);
+  background: var(--psy-surface-solid); box-shadow: var(--psy-shadow-sm);
+}
+.emotion-rhythm-diary-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
+.emotion-rhythm-diary-mood { flex: 1; font-size: 0.72rem; color: var(--psy-text-muted); }
+.emotion-rhythm-diary-close {
+  margin-left: auto; padding: 2px 8px;
+  border: 1px solid var(--psy-border-muted); border-radius: var(--psy-radius-sm);
+  background: transparent; color: var(--psy-text-muted); font-size: 0.72rem; cursor: pointer;
+}
+.emotion-rhythm-diary-close:hover { color: var(--psy-primary); border-color: var(--psy-primary); }
+.emotion-rhythm-diary-input {
+  width: 100%; box-sizing: border-box; padding: 8px;
+  border: 1px solid var(--psy-border-muted); border-radius: var(--psy-radius-sm);
+  font-family: inherit; font-size: 0.82rem; line-height: 1.6; color: var(--psy-text);
+  resize: vertical;
+}
+.emotion-rhythm-diary-input:focus { outline: none; border-color: var(--psy-primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12); }
+.emotion-rhythm-diary-actions { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; }
+.emotion-rhythm-diary-hint { flex: 1; font-size: 0.7rem; color: var(--psy-text-muted); }
 .emotion-rhythm-legend { display: flex; gap: 0.75rem; font-size: 0.75rem; }
 .emotion-rhythm-dips { font-size: 0.85rem; margin-top: 0.75rem; padding-left: 1rem; }
 

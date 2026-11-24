@@ -1,5 +1,6 @@
 import { getUserHistoryFromDb } from '../../db/historyStore';
 import { listMoodCheckins } from './moodCheckinService';
+import { listAllDiaries } from './diaryService';
 
 export interface UserDataExport {
   userId: string;
@@ -14,6 +15,7 @@ export interface UserDataExport {
   }>;
   summaries: Array<{ time: string; summary: string }>;
   moodCheckins: Array<{ mood: string; note: string | null; createdAt: string }>;
+  diaries: Array<{ date: string; content: string; updatedAt: string }>;
 }
 
 export function buildUserDataExport(userId: string): UserDataExport {
@@ -34,6 +36,11 @@ export function buildUserDataExport(userId: string): UserDataExport {
       mood: c.mood,
       note: c.note,
       createdAt: c.createdAt
+    })),
+    diaries: listAllDiaries(userId).map((d) => ({
+      date: d.date,
+      content: d.content,
+      updatedAt: d.updatedAt
     }))
   };
 }
@@ -56,6 +63,12 @@ export function exportToMarkdown(data: UserDataExport): string {
       lines.push(`- ${c.createdAt}：${c.mood}${c.note ? `（${c.note}）` : ''}`);
     }
     lines.push('');
+  }
+  if (data.diaries.length) {
+    lines.push('## 我的日记', '');
+    for (const d of data.diaries) {
+      lines.push(`### ${d.date}`, '', d.content, '');
+    }
   }
   return lines.join('\n');
 }

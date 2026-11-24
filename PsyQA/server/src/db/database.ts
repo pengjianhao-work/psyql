@@ -173,6 +173,15 @@ function initSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_mood_checkins_user
       ON mood_checkins(user_id, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS diary_entries (
+      user_id TEXT NOT NULL,
+      entry_date TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, entry_date)
+    );
+
     CREATE TABLE IF NOT EXISTS trend_terms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       term TEXT NOT NULL,

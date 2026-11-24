@@ -62,7 +62,9 @@ import {
 } from '../controllers/innovationController';
 import {
   exportUserData,
+  getDiaryEntries,
   getMoodCheckins,
+  postDiaryEntry,
   postMoodCheckin
 } from '../controllers/userToolsController';
 import {
@@ -119,6 +121,8 @@ questionRouter.get('/seasonal-rag', getSeasonalRag);
 questionRouter.get('/export', ...studentApi, exportUserData);
 questionRouter.post('/mood-checkin', ...studentApi, postMoodCheckin);
 questionRouter.get('/mood-checkins', ...studentApi, getMoodCheckins);
+questionRouter.get('/diary-entries', ...studentApi, getDiaryEntries);
+questionRouter.post('/diary-entry', ...studentApi, postDiaryEntry);
 
 questionRouter.get('/stats', requireAuth, requireRole('admin'), getSystemStats);
 questionRouter.get('/admin/agent-profile', requireAuth, requireRole('admin'), getUserAgentProfileAdmin);
