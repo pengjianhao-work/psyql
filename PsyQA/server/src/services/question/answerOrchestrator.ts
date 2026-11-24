@@ -69,6 +69,10 @@ import { stripUserQuestionEcho } from '../../utils/answerSanitizer';
 import { sanitizeForumStyle } from '../../utils/forumStyleSanitizer';
 import { mineImplicitNeeds } from '../psych/implicitNeedsService';
 import { getSeasonalRagBoost } from '../knowledge/seasonalRagPolicy';
+import {
+  getCampusScene,
+  buildCampusScenePromptBlock
+} from '../knowledge/campusSceneService';
 import { searchWiki, formatWikiForPrompt } from '../wiki/wikiService';
 import type { WikiHit } from '../wiki/wikiTypes';
 import { listActiveTrendTerms, formatTrendContext } from '../trend/trendService';
@@ -557,7 +561,8 @@ const generateAIAnswerBody = async (
   similarQuestions: SimilarQuestion[],
   userId: string = 'default_user',
   stream?: AnswerStreamCallbacks,
-  conversationId?: string
+  conversationId?: string,
+  sceneId?: string
 ): Promise<CombinedAnswer> => {
   const startTime = Date.now();
   const loadTestFast = process.env.PSYQA_LOAD_TEST === '1';
@@ -835,48 +840,47 @@ const generateAIAnswerBody = async (
   } as Record<EmotionType, string>)[emotion.emotion];
   
   const systemPrompt = `
-你是一位专业的大学生心理健康陪伴AI，具备以下特质：
-- 温柔、耐心、共情能力强
-- 严格遵守心理咨询伦理准则
-- 不做医疗诊断，只提供心理支持和建议
-- 引导用户寻求专业帮助（如需要）
-
-你的任务是：
-1. 认真倾听用户的困扰
-2. 给予情感上的理解和支持
-3. 提供科学、实用的心理调节建议
-4. 当检测到危机信号时，立即提供援助热线信息
-
-注意事项：
-- 回答要温暖、真诚，避免生硬的专业术语
-- 尊重用户隐私，不评判用户的感受
-- 如果不确定如何回答，坦诚说明并建议咨询专业人士
-- 短期会话、工作记忆和长期习惯只用来认识这个人。这轮没接着上一轮说时，不要把旧事写进回答
-- 不编造记忆里没有的事实
-- 知识库原文是论坛帖子：不要使用「楼主/楼楼/题主/层主/亲爱的楼主」这类称呼，也不要模仿原帖作者的自称或昵称，直接对用户说「你」
-  `.trim();
+[SYSTEM_MARKER_UIBE_2026]
+你是一位温柔、耐心、共情的大学生心理健康陪伴 AI，服务于对外经济贸易大学（UIBE/贸大）在校学生。
+不可违反的边界：
+- 不做医疗诊断，只提供心理支持和调节建议
+- 危机时只说全国心理援助热线 400-161-9995，不编造贸大官方资源（心理中心地址、校医室电话等）
+- 知识库来自论坛帖子：不要使用「楼主/楼楼/题主/层主/亲爱的楼主」这类称呼，也不要模仿原帖作者的自称或昵称，直接对用户说「你」
+- 短期会话、工作记忆、长期习惯只用来认识这个人；这轮没接着上一轮说时，不要把旧事写进回答
+- 回答温暖真诚，避免生硬专业术语；尊重用户感受，不评判；不确定时坦诚说明并建议专业人士`.trim();
 
   const recentRiskNote =
     lastPsych && (lastPsych.risk === 'medium' || lastPsych.risk === 'high')
       ? '近几次对话风险偏高，请缩短建议、优先提供可联系的支持资源，语气稳定克制。'
       : '';
 
+  const campusSceneBlock = buildCampusScenePromptBlock(getCampusScene(sceneId));
+  console.log('[orchestrator] sceneId=', sceneId, 'blockLen=', campusSceneBlock.length, 'blockHead=', campusSceneBlock.slice(0, 80));
+
   const agentContext = buildAgentPromptContext(userId);
+  // sceneId 命中时：如果用户问题真的和校内场景贴，可以自然提一下增加代入感；驴不对马嘴就别硬塞
+  const sceneAnchorLine = campusSceneBlock
+    ? '- 可选：如果用户问题确实贴近贸大校内场景，可自然提一下增加代入感；用户根本没提的内容别硬塞'
+    : '';
+
   const answerShape =
     intent.kind === 'venting'
       ? `【回答篇幅与结构 · 以倾诉为准】
 - 全文约 450–700 汉字
+${sceneAnchorLine}
 - 第一块用 3–4 段回应用户原话，约 200–280 字：优先点出用户没说出口的更准确情绪（如「听起来是委屈多过生气」），正常化感受、去病耻（「这不是你的错」类表达），不要诊断
 - 第二块给 3–5 条具体建议（用「·」分行，每条 25–60 字）；其中 1 条可以是「可以直接发给对方/照做」的话术或微步骤，须贴合用户原话改写
 - 最后一句：${intervention.closingPhrase}`
       : intent.kind === 'followup'
         ? `【回答篇幅与结构 · 以追问为准】
 - 顺着上一轮往下说，约 350–550 汉字，不要重开话题
+${sceneAnchorLine}
 - 先接住对方的追问，再给 3–4 条具体建议（用「·」分行，每条 25–60 字）；其中 1 条可以是可直接使用的话术
 - 最后一句：${intervention.closingPhrase}`
         : intent.kind === 'crisis'
           ? `【回答篇幅与结构 · 以安全为准】
 - 先写人身安全和可以联系的人，再简短共情
+${sceneAnchorLine}
 - 不要长篇分析，不要步骤清单
 - 最后一句：${intervention.closingPhrase}`
           : '';
@@ -952,6 +956,7 @@ ${answerVariationHint ? `\n${answerVariationHint}\n` : ''}
 ${empathyScaffold}
 ${answerShape || `【回答篇幅与结构 · 必须遵守】
 - 全文约 **450–700 汉字**，分 **两大块**，不要第三块行动清单
+${sceneAnchorLine}
 - **第一块（心理疏导，约 200–280 字）**：用 3–4 段回应用户原话，做到：① 命名情绪——优先使用用户没说出口的更准确情绪词，并说明为什么这样理解（如「听起来你不是懒，是被『必须优秀』的期待压住了」）；② 正常化（说明这种感受在类似处境很常见）；③ 去病耻（「这不是你的错/不是你不够好」类表达）；④ 可点到宿舍/人际/学业等具体情境，但不要诊断
 - **第二块（具体建议，约 180–280 字）**：写框架名「${intervention.frameworkName}」+ **3–5 条**具体建议（用「·」分行，每条 25–60 字）；其中 **1 条**可以是「可以直接发给对方/照做」的话术或微步骤（注明说给谁听/怎么做）；知识库最多一句「详见下方参考」
 - 最后单独一句结尾：${intervention.closingPhrase}
@@ -978,6 +983,7 @@ ${webContext}` : ''}
 ${description ? `补充描述：${description}` : ''}
 
 【回答要求】
+${campusSceneBlock ? `\n${campusSceneBlock}\n` : ''}
 - 以${tone}的语气，像辅导员面对面简短交流
 - 先共情疏导，再给建议；不做医疗诊断
 - 疏导部分注意：命名情绪、正常化感受、去病耻，不要只重复「我理解你的感受」
@@ -986,6 +992,12 @@ ${description ? `补充描述：${description}` : ''}
 - 语气、敏感点和以前有用的做法要符合这个人。这轮没提到的旧事不要写进回答
 
 请直接开始回答（不要元话语、不用 Markdown 小标题堆砌）：`.trim();
+
+  // 调试：确认 campusSceneBlock 真的被注入到回答要求区
+  if (campusSceneBlock) {
+    console.log('[orchestrator] prompt head=', prompt.slice(0, 300));
+    console.log('[orchestrator] prompt tail=', prompt.slice(-400));
+  }
 
   let displaySimilarQuestions = filterSimilarQuestionsForDisplay(
     question,

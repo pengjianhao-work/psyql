@@ -55,6 +55,7 @@ import { BrandSchoolChip } from '../components/BrandSchoolChip';
 import { profilesStorageKey } from '../userStorage';
 import { restoreSessionSummary } from '../utils/chatHistory';
 import { MicroTrainingPanel } from '../components/MicroTrainingPanel';
+import { CampusSceneEntry } from '../components/CampusSceneEntry';
 import { CATEGORY_PROMPT_MAP, DEFAULT_GUEST_USERS, DEMO_QUESTIONS } from './constants';
 import { createWelcomeMessage, profilesToRecord, progressToTrendData } from './studentHelpers';
 import { useToast } from './hooks/useToast';
@@ -369,7 +370,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
     });
   }, []);
 
-  const handleSend = useCallback(async (question: string, description: string) => {
+  const handleSend = useCallback(async (question: string, description: string, sceneId?: string) => {
     if (sendLockRef.current || historyLoading) {
       pushToast('正在回复上一条消息，请稍候', 'info');
       return;
@@ -502,7 +503,7 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
           const label = code ? labels[code] || code : '';
           pushToast(label ? `${label}：${msg}` : msg, 'warning');
         }
-      }, { signal: streamAbortRef.current.signal, conversationId: conversationIdRef.current });
+      }, { signal: streamAbortRef.current.signal, conversationId: conversationIdRef.current, ...(sceneId ? { sceneId } : {}) });
 
       if (aborted) {
         return;
@@ -1165,6 +1166,11 @@ function StudentApp({ sessionUser, guestMode, onLogout, onSessionUserUpdate }: S
               />
             </div>
           )}
+
+          <CampusSceneEntry
+            onSelect={(question, sceneId) => void handleSend(question, '', sceneId)}
+            disabled={isLoading || historyLoading || activeConversation?.status === 'archived'}
+          />
 
           <MicroTrainingPanel
             key={currentUserId}

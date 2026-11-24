@@ -86,8 +86,14 @@ const updateUserMetrics = (
 function validateAskRequest(
   req: AuthRequest,
   res: Response
-): { userQuestion: string; description?: string; activeUserId: string; conversationId?: string } | null {
-  const { question: userQuestion, description } = req.body;
+): {
+  userQuestion: string;
+  description?: string;
+  activeUserId: string;
+  conversationId?: string;
+  sceneId?: string;
+} | null {
+  const { question: userQuestion, description, sceneId } = req.body;
   const normalizedUserId = resolveStudentUserId(req, res, req.body?.userId);
   if (!normalizedUserId) return null;
 
@@ -115,7 +121,8 @@ function validateAskRequest(
     userQuestion: String(userQuestion),
     description,
     activeUserId: normalizedUserId,
-    conversationId: req.body?.conversationId ? String(req.body.conversationId) : undefined
+    conversationId: req.body?.conversationId ? String(req.body.conversationId) : undefined,
+    sceneId: typeof sceneId === 'string' && sceneId.trim() ? sceneId.trim() : undefined
   };
 }
 
@@ -285,7 +292,7 @@ export const getQuestionById = async (req: Request, res: Response) => {
 export const askQuestion = async (req: AuthRequest, res: Response) => {
   const parsed = validateAskRequest(req, res);
   if (!parsed) return;
-  const { userQuestion, description, activeUserId, conversationId } = parsed;
+  const { userQuestion, description, activeUserId, conversationId, sceneId } = parsed;
   const requestStart = Date.now();
 
   try {
@@ -302,7 +309,8 @@ export const askQuestion = async (req: AuthRequest, res: Response) => {
       [],
       activeUserId,
       undefined,
-      conversationId
+      conversationId,
+      sceneId
     );
     if (result.similarQuestions.length === 0 && similarReady) {
       result.similarQuestions = similarReady;
@@ -324,8 +332,9 @@ export const askQuestion = async (req: AuthRequest, res: Response) => {
 export const askQuestionStream = async (req: AuthRequest, res: Response) => {
   const parsed = validateAskRequest(req, res);
   if (!parsed) return;
-  const { userQuestion, description, activeUserId, conversationId } = parsed;
+  const { userQuestion, description, activeUserId, conversationId, sceneId } = parsed;
   const requestStart = Date.now();
+  console.log('[ask/stream] sceneId=', sceneId, 'question=', userQuestion.slice(0, 80));
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -356,7 +365,8 @@ export const askQuestionStream = async (req: AuthRequest, res: Response) => {
         onAnswerReady: (answer) => sendEvent({ type: 'answer', text: answer }),
         onStreamReset: () => sendEvent({ type: 'reset' })
       },
-      conversationId
+      conversationId,
+      sceneId
     );
 
     if (result.similarQuestions.length === 0 && similarReady) {

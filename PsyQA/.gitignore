@@ -26,3 +26,7 @@ agent_interaction_log.json
 server/data/pending_videos*.json
 # 视频向量索引（由 npm run videos:embed 生成，体积大且可重建）
 server/data/video_embeddings.json
+# 校园墙 SQLite 运行时库（CSV 可提交，db 仅本地用）
+server/data/campus_wall/*.db
+server/data/campus_wall/*.db-shm
+server/data/campus_wall/*.db-wal

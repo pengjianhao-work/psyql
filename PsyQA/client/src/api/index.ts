@@ -372,7 +372,7 @@ export async function askQuestionStream(
     onDone: (payload: QuestionResponse & { portraitPending?: boolean }) => void;
     onError: (message: string, code?: string) => void;
   },
-  options?: { signal?: AbortSignal; conversationId?: string }
+  options?: { signal?: AbortSignal; conversationId?: string; sceneId?: string }
 ): Promise<{ aborted: boolean }> {
   const token = getAuthToken();
   let res: Response;
@@ -390,7 +390,8 @@ export async function askQuestionStream(
         question,
         description,
         ...(userId ? { userId } : {}),
-        ...(options?.conversationId ? { conversationId: options.conversationId } : {})
+        ...(options?.conversationId ? { conversationId: options.conversationId } : {}),
+        ...(options?.sceneId ? { sceneId: options.sceneId } : {})
       })
     });
   } catch (err) {
@@ -1421,6 +1422,30 @@ export async function submitMoodCheckin(
 
 export async function fetchMoodCheckins(userId: string, limit = 10): Promise<{ checkins: MoodCheckin[] }> {
   const { data } = await api.get('/mood-checkins', { params: { userId, limit } });
+  return data;
+}
+
+export interface DiaryEntry {
+  date: string;
+  content: string;
+  updatedAt: string;
+}
+
+export async function fetchDiaryEntries(
+  userId: string,
+  month?: string
+): Promise<{ entries: DiaryEntry[] }> {
+  const { data } = await api.get('/diary-entries', { params: { userId, month } });
+  return data;
+}
+
+/** 保存当天日记；content 为空时后端会删除当天记录，返回 entry 为 null。 */
+export async function saveDiaryEntry(
+  userId: string,
+  date: string,
+  content: string
+): Promise<{ entry: DiaryEntry | null }> {
+  const { data } = await api.post('/diary-entry', { userId, date, content });
   return data;
 }
 
