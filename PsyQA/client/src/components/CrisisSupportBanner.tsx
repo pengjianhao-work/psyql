@@ -1,4 +1,5 @@
 import React from 'react';
+import { SupportHotlineList } from './SupportHotlineList';
 
 interface CrisisSupportBannerProps {
   level: 'high' | 'critical';
@@ -21,6 +22,10 @@ export const CrisisSupportBanner: React.FC<CrisisSupportBannerProps> = ({
             {hotline}
           </a>
           <p>也可以联系身边信任的人。紧急情况请拨打 120。</p>
+          <details className="crisis-more-channels">
+            <summary>更多求助渠道</summary>
+            <SupportHotlineList />
+          </details>
           <button type="button" className="crisis-screen-back" onClick={() => setOpen(false)}>
             先看回复
           </button>
@@ -39,6 +44,10 @@ export const CrisisSupportBanner: React.FC<CrisisSupportBannerProps> = ({
           学校心理中心可以预约聊聊。也可拨打{' '}
           <a href={`tel:${digits}`}>{hotline}</a>
         </p>
+        <details className="crisis-more-channels">
+          <summary>更多求助渠道</summary>
+          <SupportHotlineList />
+        </details>
       </div>
     </div>
   );

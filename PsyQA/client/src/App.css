@@ -5579,6 +5579,22 @@
   font-weight: 600;
 }
 
+.crisis-more-channels {
+  margin-top: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.crisis-more-channels summary {
+  cursor: pointer;
+  color: #7f1d1d;
+}
+
+.crisis-more-channels ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+  list-style: none;
+}
+
 .crisis-support-icon {
   font-size: 1.75rem;
   line-height: 1;

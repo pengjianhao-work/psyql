@@ -48,6 +48,8 @@ import {
 import { StudentStatusBar } from '../components/StudentStatusBar';
 import { GuestModeBanner } from '../components/GuestModeBanner';
 import { CrisisSupportBanner } from '../components/CrisisSupportBanner';
+import { SymptomScreeningPanel } from '../components/SymptomScreeningPanel';
+import { suggestScreening } from './symptomScreening';
 import { ExportMenu, ExportFormat } from '../components/ExportMenu';
 import { MoodCheckinCard } from '../components/MoodCheckinCard';
 import { TaskBoardPanel } from '../components/TaskBoardPanel';
@@ -939,6 +941,12 @@ const [mainView, setMainView] = useState<'chat' | 'loop' | 'record' | 'bottle'>(
         ? latestReport.risk.level
         : null;
 
+  const recentUserMessages = messages.filter((m) => m.type === 'user').slice(-2).reverse();
+  const suggestedScreening = suggestScreening(
+    recentUserMessages[0]?.content ?? '',
+    recentUserMessages[1]?.content
+  );
+
   const currentUser =
     userProfiles[currentUserId] ??
     (sessionUser && currentUserId === sessionUser.id
@@ -1109,6 +1117,9 @@ const [mainView, setMainView] = useState<'chat' | 'loop' | 'record' | 'bottle'>(
           level={crisisLevel as 'high' | 'critical'}
           hotline={latestReport?.risk?.hotline}
         />
+      )}
+      {currentUserId && !crisisLevel && (
+        <SymptomScreeningPanel key={currentUserId} suggested={suggestedScreening} />
       )}
 
       <main className="main-content">
