@@ -72,6 +72,7 @@ npm run eval:counsel  # 咨询话术评测
 | [PSYCH_LOOP_MIGRATION.md](PsyQA/docs/PSYCH_LOOP_MIGRATION.md) | 心理闭环迁移决策与阶段记录 |
 | [PRODUCTION_READINESS.md](PsyQA/docs/PRODUCTION_READINESS.md) | 生产就绪基线与风险登记 |
 | [PILOT_RELEASE.md](PsyQA/docs/PILOT_RELEASE.md) | 试点发布 runbook 与冒烟清单 |
+| [协作流程.md](PsyQA/docs/协作流程.md) | 新同学 git/PR 上手与本仓库约定 |
 | [安装与运行.md](PsyQA/docs/安装与运行.md) | 环境配置 |
 | [作品使用与演示说明.md](PsyQA/docs/作品使用与演示说明.md) | 演示流程 |
 
