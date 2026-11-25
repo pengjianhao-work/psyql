@@ -68,6 +68,7 @@ npm run eval:counsel  # 咨询话术评测
 
 | 文档 | 说明 |
 |------|------|
+| [项目详细介绍.md](PsyQA/docs/项目详细介绍.md) | 产品定位、闭环设计、安全体系、架构与 API 全景 |
 | [PSYCH_LOOP_MIGRATION.md](PsyQA/docs/PSYCH_LOOP_MIGRATION.md) | 心理闭环迁移决策与阶段记录 |
 | [PRODUCTION_READINESS.md](PsyQA/docs/PRODUCTION_READINESS.md) | 生产就绪基线与风险登记 |
 | [PILOT_RELEASE.md](PsyQA/docs/PILOT_RELEASE.md) | 试点发布 runbook 与冒烟清单 |
